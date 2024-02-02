@@ -21,7 +21,7 @@ def parser_init():
     )
     parser.add_argument("-d", "--development", help="Turn on development server",
                         action="store_true")
-    parser.add_argument("-i", "--ip", help="Listening on ip address",
+    parser.add_argument("-ip", "--ip", help="Listening on ip address",
                         action="store")
     parser.add_argument("-port", "--port", help="Listening on port",
                         action="store")
