@@ -12,7 +12,7 @@ def webhook():
         abort(400)
 @app.route('/')
 def hello_world():
-    return 'Hello'
+    return 'Up and running'
         
 def parser_init():
     # Arguments parsing

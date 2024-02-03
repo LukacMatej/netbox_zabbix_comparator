@@ -17,15 +17,9 @@ except ModuleNotFoundError:
     sys.exit(0)
 logger = init.loggin_init(path)
 load_dotenv()
-
 def main(logger,arguments):
     """Run the sync process."""
     # set environment variables
-    environ['ZABBIX_HOST'] = "http://127.0.0.1:80"
-    environ['ZABBIX_USER'] = "Admin"
-    environ['ZABBIX_PASS'] = "zabbix"
-    environ['NETBOX_HOST'] = "http://127.0.0.1:8000"
-    environ['NETBOX_TOKEN'] = "dd402667fefdfc8282901ec903bef396ede5a446"
     if(arguments.verbose):
         logger.setLevel(logging.DEBUG)
     env_vars = ["ZABBIX_HOST", "ZABBIX_USER", "ZABBIX_PASS",
@@ -37,8 +31,7 @@ def main(logger,arguments):
             raise Ex.EnvironmentVarError(e)
     # Get all virtual environment variables
     zabbix_host = environ.get("ZABBIX_HOST")
-    zabbix_user = environ.get("ZABBIX_USER")
-    zabbix_pass = environ.get("ZABBIX_PASS")
+    zabbix_token = environ.get("ZABBIX_TOKEN")
     netbox_host = environ.get("NETBOX_HOST")
     netbox_token = environ.get("NETBOX_TOKEN")
     # Set Netbox API
@@ -60,7 +53,7 @@ def main(logger,arguments):
     # Set Zabbix API
     try:
         zabbix = ZabbixAPI(zabbix_host)
-        zabbix.login(zabbix_user, zabbix_pass)
+        zabbix.login(api_token=zabbix_token)
     except ZabbixAPIException as e:
         e = f"Zabbix returned the following error: {str(e)}."
         logger.error(e)
