@@ -22,7 +22,7 @@ def main(logger,arguments):
     # set environment variables
     if(arguments.verbose):
         logger.setLevel(logging.DEBUG)
-    env_vars = ["ZABBIX_HOST", "ZABBIX_USER", "ZABBIX_PASS",
+    env_vars = ["ZABBIX_HOST", "ZABBIX_TOKEN",
                 "NETBOX_HOST", "NETBOX_TOKEN"]
     for var in env_vars:
         if var not in environ:

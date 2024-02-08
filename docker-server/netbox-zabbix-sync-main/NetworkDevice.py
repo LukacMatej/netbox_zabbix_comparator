@@ -9,7 +9,7 @@ class NetworkDevice():
     def __init__(self, nb, zabbix, nb_journal_class, logger, device_cf, journal=None):
         self.nb = nb
         self.id = nb.id
-        self.name = nb.name if nb.dns == "None" or nb.dns == "" else nb.dns
+        self.name = nb.name if nb.primary_ip.dns_name == "None" or nb.primary_ip.dns_name == "" else nb.primary_ip.dns_name
         self.status = nb.status.label
         self.zabbix = zabbix
         self.tenant = nb.tenant

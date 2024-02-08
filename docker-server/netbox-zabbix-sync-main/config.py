@@ -26,7 +26,7 @@ nb_device_filter = {"tag": "zabbix"} #Use a tag
 # nb_device_filter = {"name__n": "null"}
 
 #Set enviroment variables to the right netbox and zabbix informations 
-environ['ZABBIX_HOST'] = "http://127.0.0.1:80"
+environ['ZABBIX_HOST'] = "http://172.26.248.142"
 environ['ZABBIX_TOKEN'] = "061aae75e443fba028fdaf60d76f238ddbb9c035a74bbbfce119dbc31074a26e"
-environ['NETBOX_HOST'] = "http://127.0.0.1:8000"
-environ['NETBOX_TOKEN'] = "dd402667fefdfc8282901ec903bef396ede5a446"
+environ['NETBOX_HOST'] = "http://172.26.248.142:8000/"
+environ['NETBOX_TOKEN'] = "d5d25ce1b8d0b9b07b8ec048799a17a0f3c7d312"
