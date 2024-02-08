@@ -5,8 +5,10 @@
 # https://docs.docker.com/engine/reference/builder/#dockerignore-file
 
 **/.DS_Store
-**/__pycache__
-**/.venv
+__pycache__
+.venv
+.Dockerfile.swp
+.Dockerfile.swo
 **/.classpath
 **/.dockerignore
 **/.env
@@ -15,7 +17,7 @@
 **/.project
 **/.settings
 **/.toolstarget
-**/.vs
+**/.vs  
 **/.vscode
 **/*.*proj.user
 **/*.dbmdl
