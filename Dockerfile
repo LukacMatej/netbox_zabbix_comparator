@@ -43,9 +43,7 @@ RUN chmod -R 755 /app
 # Leverage a cache mount to /root/.cache/pip to speed up subsequent builds.
 # Leverage a bind mount to requirements.txt to avoid having to copy them into
 # into this layer.
-RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=bind,source=requirements.txt,target=requirements.txt \
-	pip3 install -r requirements.txt 
+RUN pip3 install -r requirements.txt 
 RUN pip install pynetbox
 RUN pip install pyzabbix
 # Switch to the non-privileged user to run the application.
