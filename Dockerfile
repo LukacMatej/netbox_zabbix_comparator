@@ -25,7 +25,7 @@ RUN pip3 install --upgrade pip setuptools
 RUN pip install -U python-dotenv
 
 WORKDIR /app
-
+USER root
 # Create a non-privileged user that the app will run under.
 # See https://docs.docker.com/go/dockerfile-user-best-practices/
 ARG UID=10001
@@ -37,8 +37,7 @@ RUN adduser \
     --no-create-home \
     --uid "${UID}" \
     appuser
-RUN groupadd -r mates && useradd -r -g mates mates
-#Change group to user or something else
+RUN chmod -R 755 /app 
 
 # Download dependencies as a separate step to take advantage of Docker's caching.
 # Leverage a cache mount to /root/.cache/pip to speed up subsequent builds.
