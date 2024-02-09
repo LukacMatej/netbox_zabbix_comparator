@@ -9,6 +9,6 @@ stages:
 docker_build_devel:
   stage: docker_build
   script:
-    - docker compose build netsystemcz/$CI_PROJECT_NAME:test
+    - docker build netsystemcz/$CI_PROJECT_NAME:test
   except:
     - tags
