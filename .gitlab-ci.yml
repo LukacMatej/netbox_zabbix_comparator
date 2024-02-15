@@ -1,12 +1,55 @@
 image: docker:latest
 
 stages:
+  - docker_stop
   - docker_build
+  - docker_copy
+  - docker_run
+
+docker_stop_devel:
+  stage: docker_stop
+  image: docker:latest
+  script:
+    - echo "Using docker ${DOCKER_HOST_1} and ${DOCKER_HOST_2}"
+    - DOCKER_HOST=${DOCKER_HOST_2} docker stop ${CI_PROJECT_NAME}-dev || true
+    - DOCKER_HOST=${DOCKER_HOST_2} docker rm ${CI_PROJECT_NAME}-dev || true
+    - DOCKER_HOST=${DOCKER_HOST_2} docker image rm -f netsystemcz/${CI_PROJECT_NAME}:test || true
+    - DOCKER_HOST=${DOCKER_HOST_1} docker image rm -f netsystemcz/${CI_PROJECT_NAME}:test || true
+  artifacts:
+    paths:
+      - dist/
+      - client/dist/
+    expire_in: 3 day
+  except:
+    - tags
+
 
 docker_build_devel:
   stage: docker_build
+  image: docker:latest
   script:
-    - echo "Using docker ${DOCKER_HOST}"
-    - docker build -t netsystemcz/$CI_PROJECT_NAME:test .
+    - echo "Using docker ${DOCKER_HOST_1}"
+    - DOCKER_HOST=${DOCKER_HOST_1} docker build -t netsystemcz/${CI_PROJECT_NAME}:test .
   except:
     - tags
+
+docker_copy_devel:
+  stage: docker_copy
+  image: docker:latest
+  script:
+    - echo "Using docker ${DOCKER_HOST_1} and ${DOCKER_HOST_2}"
+    - DOCKER_HOST=${DOCKER_HOST_1} docker save netsystemcz/${CI_PROJECT_NAME}:test | gzip | DOCKER_HOST=${DOCKER_HOST_2} docker load
+  except:
+    - tags
+
+docker_run_devel:
+  stage: docker_run
+  image: docker:latest
+  dependencies:
+    - docker_build_devel
+  script:
+    - echo "Using docker ${DOCKER_HOST_2}"
+    - DOCKER_HOST=${DOCKER_HOST_2} docker run --detach -p 5002:5000 --dns 192.168.200.10 --dns 192.168.200.13 --name ${CI_PROJECT_NAME}-dev netsystemcz/${CI_PROJECT_NAME}:test
+  except:
+    - tags
+
