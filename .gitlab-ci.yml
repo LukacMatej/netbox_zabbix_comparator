@@ -15,11 +15,6 @@ docker_stop_devel:
     - DOCKER_HOST=${DOCKER_HOST_2} docker rm ${CI_PROJECT_NAME}-dev || true
     - DOCKER_HOST=${DOCKER_HOST_2} docker image rm -f netsystemcz/${CI_PROJECT_NAME}:test || true
     - DOCKER_HOST=${DOCKER_HOST_1} docker image rm -f netsystemcz/${CI_PROJECT_NAME}:test || true
-  artifacts:
-    paths:
-      - dist/
-      - client/dist/
-    expire_in: 3 day
   except:
     - tags
 

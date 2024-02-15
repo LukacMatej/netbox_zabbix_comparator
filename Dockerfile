@@ -58,4 +58,6 @@ COPY . .
 EXPOSE 5000
 
 # Run the application.
-CMD uwsgi --http 0.0.0.0:5000 --master -p 4 -w server:app
+#CMD uwsgi --http 0.0.0.0:5000 --master -p 4 -w server:app
+CMD python3 ./server.py
+
