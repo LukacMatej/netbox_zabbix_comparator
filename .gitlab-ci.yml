@@ -1,14 +1,12 @@
 image: docker:latest
 
-variables:
-  DOCKER_HOST: tcp://192.168.200.127:2375
-
 stages:
   - docker_build
 
 docker_build_devel:
   stage: docker_build
   script:
+    - echo "Using docker ${DOCKER_HOST}"
     - docker build -t netsystemcz/$CI_PROJECT_NAME:test .
   except:
     - tags
