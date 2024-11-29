@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        .container {
+            display: flex;
+            flex-direction: row;
+        }
+        .column {
+            border-right: 1px solid black;
+            flex: 50%;
+            padding: 10px;
+        }
+        .column:last-child {
+            border-right: none;
+            flex: 50%;
+            padding: 10px;
+        }
+        .header {
+            font-weight: bold;
+        }
+        .header:first-child {
+            font-size: 1.5em;
+        }
+        .lines{
+            line-height: 2;
+        }
+        .sync{
+            margin-top: 20px;
+            border-top: 1px solid black;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .sync div{
+            padding: 10px;
+        }
+    </style>
+    <title>Comparison Output</title>
+</head>
+<body>
+    <div class="container">
+    </div>
+</body>
+</html>

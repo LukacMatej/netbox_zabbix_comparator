@@ -1,6 +1,33 @@
-from flask import Flask, request, abort
+"""server.py
+This script sets up a Flask web server with routes for handling webhooks and a test route. 
+It also includes an argument parser for configuring the server to run in development or production mode.
+Routes:
+    /webhook (POST): Executes a subprocess to run a Python script for syncing NetBox and Zabbix.
+    / (GET): Renders an index.html template to check if the server is up and running.
+Functions:
+    webhook(): Handles POST requests to the /webhook route and runs a subprocess.
+    test(): Renders an index.html template to check if the server is up and running.
+    parser_init(): Initializes and returns an argument parser for server configuration.
+Usage:
+    Run the script with optional arguments to start the server in development or production mode.
+    Example:
+        python server.py --development
+        python server.py --debug
+Environment Variables:
+    LISTEN_ADDRESS: The IP address the server will listen on.
+    HTTP_PORT: The port the server will listen on.
+Dependencies:
+    - Flask
+    - subprocess
+    - argparse
+    - os
+"""
+from flask import Flask, render_template, request
+from waitress import serve
 import subprocess
+import controller as ct
 import argparse
+import os
 app = Flask(__name__)
 
 @app.route('/webhook',methods=['POST'])
@@ -9,35 +36,52 @@ def webhook():
         subprocess.run(["python",'netbox-zabbix-sync-main/netbox_zabbix_sync.py'])
         return 'success', 200
     else:
-        abort(400)
-@app.route('/')
-def hello_world():
-    return 'Up and running'
-        
-def parser_init():
-    # Arguments parsing
-    parser = argparse.ArgumentParser(
-        description='Turn on/off production.'
-    )
-    parser.add_argument("-d", "--development", help="Turn on development server",
-                        action="store_true")
-    parser.add_argument("-ip", "--ip", help="Listening on ip address",
-                        action="store")
-    parser.add_argument("-port", "--port", help="Listening on port",
-                        action="store")
-    return parser
-def main(args):
-    if not args.development:
-        #production
-        from waitress import serve
-        serve(app, host=args.ip if args.ip is not None else "0.0.0.0", port=args.port if args.port is not None else "5000")
-    else:
-        #development
-        app.run(debug=True, host="0.0.0.0", port="5000")
+        return 400
 
+@app.route("/")
+def test() -> tuple[str,int]:
+    """
+    A test route to check if the server is up and running.
+
+    Returns:
+        str: A message indicating that the server is up and running.
+    """
+    return render_template(
+        "index.html",200
+    )
     
-if __name__ == '__main__':
-    parser = parser_init()
-    args = parser.parse_args()
-    main(args)
-    
+@app.route("/RunCompare")
+def RunCompare() -> tuple[str,int]:
+    netbox_key: str = os.environ.get("NETBOX_KEY")
+    netbox_ip: str = os.environ.get("NETBOX_IP")
+    nb_devs = ct.get_nb_addresses(ip=netbox_ip,key=netbox_key)
+    return nb_devs,200
+        
+def parser_init() -> argparse.ArgumentParser:
+    """
+    Initialize the argument parser for the server.
+
+    Returns:
+        argparse.ArgumentParser: The argument parser object.
+    """
+    argparser = argparse.ArgumentParser(description="Turn on/off production.")
+    argparser.add_argument(
+        "-d", "--development", help="Turn on development server", action="store_true"
+    )
+    argparser.add_argument(
+        "-debug", "--debug", help="Turn on debug mode", action="store_true"
+    )
+    return argparser
+
+
+if __name__ == "__main__":
+    parser: argparse.ArgumentParser = parser_init()
+    args: argparse.Namespace = parser.parse_args()
+    docker_ip: str = os.environ.get("LISTEN_ADDRESS","0.0.0.0")
+    docker_port: str = os.environ.get("HTTP_PORT",7001)
+    if not args.development:
+        # production
+        serve(app, host=docker_ip, port=docker_port)
+    else:
+        # development
+        app.run(debug=True, host=docker_ip, port=docker_port)
