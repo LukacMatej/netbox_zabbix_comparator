@@ -25,7 +25,6 @@ Dependencies:
 from flask import Flask, render_template, request
 from waitress import serve
 import subprocess
-import controller as ct
 import argparse
 import os
 app = Flask(__name__)

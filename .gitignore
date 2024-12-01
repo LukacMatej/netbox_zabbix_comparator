@@ -5,3 +5,4 @@ __pycache__
 .Dockerfile.swp
 .Dockerfile.swo
 *.py[cod]
+test.py
