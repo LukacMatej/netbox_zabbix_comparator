@@ -21,4 +21,3 @@ RUN pip install pyzabbix
 EXPOSE 7000
 
 CMD python3 ./server.py
-
