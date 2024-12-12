@@ -1,8 +1,22 @@
 *.log
-# Byte-compiled / optimized / DLL files
 __pycache__
 .venv
 .Dockerfile.swp
 .Dockerfile.swo
 *.py[cod]
+test.py
+config.xml
+dhcp.pass
+dns.pass
+.venv
+.vscode
+__pycache__
+netsys-ca.crt
+lab-ca.crt
+test.txt
+poznamky.txt
+env.list
+*~
+*.swp
+compose.yaml
 test.py
