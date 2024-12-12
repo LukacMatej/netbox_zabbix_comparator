@@ -27,15 +27,19 @@ from waitress import serve
 import subprocess
 import argparse
 import os
+from app.compare.service import compare_service as ct
+from app.device.models.difference_model import DeviceDifference
+from app.device.models.device_model import Device
+
 app = Flask(__name__)
 
 @app.route('/webhook',methods=['POST'])
-def webhook():
+def webhook() -> tuple[str,int]:
     if request.method == 'POST':
         subprocess.run(["python",'netbox-zabbix-sync-main/netbox_zabbix_sync.py'])
         return 'success', 200
     else:
-        return 400
+        return 'error',400
 
 @app.route("/")
 def test() -> tuple[str,int]:
@@ -50,11 +54,26 @@ def test() -> tuple[str,int]:
     )
     
 @app.route("/RunCompare")
-def RunCompare() -> tuple[str,int]:
+def RunCompare() -> tuple[str, int]:
     netbox_key: str = os.environ.get("NETBOX_KEY")
     netbox_ip: str = os.environ.get("NETBOX_IP")
-    nb_devs = ct.get_nb_addresses(ip=netbox_ip,key=netbox_key)
-    return nb_devs,200
+    zabbix_ip: str = os.environ.get("ZABBIX_IP")
+    zabbix_key: str = os.environ.get("ZABBIX_KEY")
+    compare_output: Exception | tuple[list[DeviceDifference], list[Device], list[Device]] = ct.compare(nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key)
+    
+    if isinstance(compare_output, Exception):
+        return str(compare_output), 500
+    
+    differences: list[DeviceDifference] = compare_output[0]
+    netbox_devices: list[Device] = compare_output[1]
+    zabbix_devices: list[Device] = compare_output[2]
+    
+    return render_template(
+        "compare_output.html",
+        differences=differences,
+        netbox_devices=netbox_devices,
+        zabbix_devices=zabbix_devices
+    ), 200
         
 def parser_init() -> argparse.ArgumentParser:
     """

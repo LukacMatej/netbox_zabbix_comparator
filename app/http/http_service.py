@@ -26,7 +26,7 @@ def get_headers(key: str) -> dict:
         "Accept": "application/json"
     }
 
-def get(key: str,ip: str,url: str) -> tuple[str, int]:
+def get(key: str,ip: str) -> tuple[str, int]:
     """
     Sends a GET request to the specified IP address and URL with the provided API key.
 
@@ -39,7 +39,7 @@ def get(key: str,ip: str,url: str) -> tuple[str, int]:
         tuple[str, int]: A tuple containing the response content as a string and the HTTP status code as an integer.
     """
     response: requests.Response = requests.get(
-        f"{ip}/api/{url}", headers=get_headers(key), timeout=300)
+        f"{ip}", headers=get_headers(key), timeout=300)
     return response
 
 def post(key: str, ip: str, url: str, json_data: Any) -> tuple[str, int]:

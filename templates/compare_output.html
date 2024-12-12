@@ -10,13 +10,11 @@
         }
         .column {
             border-right: 1px solid black;
-            flex: 50%;
+            flex: 33.33%;
             padding: 10px;
         }
         .column:last-child {
             border-right: none;
-            flex: 50%;
-            padding: 10px;
         }
         .header {
             font-weight: bold;
@@ -24,25 +22,38 @@
         .header:first-child {
             font-size: 1.5em;
         }
-        .lines{
+        .lines {
             line-height: 2;
-        }
-        .sync{
-            margin-top: 20px;
-            border-top: 1px solid black;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-        }
-        .sync div{
-            padding: 10px;
         }
     </style>
     <title>Comparison Output</title>
 </head>
 <body>
     <div class="container">
+        <div class="column">
+            <div class="header">Netbox Devices</div>
+            <div class="lines">
+                {% for device in netbox_devices %}
+                    <div>{{ device }}</div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="column">
+            <div class="header">Differences</div>
+            <div class="lines">
+                {% for difference in differences %}
+                    <div>{{ difference }}</div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="column">
+            <div class="header">Zabbix Devices</div>
+            <div class="lines">
+                {% for device in zabbix_devices %}
+                    <div>{{ device }}</div>
+                {% endfor %}
+            </div>
+        </div>
     </div>
 </body>
 </html>

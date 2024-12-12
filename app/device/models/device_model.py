@@ -1,13 +1,21 @@
-from dataclasses import dataclass
+from app.device.models.interface_model import Interface as interface
 
-@dataclass
 class Device:
     name: str = ""
-    address: str = ""
-    interface: str = ""
+    interfaces: list[interface] = []
     hostgroup: str = ""
     description: str = ""
-    dns_name: str = ""
     templates: str = ""
     status: str = ""
     
+    def __init__(self, name, interfaces, hostgroup, description, templates, status):
+        self.name = name
+        self.interfaces = interfaces
+        self.hostgroup = hostgroup
+        self.description = description
+        self.templates = templates
+        self.status = status
+        
+    
+    def __str__(self):
+        return f"{self.name} {self.interfaces} {self.hostgroup} {self.description} {self.templates} {self.status}"

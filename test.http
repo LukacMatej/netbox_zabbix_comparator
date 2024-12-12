@@ -1,1 +1,0 @@
-curl -X POST -H "Authorization: Token 8f9d3eaba15b0fb9c182f316ee9ee7f791ab0e4b" -H "Content-Type: application/json" -H "Accept: application/json" --data '{"query": "{ device_list { id name } }"}' http://172.26.248.142:8000/graphql/
