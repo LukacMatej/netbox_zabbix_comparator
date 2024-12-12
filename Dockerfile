@@ -11,7 +11,6 @@ WORKDIR /
 ADD server.py /
 ADD netbox-zabbix-sync-main /
 ADD app/ /app
-ADD compare_sync.py /
 ADD templates/ /templates
 
 
