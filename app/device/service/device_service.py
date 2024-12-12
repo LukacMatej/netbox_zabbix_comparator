@@ -1,26 +1,40 @@
 """_summary_
 """
 import requests
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 from app.device.models.device_model import Device as device_model
 from app.device.models.interface_model import Interface as interface_model
 from app.device.models.address_model import Address as address_model
+from app.logger import logger_conf as log
 
 
 def print_devices(nb_device_list: list[device_model]) -> None:
+  txt_builder: str = ""
   for device in nb_device_list:
-    print(f"Device Name: {device.name}")
-    print(f"Description: {device.description}")
-    print(f"Status: {device.status}")
-    print(f"Templates: {device.templates}")
+    txt_builder += f"Device Name: {device.name}\n"
+    txt_builder += f"Description: {device.description}\n"
+    txt_builder += f"Status: {device.status}\n"
+    txt_builder += f"Templates: {device.templates}\n"
     for interface in device.interfaces:
-      print(f"  Interface Name: {interface.name}")
-      print(f"  MAC Address: {interface.mac_address}")
+      txt_builder += f"  Interface Name: {interface.name}\n"
+      txt_builder += f"  MAC Address: {interface.mac_address}\n"
       for address in interface.addresses:
-        print(f"    IP Address: {address.address}")
-        print(f"    DNS Name: {address.dns_name}")
+        txt_builder += f"    IP Address: {address.address}\n"
+        txt_builder += f"    DNS Name: {address.dns_name}\n"
+  return 
+
+def print_device(device: device_model) -> None:
+  txt_builder: str = ""
+  txt_builder += f"Device Name: {device.name}\n"
+  txt_builder += f"Description: {device.description}\n"
+  txt_builder += f"Status: {device.status}\n"
+  txt_builder += f"Templates: {device.templates}\n"
+  for interface in device.interfaces:
+    txt_builder += f"  Interface Name: {interface.name}\n"
+    txt_builder += f"  MAC Address: {interface.mac_address}\n"
+    for address in interface.addresses:
+      txt_builder += f"    IP Address: {address.address}\n"
+      txt_builder += f"    DNS Name: {address.dns_name}\n"
+  return txt_builder
 
 def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
   headers: dict[str, str] = {
@@ -78,9 +92,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
       return (f"Request failed: {e}")
 
 def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
-  key = "14a116237840d411e877d16b511eecc00818a3c050470648db9a91d2326e00f5"
-  ip = "localhost"
-  ip = f"http://{ip}/api_jsonrpc.php"
+  ip = f"{ip}/api_jsonrpc.php"
   payload = {
     "jsonrpc": "2.0",
     "method": "host.get",
@@ -113,9 +125,10 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
   }
   try:
     zb_device_list: list[device_model] = []
-    response = requests.post(ip, headers=headers, json=payload)
+    response: requests.Response = requests.post(ip, headers=headers, json=payload)
     response.raise_for_status()
     result = response.json()
+    log.logger.debug(result)
     for host in result["result"]:
       zb_device_list.append(device_model(
         name=host["name"],
@@ -136,5 +149,3 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
   except requests.exceptions.RequestException as e:
     return (f"Request failed: {e}")
   return zb_device_list
-
-# get_zb_devices("","")

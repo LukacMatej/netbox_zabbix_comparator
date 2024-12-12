@@ -1,8 +1,8 @@
-from app.device.models.interface_model import Interface as interface
+from app.device.models.interface_model import Interface as InterfaceModel
 
 class Device:
     name: str = ""
-    interfaces: list[interface] = []
+    interfaces: list[InterfaceModel] = []
     hostgroup: str = ""
     description: str = ""
     templates: str = ""

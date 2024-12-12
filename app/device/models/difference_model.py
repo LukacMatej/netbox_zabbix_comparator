@@ -1,9 +1,9 @@
-from app.device.models.device_model import device_model as device_model
+from app.device.models.device_model import Device as DeviceModel
 
 class DeviceDifference:
-    def __init__(self, nb_device: device_model, zb_device: device_model):
-        self.nb_device: device_model = nb_device
-        self.zb_device: device_model = zb_device
+    def __init__(self, nb_device: DeviceModel, zb_device: DeviceModel, differences: list[str]):
+        self.nb_device: DeviceModel = nb_device
+        self.zb_device: DeviceModel = zb_device
         self.differences: list[str] = []
 
     def __str__(self):

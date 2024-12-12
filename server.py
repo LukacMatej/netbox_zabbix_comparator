@@ -28,8 +28,10 @@ import subprocess
 import argparse
 import os
 from app.compare.service import compare_service as ct
+from app.device.service import device_service as ds
 from app.device.models.difference_model import DeviceDifference
 from app.device.models.device_model import Device
+from app.logger import logger_conf as log
 
 app = Flask(__name__)
 
@@ -50,8 +52,8 @@ def test() -> tuple[str,int]:
         str: A message indicating that the server is up and running.
     """
     return render_template(
-        "index.html",200
-    )
+        "index.html"
+        ),200
     
 @app.route("/RunCompare")
 def RunCompare() -> tuple[str, int]:
@@ -60,19 +62,37 @@ def RunCompare() -> tuple[str, int]:
     zabbix_ip: str = os.environ.get("ZABBIX_IP")
     zabbix_key: str = os.environ.get("ZABBIX_KEY")
     compare_output: Exception | tuple[list[DeviceDifference], list[Device], list[Device]] = ct.compare(nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key)
-    
     if isinstance(compare_output, Exception):
         return str(compare_output), 500
-    
     differences: list[DeviceDifference] = compare_output[0]
     netbox_devices: list[Device] = compare_output[1]
     zabbix_devices: list[Device] = compare_output[2]
-    
+    log.logger.debug(differences)
+    log.logger.debug(netbox_devices)
+    log.logger.debug(zabbix_devices)
+    output_differences: list[str] = []
+    output_netbox_devices: list[str] = []
+    output_zabbix_devices: list[str] = []
+    differences_string: str = ""
+    netbox_string: str = ""
+    zabbix_string: str = ""
+    for diff in differences:
+        differences_string = f"Netbox Device: {ds.print_device(diff.nb_device)} Zabbix Device: {ds.print_device(diff.zb_device)} Fields: {[str(d) for d in diff.differences]}"
+        output_differences.append(differences_string)
+    log.logger.debug(output_differences)
+    for nb_device in netbox_devices:
+        netbox_string = ds.print_device(nb_device)
+        output_netbox_devices.append(netbox_string)
+    log.logger.debug(output_netbox_devices)
+    for zb_device in zabbix_devices:
+        zabbix_string = ds.print_device(zb_device)
+        output_zabbix_devices.append(zabbix_string)
+    log.logger.debug(output_zabbix_devices)
     return render_template(
         "compare_output.html",
-        differences=differences,
-        netbox_devices=netbox_devices,
-        zabbix_devices=zabbix_devices
+        differences=output_differences,
+        netbox_devices=output_netbox_devices,
+        zabbix_devices=output_zabbix_devices
     ), 200
         
 def parser_init() -> argparse.ArgumentParser:
@@ -96,7 +116,7 @@ if __name__ == "__main__":
     parser: argparse.ArgumentParser = parser_init()
     args: argparse.Namespace = parser.parse_args()
     docker_ip: str = os.environ.get("LISTEN_ADDRESS","0.0.0.0")
-    docker_port: str = os.environ.get("HTTP_PORT",7001)
+    docker_port: str = os.environ.get("HTTP_PORT",7000)
     if not args.development:
         # production
         serve(app, host=docker_ip, port=docker_port)
