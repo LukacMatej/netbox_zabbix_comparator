@@ -61,11 +61,7 @@ def RunCompare() -> tuple[str, int]:
     netbox_ip: str = os.environ.get("NETBOX_IP")
     zabbix_ip: str = os.environ.get("ZABBIX_IP")
     zabbix_key: str = os.environ.get("ZABBIX_KEY")
-    NETBOX_IP="http://172.26.248.142:8000"
-    NETBOX_KEY="8f9d3eaba15b0fb9c182f316ee9ee7f791ab0e4b"
-    ZABBIX_IP="http://172.26.248.142:80"
-    ZABBIX_KEY="14a116237840d411e877d16b511eecc00818a3c050470648db9a91d2326e00f5"
-    compare_output: Exception | tuple[list[DeviceDifference], list[Device], list[Device]] = ct.compare(nb_ip=NETBOX_IP, nb_key=NETBOX_KEY, zb_ip=ZABBIX_IP, zb_key=ZABBIX_KEY)
+    compare_output: Exception | tuple[list[DeviceDifference], list[Device], list[Device]] = ct.compare(nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key)
     if isinstance(compare_output, Exception):
         return str(compare_output), 500
     differences: list[DeviceDifference] = compare_output[0]
