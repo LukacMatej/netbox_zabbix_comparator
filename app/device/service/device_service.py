@@ -69,6 +69,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
           json={"query": query}
       )
       device_list: list[device_model] = []
+      log.logger.debug(response)
       if response.status_code == 200:
           data = response.json()
           for device in data["data"]["device_list"]:
@@ -126,6 +127,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
   try:
     zb_device_list: list[device_model] = []
     response: requests.Response = requests.post(ip, headers=headers, json=payload)
+    log.logger.debug(response)
     response.raise_for_status()
     result = response.json()
     log.logger.debug(result)

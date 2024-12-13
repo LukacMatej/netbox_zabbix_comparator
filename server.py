@@ -61,7 +61,11 @@ def RunCompare() -> tuple[str, int]:
     netbox_ip: str = os.environ.get("NETBOX_IP")
     zabbix_ip: str = os.environ.get("ZABBIX_IP")
     zabbix_key: str = os.environ.get("ZABBIX_KEY")
-    compare_output: Exception | tuple[list[DeviceDifference], list[Device], list[Device]] = ct.compare(nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key)
+    NETBOX_IP="http://172.26.248.142:8000"
+    NETBOX_KEY="8f9d3eaba15b0fb9c182f316ee9ee7f791ab0e4b"
+    ZABBIX_IP="http://172.26.248.142:80"
+    ZABBIX_KEY="14a116237840d411e877d16b511eecc00818a3c050470648db9a91d2326e00f5"
+    compare_output: Exception | tuple[list[DeviceDifference], list[Device], list[Device]] = ct.compare(nb_ip=NETBOX_IP, nb_key=NETBOX_KEY, zb_ip=ZABBIX_IP, zb_key=ZABBIX_KEY)
     if isinstance(compare_output, Exception):
         return str(compare_output), 500
     differences: list[DeviceDifference] = compare_output[0]
@@ -70,29 +74,11 @@ def RunCompare() -> tuple[str, int]:
     log.logger.debug(differences)
     log.logger.debug(netbox_devices)
     log.logger.debug(zabbix_devices)
-    output_differences: list[str] = []
-    output_netbox_devices: list[str] = []
-    output_zabbix_devices: list[str] = []
-    differences_string: str = ""
-    netbox_string: str = ""
-    zabbix_string: str = ""
-    for diff in differences:
-        differences_string = f"Netbox Device: {ds.print_device(diff.nb_device)} Zabbix Device: {ds.print_device(diff.zb_device)} Fields: {[str(d) for d in diff.differences]}"
-        output_differences.append(differences_string)
-    log.logger.debug(output_differences)
-    for nb_device in netbox_devices:
-        netbox_string = ds.print_device(nb_device)
-        output_netbox_devices.append(netbox_string)
-    log.logger.debug(output_netbox_devices)
-    for zb_device in zabbix_devices:
-        zabbix_string = ds.print_device(zb_device)
-        output_zabbix_devices.append(zabbix_string)
-    log.logger.debug(output_zabbix_devices)
     return render_template(
         "compare_output.html",
-        differences=output_differences,
-        netbox_devices=output_netbox_devices,
-        zabbix_devices=output_zabbix_devices
+        differences=compare_output[0],
+        netbox_devices=compare_output[1],
+        zabbix_devices=compare_output[2]
     ), 200
         
 def parser_init() -> argparse.ArgumentParser:

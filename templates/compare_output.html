@@ -25,6 +25,24 @@
         .lines {
             line-height: 2;
         }
+        .line {
+            font-size: 0;
+            color: white;
+            border-bottom: 1px solid black;
+        }
+        .line:last-child {
+            border-bottom: none;
+        }
+        .tab-interface {
+            margin-left: 20px;
+        }
+        .tab-address {
+            margin-left: 40px;
+        }
+        .differences {
+            display: flex;
+            flex: 50% 50%;
+        }
     </style>
     <title>Comparison Output</title>
 </head>
@@ -34,23 +52,103 @@
             <div class="header">Netbox Devices</div>
             <div class="lines">
                 {% for device in netbox_devices %}
-                    <div>{{ device }}</div>
+                    <div>{{ device.name }}</div>
+                    <div>Interfaces:</div>
+                    {% for interface in device.interfaces %}
+                        <div class="tab-interface">{{ interface.name }}</div>
+                        <div class="tab-interface">MAC Address: {{ interface.mac_address }}</div>
+                        <div class="tab-interface">Addresses:</div>
+                        {% for address in interface.addresses %}
+                            <div class="tab-address">{{ address.address }}</div>
+                            <div class="tab-address">{{ address.dns_name }}</div>
+                        {% endfor %}
+                    {% endfor %}
+                    <div>Hostgroup: {{ device.hostgroup }}</div>
+                    <div>Description: {{ device.description }}</div>
+                    <div>Templates: {{ device.templates }}</div>
+                    <div>Status: {{ device.status }}</div>
+                    <div class="line">Oddeleni</div>
                 {% endfor %}
             </div>
         </div>
+
+
         <div class="column">
             <div class="header">Differences</div>
             <div class="lines">
                 {% for difference in differences %}
-                    <div>{{ difference }}</div>
+                    <div>{{ difference.nb_device.name }}</div>
+                    <div>Interfaces:</div>
+                    {% for interface in difference.nb_device.interfaces %}
+                        <div class="tab-interface">{{ interface.name }}</div>
+                        <div class="tab-interface">MAC Address: {{ interface.mac_address }}</div>
+                        <div class="tab-interface">Addresses:</div>
+                        {% for address in interface.addresses %}
+                            <div class="tab-address">{{ address.address }}</div>
+                            <div class="tab-address">{{ address.dns_name }}</div>
+                        {% endfor %}
+                    {% endfor %}
+                    <div>Hostgroup: {{ difference.nb_device.hostgroup }}</div>
+                    <div>Description: {{ difference.nb_device.description }}</div>
+                    <div>Templates: {{ difference.nb_device.templates }}</div>
+                    <div>Status: {{ difference.nb_device.status }}</div>
+
+                    <div class="differences">
+                        <div>
+                            <div>Differences:</div>
+                            {% for difference in difference.differences[0] %}
+                                <div class="tab-interface">{{ difference }}</div>
+                            {% endfor %}
+                        </div>
+                        <div>
+                            <div>Same:</div>
+                            {% for difference in difference.differences[1] %}
+                                <div class="tab-interface">{{ difference }}</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div>{{ difference.zb_device.name }}</div>
+                    <div>Interfaces:</div>
+                    {% for interface in difference.zb_device.interfaces %}
+                        <div class="tab-interface">{{ interface.name }}</div>
+                        <div class="tab-interface">MAC Address: {{ interface.mac_address }}</div>
+                        <div class="tab-interface">Addresses:</div>
+                        {% for address in interface.addresses %}
+                            <div class="tab-address">{{ address.address }}</div>
+                            <div class="tab-address">{{ address.dns_name }}</div>
+                        {% endfor %}
+                    {% endfor %}
+                    <div>Hostgroup: {{ difference.zb_device.hostgroup }}</div>
+                    <div>Description: {{ difference.zb_device.description }}</div>
+                    <div>Templates: {{ difference.zb_device.templates }}</div>
+                    <div>Status: {{ difference.zb_device.status }}</div>
+                    <div class="line">Oddeleni</div>
                 {% endfor %}
             </div>
         </div>
+
+
         <div class="column">
             <div class="header">Zabbix Devices</div>
             <div class="lines">
                 {% for device in zabbix_devices %}
-                    <div>{{ device }}</div>
+                    <div>{{ device.name }}</div>
+                    <div>Interfaces:</div>
+                    {% for interface in device.interfaces %}
+                        <div class="tab-interface">{{ interface.name }}</div>
+                        <div class="tab-interface">MAC Address: {{ interface.mac_address }}</div>
+                        <div class="tab-interface">Addresses:</div>
+                        {% for address in interface.addresses %}
+                            <div class="tab-address">{{ address.address }}</div>
+                            <div class="tab-address">{{ address.dns_name }}</div>
+                        {% endfor %}
+                    {% endfor %}
+                    <div>Hostgroup: {{ device.hostgroup }}</div>
+                    <div>Description: {{ device.description }}</div>
+                    <div>Templates: {{ device.templates }}</div>
+                    <div>Status: {{ device.status }}</div>
+                    <div class="line">Oddeleni</div>
                 {% endfor %}
             </div>
         </div>
