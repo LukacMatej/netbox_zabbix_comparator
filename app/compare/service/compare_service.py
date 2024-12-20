@@ -24,7 +24,7 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
             same.append(field)
     for nb_interface, zb_interface in zip(nb_device.interfaces, zb_device.interfaces):
         interface_fields: list[str] = list(interface_model.__annotations__.keys())
-        interface_fields = [key for key in device_model.__annotations__.keys() if key not in ["name"]]
+        interface_fields = [key for key in interface_model.__annotations__.keys() if key not in ["name"]]
         for field in interface_fields:
             if getattr(nb_interface, field) != getattr(zb_interface, field):
                 found = True
