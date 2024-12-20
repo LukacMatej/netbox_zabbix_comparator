@@ -44,21 +44,32 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
   }
   query = """
   {
-    device_list {
-      id
+  device_list {
+    id
+    name
+    site {
       name
-      config_context
-      status
-      description
-      interfaces {
+    }
+    device_type {
+      manufacturer {
         name
-        mac_address
-        ip_addresses {
-          address
-          dns_name
-        }
       }
     }
+    role {
+      name
+    }
+    config_context
+    status
+    description
+    interfaces {
+      name
+      mac_address
+      ip_addresses {
+        address
+        dns_name
+      }
+    }
+  }
   }
   """
   
@@ -75,7 +86,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
           for device in data["data"]["device_list"]:
             device_list.append(device_model(
               name=device["name"],
-              hostgroup="",
+              hostgroup=device["site"]["name"]+"/"+device["device_type"]["manufacturer"]["name"]+"/"+device["role"]["name"],
               description=device["description"],
               templates=device["config_context"]["zabbix"]["templates"] if device["config_context"] else "",
               status=device["status"],
