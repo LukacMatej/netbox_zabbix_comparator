@@ -52,7 +52,7 @@
             <div class="header">Netbox Devices</div>
             <div class="lines">
                 {% for device in netbox_devices %}
-                    <div>{{ device.name }}</div>
+                    <div><strong>{{ device.name }}</strong></div>
                     <div>Interfaces:</div>
                     {% for interface in device.interfaces %}
                         <div class="tab-interface">{{ interface.name }}</div>
@@ -77,7 +77,7 @@
             <div class="header">Differences</div>
             <div class="lines">
                 {% for difference in differences %}
-                    <div>{{ difference.nb_device.name }}</div>
+                    <div><strong>Netbox: {{ difference.nb_device.name }}</strong></div>
                     <div>Interfaces:</div>
                     {% for interface in difference.nb_device.interfaces %}
                         <div class="tab-interface">{{ interface.name }}</div>
@@ -92,23 +92,23 @@
                     <div>Description: {{ difference.nb_device.description }}</div>
                     <div>Templates: {{ difference.nb_device.templates }}</div>
                     <div>Status: {{ difference.nb_device.status }}</div>
-
+                    <br>
                     <div class="differences">
                         <div>
-                            <div>Differences:</div>
+                            <div><strong>Differences:</strong></div>
                             {% for difference in difference.differences[0] %}
                                 <div class="tab-interface">{{ difference }}</div>
                             {% endfor %}
                         </div>
                         <div>
-                            <div>Same:</div>
+                            <div><strong>Same:</strong></div>
                             {% for difference in difference.differences[1] %}
                                 <div class="tab-interface">{{ difference }}</div>
                             {% endfor %}
                         </div>
                     </div>
-
-                    <div>{{ difference.zb_device.name }}</div>
+                    <br>
+                    <div><strong>Zabbix: {{ difference.zb_device.name }}</strong></div>
                     <div>Interfaces:</div>
                     {% for interface in difference.zb_device.interfaces %}
                         <div class="tab-interface">{{ interface.name }}</div>
@@ -133,7 +133,7 @@
             <div class="header">Zabbix Devices</div>
             <div class="lines">
                 {% for device in zabbix_devices %}
-                    <div>{{ device.name }}</div>
+                    <div><strong>{{ device.name }}</strong></div>
                     <div>Interfaces:</div>
                     {% for interface in device.interfaces %}
                         <div class="tab-interface">{{ interface.name }}</div>

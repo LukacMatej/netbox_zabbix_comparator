@@ -6,6 +6,14 @@ from app.device.models.interface_model import Interface as interface_model
 from app.device.models.address_model import Address as address_model
 from app.logger import logger_conf as log
 
+def formatStatus(status: str)-> str:
+  enabled_statuses = {"ACTIVE",0}
+  disabled_statuses = {"OFFLINE","STAGED","PLANNED","FAILED","INVENTORY"}
+  if status in enabled_statuses:
+    return "Active"
+  elif status in disabled_statuses:
+    return "Disabled"
+  return status
 
 def print_devices(nb_device_list: list[device_model]) -> None:
   txt_builder: str = ""
@@ -91,7 +99,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
               hostgroup=device["site"]["name"]+"/"+device["device_type"]["manufacturer"]["name"]+"/"+device["role"]["name"],
               description=device["description"],
               templates=device["config_context"]["zabbix"]["templates"] if device["config_context"] else "",
-              status=device["status"],
+              status=formatStatus(device["status"]),
               interfaces=[interface_model(
                 name=interface["name"],
                 mac_address=interface["mac_address"],
@@ -150,7 +158,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
         hostgroup=host["groups"][0]["name"],
         description=host["description"],
         templates=[template["name"] for template in host["parentTemplates"]],
-        status=host["status"],
+        status=formatStatus(host["status"]),
         interfaces=[interface_model(
           name=interface["dns"],
           mac_address=host["inventory"]["macaddress_a"],

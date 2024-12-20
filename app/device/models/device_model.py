@@ -8,7 +8,7 @@ class Device:
     templates: str = ""
     status: str = ""
     
-    def __init__(self, name, interfaces, hostgroup, description, templates, status):
+    def __init__(self, name, interfaces, hostgroup, description, templates, status) -> None:
         self.name = name
         self.interfaces = interfaces
         self.hostgroup = hostgroup
@@ -17,5 +17,5 @@ class Device:
         self.status = status
         
     
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} {self.interfaces} {self.hostgroup} {self.description} {self.templates} {self.status}"

@@ -5,10 +5,10 @@ class Interface:
     addresses: list[addr] = []
     mac_address: str = ""
     
-    def __init__(self, name, addresses, mac_address):
+    def __init__(self, name, addresses, mac_address) -> None:
         self.name = name
         self.addresses = addresses
         self.mac_address = mac_address
     
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} {self.addresses} {self.mac_address}"
