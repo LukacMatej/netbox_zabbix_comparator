@@ -13,6 +13,7 @@ def print_devices(nb_device_list: list[device_model]) -> None:
     txt_builder += f"Device Name: {device.name}\n"
     txt_builder += f"Description: {device.description}\n"
     txt_builder += f"Status: {device.status}\n"
+    txt_builder += f"Hostgroup: {device.hostgroup}\n"
     txt_builder += f"Templates: {device.templates}\n"
     for interface in device.interfaces:
       txt_builder += f"  Interface Name: {interface.name}\n"
@@ -27,6 +28,7 @@ def print_device(device: device_model) -> None:
   txt_builder += f"Device Name: {device.name}\n"
   txt_builder += f"Description: {device.description}\n"
   txt_builder += f"Status: {device.status}\n"
+  txt_builder += f"Hostgroup: {device.hostgroup}\n"
   txt_builder += f"Templates: {device.templates}\n"
   for interface in device.interfaces:
     txt_builder += f"  Interface Name: {interface.name}\n"
