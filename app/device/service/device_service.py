@@ -16,16 +16,17 @@ def formatStatus(status: str)-> str:
     return "Disabled"
   return status
 
-def print_differences(difference_model: difference_model) -> str:
+def print_differences(difference_model: list[difference_model]) -> str:
     txt_builder: str = ""
-    txt_builder += f"Netbox device: {print_device(difference_model.nb_device)}\n"
-    txt_builder += f"Zabbix device: {print_device(difference_model.zb_device)}\n"
-    txt_builder += "Differences:\n"
-    for difference in difference_model.differences[0]:
-        txt_builder += f"  {difference}\n"
-    txt_builder += "Similarities:\n"
-    for similarity in difference_model.differences[1]:
-        txt_builder += f"  {similarity}\n"
+    for differ in difference_model:
+      txt_builder += f"Netbox device: {print_device(differ.nb_device)}\n"
+      txt_builder += f"Zabbix device: {print_device(differ.zb_device)}\n"
+      txt_builder += "Differences:\n"
+      for difference in differ.differences[0]:
+          txt_builder += f"  {difference}\n"
+      txt_builder += "Similarities:\n"
+      for similarity in differ.differences[1]:
+          txt_builder += f"  {similarity}\n"
     return txt_builder
 
 def print_devices(nb_device_list: list[device_model]) -> None:
