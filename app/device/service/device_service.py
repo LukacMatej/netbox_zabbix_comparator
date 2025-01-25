@@ -4,6 +4,7 @@ import requests
 from app.device.models.device_model import Device as device_model
 from app.device.models.interface_model import Interface as interface_model
 from app.device.models.address_model import Address as address_model
+from app.device.models.difference_model import DeviceDifference as difference_model
 from app.logger import logger_conf as log
 
 def formatStatus(status: str)-> str:
@@ -15,15 +16,15 @@ def formatStatus(status: str)-> str:
     return "Disabled"
   return status
 
-def print_differences(nb_device: device_model, zb_device: device_model, differences: tuple[list[str],list[str]]) -> str:
+def print_differences(difference_model: difference_model) -> str:
     txt_builder: str = ""
-    txt_builder += f"Netbox device: {print_device(nb_device)}\n"
-    txt_builder += f"Zabbix device: {print_device(zb_device)}\n"
+    txt_builder += f"Netbox device: {print_device(difference_model.nb_device)}\n"
+    txt_builder += f"Zabbix device: {print_device(difference_model.zb_device)}\n"
     txt_builder += "Differences:\n"
-    for difference in differences[0]:
+    for difference in difference_model.differences[0]:
         txt_builder += f"  {difference}\n"
     txt_builder += "Similarities:\n"
-    for similarity in differences[1]:
+    for similarity in difference_model.differences[1]:
         txt_builder += f"  {similarity}\n"
     return txt_builder
 
