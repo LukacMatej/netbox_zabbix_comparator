@@ -67,9 +67,9 @@ def RunCompare() -> tuple[str, int]:
     differences: list[DeviceDifference] = compare_output[0]
     netbox_devices: list[Device] = compare_output[1]
     zabbix_devices: list[Device] = compare_output[2]
-    log.logger.debug(differences)
-    log.logger.debug(netbox_devices)
-    log.logger.debug(zabbix_devices)
+    log.logger.debug(DeviceDifference.__str__(differences))
+    log.logger.debug(ds.print_devices(netbox_devices))
+    log.logger.debug(ds.print_devices(zabbix_devices))
     return render_template(
         "compare_output.html",
         differences=compare_output[0],
