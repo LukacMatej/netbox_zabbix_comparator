@@ -8,3 +8,15 @@ class DeviceDifference:
 
     def __str__(self) -> str:
         return f"{self.nb_device} {self.zb_device} {self.differences}"
+
+    def print_differences(self) -> str:
+        txt_builder: str = ""
+        txt_builder += f"Netbox device: {self.nb_device.name}\n"
+        txt_builder += f"Zabbix device: {self.zb_device.name}\n"
+        txt_builder += "Differences:\n"
+        for difference in self.differences[0]:
+            txt_builder += f"  {difference}\n"
+        txt_builder += "Similarities:\n"
+        for similarity in self.differences[1]:
+            txt_builder += f"  {similarity}\n"
+        return txt_builder
