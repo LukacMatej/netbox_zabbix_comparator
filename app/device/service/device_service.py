@@ -29,7 +29,7 @@ def print_differences(difference_model: list[difference_model]) -> str:
           txt_builder += f"  {similarity}\n"
     return txt_builder
 
-def print_devices(nb_device_list: list[device_model]) -> None:
+def print_devices(nb_device_list: list[device_model]) -> str:
   txt_builder: str = ""
   for device in nb_device_list:
     txt_builder += f"Device Name: {device.name}\n"
@@ -45,7 +45,7 @@ def print_devices(nb_device_list: list[device_model]) -> None:
         txt_builder += f"    DNS Name: {address.dns_name}\n"
   return txt_builder
 
-def print_device(device: device_model) -> None:
+def print_device(device: device_model) -> str:
   txt_builder: str = ""
   txt_builder += f"Device Name: {device.name}\n"
   txt_builder += f"Description: {device.description}\n"

@@ -19,7 +19,7 @@ class Device:
     def __str__(self) -> str:
         return f"{self.name} {self.interfaces} {self.hostgroup} {self.description} {self.templates} {self.status}"
 
-def normalize_status(status) -> str:
+def normalize_status(status: str) -> str:
     if status == 0 or status == "Active" or status == "0":
         return "Active"
     return "Inactive"

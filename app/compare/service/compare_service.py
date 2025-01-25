@@ -22,7 +22,7 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
             found = True
             fields.append(field)
         else:
-            if nb_value != "" and zb_value != "":
+            if nb_value == "" and zb_value == "":
                 pass
             else:
                 count += 1
@@ -37,7 +37,7 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
                 found = True
                 fields.append(f"interface.{field}")
             else:
-                if nb_value != "" and zb_value != "":
+                if nb_value == "" and zb_value == "":
                     pass
                 else:
                     count += 1
@@ -51,7 +51,7 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
                     found = True
                     fields.append(f"interface.address.{field}")
                 else:
-                    if nb_value != "" and zb_value != "":
+                    if nb_value == "" and zb_value == "":
                         pass
                     else:
                         count += 1
@@ -103,13 +103,13 @@ def compare(nb_ip, nb_key, zb_ip, zb_key) -> Exception | tuple[list[device_diffe
         log.logger.error(f"Error: {nb_device_list}")
         return Exception(nb_device_list)
     log.logger.debug("Netbox Devices:")
-    log.logger.debug("\n".join(device_service.print_devices(nb_device_list)))
+    log.logger.debug(device_service.print_devices(nb_device_list))
     zb_device_list: list[device_model] | str = device_service.get_zb_devices(zb_key, zb_ip)
     if isinstance(zb_device_list, str):
         log.logger.error(f"Error: {zb_device_list}")
         return Exception(zb_device_list)
     log.logger.debug("Zabbix Devices:")
-    log.logger.debug("\n".join(device_service.print_devices(zb_device_list)))
+    log.logger.debug(device_service.print_devices(zb_device_list))
     different_devices: tuple[list[device_difference_model],list[device_model],list[device_model]] = compare_devices(nb_device_list, zb_device_list)
     log.logger.info("Ending compare")
     return different_devices
