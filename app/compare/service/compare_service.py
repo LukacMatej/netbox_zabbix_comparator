@@ -7,7 +7,7 @@ from app.device.models.difference_model import DeviceDifference as device_differ
 from app.device.models.address_model import Address as address_model
 from app.device.models.interface_model import Interface as interface_model
 
-def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[bool, tuple[device_model, device_model], tuple[list[str],list[str]]]:
+def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[bool, tuple[device_model, device_model], tuple[list[str], list[str]]]:
     differences: tuple[bool, tuple[device_model, device_model], str] = (False, (nb_device, zb_device), "")
     found = False
     fields: list[str] = []
@@ -16,34 +16,40 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
     device_fields: list[str] = list(device_model.__annotations__.keys())
     device_fields = [key for key in device_model.__annotations__.keys() if key not in ["description", "status"]]
     for field in device_fields:
-        if getattr(nb_device, field) != getattr(zb_device, field):
+        nb_value = getattr(nb_device, field)
+        zb_value = getattr(zb_device, field)
+        if nb_value != zb_value and nb_value != "" and zb_value != "":
             found = True
             fields.append(field)
         else:
-            count +=1
+            count += 1
             same.append(field)
     for nb_interface, zb_interface in zip(nb_device.interfaces, zb_device.interfaces):
         interface_fields: list[str] = list(interface_model.__annotations__.keys())
         interface_fields = [key for key in interface_model.__annotations__.keys() if key not in ["name"]]
         for field in interface_fields:
-            if getattr(nb_interface, field) != getattr(zb_interface, field):
+            nb_value = getattr(nb_interface, field)
+            zb_value = getattr(zb_interface, field)
+            if nb_value != zb_value and nb_value != "" and zb_value != "":
                 found = True
                 fields.append(f"interface.{field}")
             else:
-                count +=1
+                count += 1
                 same.append(field)
         for nb_address, zb_address in zip(nb_interface.addresses, zb_interface.addresses):
             address_fields: list[str] = list(address_model.__annotations__.keys())
             for field in address_fields:
-                if getattr(nb_address, field) != getattr(zb_address, field):
+                nb_value = getattr(nb_address, field)
+                zb_value = getattr(zb_address, field)
+                if nb_value != zb_value and nb_value != "" and zb_value != "":
                     found = True
                     fields.append(f"interface.address.{field}")
                 else:
-                    count +=1
+                    count += 1
                     same.append(field)
     if count < 1:
         found = False
-    differences = found, (nb_device, zb_device), (fields,same)
+    differences = found, (nb_device, zb_device), (fields, same)
     return differences
 
 def compare_devices(nb_device_list: list[device_model], zb_device_list: list[device_model]) -> list[device_difference_model]:
