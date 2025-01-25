@@ -29,7 +29,7 @@ def print_devices(nb_device_list: list[device_model]) -> None:
       for address in interface.addresses:
         txt_builder += f"    IP Address: {address.address}\n"
         txt_builder += f"    DNS Name: {address.dns_name}\n"
-  return 
+  return txt_builder
 
 def print_device(device: device_model) -> None:
   txt_builder: str = ""
