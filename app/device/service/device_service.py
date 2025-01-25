@@ -15,6 +15,18 @@ def formatStatus(status: str)-> str:
     return "Disabled"
   return status
 
+def print_differences(nb_device: device_model, zb_device: device_model, differences: tuple[list[str],list[str]]) -> str:
+    txt_builder: str = ""
+    txt_builder += f"Netbox device: {print_device(nb_device)}\n"
+    txt_builder += f"Zabbix device: {print_device(zb_device)}\n"
+    txt_builder += "Differences:\n"
+    for difference in differences[0]:
+        txt_builder += f"  {difference}\n"
+    txt_builder += "Similarities:\n"
+    for similarity in differences[1]:
+        txt_builder += f"  {similarity}\n"
+    return txt_builder
+
 def print_devices(nb_device_list: list[device_model]) -> None:
   txt_builder: str = ""
   for device in nb_device_list:
