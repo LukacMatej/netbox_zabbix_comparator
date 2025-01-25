@@ -18,35 +18,44 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
     for field in device_fields:
         nb_value = getattr(nb_device, field)
         zb_value = getattr(zb_device, field)
-        if nb_value != zb_value and nb_value != "" and zb_value != "":
+        if nb_value != zb_value:
             found = True
             fields.append(field)
         else:
-            count += 1
-            same.append(field)
+            if nb_value != "" and zb_value != "":
+                pass
+            else:
+                count += 1
+                same.append(field)
     for nb_interface, zb_interface in zip(nb_device.interfaces, zb_device.interfaces):
         interface_fields: list[str] = list(interface_model.__annotations__.keys())
         interface_fields = [key for key in interface_model.__annotations__.keys() if key not in ["name"]]
         for field in interface_fields:
             nb_value = getattr(nb_interface, field)
             zb_value = getattr(zb_interface, field)
-            if nb_value != zb_value and nb_value != "" and zb_value != "":
+            if nb_value != zb_value:
                 found = True
                 fields.append(f"interface.{field}")
             else:
-                count += 1
-                same.append(field)
+                if nb_value != "" and zb_value != "":
+                    pass
+                else:
+                    count += 1
+                    same.append(field)
         for nb_address, zb_address in zip(nb_interface.addresses, zb_interface.addresses):
             address_fields: list[str] = list(address_model.__annotations__.keys())
             for field in address_fields:
                 nb_value = getattr(nb_address, field)
                 zb_value = getattr(zb_address, field)
-                if nb_value != zb_value and nb_value != "" and zb_value != "":
+                if nb_value != zb_value:
                     found = True
                     fields.append(f"interface.address.{field}")
                 else:
-                    count += 1
-                    same.append(field)
+                    if nb_value != "" and zb_value != "":
+                        pass
+                    else:
+                        count += 1
+                        same.append(field)
     if count < 1:
         found = False
     differences = found, (nb_device, zb_device), (fields, same)
