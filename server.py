@@ -76,7 +76,11 @@ def RunCompare() -> tuple[str, int]:
         netbox_devices=compare_output[1],
         zabbix_devices=compare_output[2]
     ), 200
-        
+
+@app.route("/RunCompareSync")
+def RunCompareSync() -> tuple[str, int]:
+    return "Not implemented yet", 200
+
 def parser_init() -> argparse.ArgumentParser:
     """
     Initialize the argument parser for the server.
