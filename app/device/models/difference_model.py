@@ -7,4 +7,5 @@ class DeviceDifference:
         self.differences: tuple[list[str],list[str]] = differences
 
     def __str__(self) -> str:
-        return f"{self.nb_device} {self.zb_device} {self.differences}"
+        return f"{self.nb_device} {self.zb_device} {self.differences}" 
+        

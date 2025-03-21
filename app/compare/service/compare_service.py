@@ -14,7 +14,7 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
     count = 0
     same: list[str] = []
     device_fields: list[str] = list(device_model.__annotations__.keys())
-    device_fields = [key for key in device_model.__annotations__.keys() if key not in ["description", "status"]]
+    device_fields = [key for key in device_model.__annotations__.keys() if key not in ["description", "status","templates"]]
     for field in device_fields:
         nb_value = getattr(nb_device, field)
         zb_value = getattr(zb_device, field)
@@ -29,13 +29,13 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
                 same.append(field)
     for nb_interface, zb_interface in zip(nb_device.interfaces, zb_device.interfaces):
         interface_fields: list[str] = list(interface_model.__annotations__.keys())
-        interface_fields = [key for key in interface_model.__annotations__.keys() if key not in ["name"]]
+        interface_fields = [key for key in interface_model.__annotations__.keys() if key not in ["name","addresses"]]
         for field in interface_fields:
             nb_value = getattr(nb_interface, field)
             zb_value = getattr(zb_interface, field)
             if nb_value != zb_value:
                 found = True
-                fields.append(f"interface.{field}")
+                fields.append(f"{field}")
             else:
                 if nb_value == "" and zb_value == "":
                     pass
@@ -49,7 +49,7 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
                 zb_value = getattr(zb_address, field)
                 if nb_value != zb_value:
                     found = True
-                    fields.append(f"interface.address.{field}")
+                    fields.append(f"{field}")
                 else:
                     if nb_value == "" and zb_value == "":
                         pass
