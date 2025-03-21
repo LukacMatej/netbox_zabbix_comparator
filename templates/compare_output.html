@@ -50,6 +50,7 @@
     <div class="container">
         <div class="column">
             <div class="header">Netbox Devices</div>
+            {% if netbox_devices %}
             <div class="lines">
                 {% for device in netbox_devices %}
                     <div><strong>{{ device.name }}</strong></div>
@@ -66,9 +67,13 @@
                     <div class="line">Oddeleni</div>
                 {% endfor %}
             </div>
+            {% else %}
+                <div class="header">No Netbox devices found</div>
+            {% endif %}
         </div>
 
         <div class="column">
+            {% if differences %}
             <div class="header">Differences</div>
             <div class="lines">
                 {% for difference in differences %}
@@ -114,10 +119,14 @@
                     <div class="line">Oddeleni</div>
                 {% endfor %}
             </div>
+            {% else %}
+                <div class="header">No differences found</div>
+            {% endif %}
         </div>
 
         <div class="column">
             <div class="header">Zabbix Devices</div>
+            {% if zabbix_devices %}
             <div class="lines">
                 {% for device in zabbix_devices %}
                     <div><strong>{{ device.name }}</strong></div>
@@ -134,6 +143,9 @@
                     <div class="line">Oddeleni</div>
                 {% endfor %}
             </div>
+            {% else %}
+                <div class="header">No Zabbix devices found</div>
+            {% endif %}
         </div>
     </div>
 </body>
