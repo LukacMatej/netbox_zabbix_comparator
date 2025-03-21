@@ -61,7 +61,7 @@
                             <div class="tab-address">IP adress: {{ address.address }}, DNS Name: {{address.dns_name}}</div>
                         {% endfor %}
                     {% endfor %}
-                    <div>Hostgroup: {{ device.hostgroup }}, {% if device.description%} Description: {{ device.description }} {% endif %}, Status: {{ device.status }}</div>
+                    <div>Hostgroup: {{ device.hostgroup }}, {% if device.description%} Description: {{ device.description }} ,{% endif %} Status: {{ device.status }}</div>
                     <div>Templates: {{ device.templates }}</div>
                     <div class="line">Oddeleni</div>
                 {% endfor %}
@@ -81,7 +81,7 @@
                             <div class="tab-address">IP adress: {{ address.address }}, DNS Name: {{ address.dns_name }}</div>
                         {% endfor %}
                     {% endfor %}
-                    <div>Hostgroup: {{ difference.nb_device.hostgroup }},{% if difference.nb_device.description %} Description: {{ difference.nb_device.description }} {% endif %} , Status: {{ difference.nb_device.status }}</div>
+                    <div>Hostgroup: {{ difference.nb_device.hostgroup }},{% if difference.nb_device.description %} Description: {{ difference.nb_device.description }} ,{% endif %} Status: {{ difference.nb_device.status }}</div>
                     <div>Templates: {{ difference.nb_device.templates }}</div>
                     <br>
                     <div class="differences">
@@ -109,7 +109,7 @@
                             <div class="tab-address">{{ address.dns_name }}</div>
                         {% endfor %}
                     {% endfor %}
-                    <div>Hostgroup: {{ difference.zb_device.hostgroup }}, {% if difference.zb_device.description%} Description: {{ difference.zb_device.description }} {% endif %}, Status: {{ difference.zb_device.status }}</div>
+                    <div>Hostgroup: {{ difference.zb_device.hostgroup }}, {% if difference.zb_device.description%} Description: {{ difference.zb_device.description }} ,{% endif %} Status: {{ difference.zb_device.status }}</div>
                     <div>Templates: {{ difference.zb_device.templates }}</div>
                     <div class="line">Oddeleni</div>
                 {% endfor %}
@@ -129,7 +129,7 @@
                             <div class="tab-address">IP adress: {{ address.address }}, DNS Name: {{address.dns_name}}</div>
                         {% endfor %}
                     {% endfor %}
-                    <div>Hostgroup: {{ device.hostgroup }}, {% if device.description%} Description: {{ device.description }} {% endif %}, Status: {{ device.status }}</div>
+                    <div>Hostgroup: {{ device.hostgroup }}, {% if device.description%} Description: {{ device.description }} ,{% endif %} Status: {{ device.status }}</div>
                     <div>Templates: {{ device.templates }}</div>
                     <div class="line">Oddeleni</div>
                 {% endfor %}
