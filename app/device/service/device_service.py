@@ -19,7 +19,7 @@ def formatStatus(status: str)-> str:
 
 def formatMac(mac: str) -> str:
     if not mac:
-      return "None"
+      return ""
     mac_clean = re.sub(r'[^0-9A-Fa-f]', '', mac)
     return f"{mac_clean[0:4]}.{mac_clean[4:8]}.{mac_clean[8:12]}".lower()
 
