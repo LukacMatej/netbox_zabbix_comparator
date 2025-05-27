@@ -1,6 +1,7 @@
 """_summary_
 """
 import requests
+import re
 from app.device.models.device_model import Device as device_model
 from app.device.models.interface_model import Interface as interface_model
 from app.device.models.address_model import Address as address_model
@@ -15,6 +16,12 @@ def formatStatus(status: str)-> str:
   elif status in disabled_statuses:
     return "Disabled"
   return status
+
+def formatMac(mac: str) -> str:
+    if not mac:
+      return "None"
+    mac_clean = re.sub(r'[^0-9A-Fa-f]', '', mac)
+    return f"{mac_clean[0:4]}.{mac_clean[4:8]}.{mac_clean[8:12]}".lower()
 
 def print_differences(difference_model: list[difference_model]) -> str:
     txt_builder: str = ""
@@ -116,7 +123,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
               status=formatStatus(device["status"]),
               interfaces=[interface_model(
                 name=interface["name"],
-                mac_address=interface["mac_address"],
+                mac_address=formatMac(interface["mac_address"]),
                 addresses=[address_model(
                   address=ip["address"],
                   dns_name=ip["dns_name"]
@@ -175,7 +182,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
         status=formatStatus(host["status"]),
         interfaces=[interface_model(
           name=interface["dns"],
-          mac_address=host["inventory"]["macaddress_a"],
+          mac_address=formatMac(host["inventory"]["macaddress_a"]),
           addresses=[address_model(
             address=interface["ip"],
             dns_name=interface["dns"]
