@@ -14,7 +14,7 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
     count = 0
     same: list[str] = []
     device_fields: list[str] = list(device_model.__annotations__.keys())
-    device_fields = [key for key in device_model.__annotations__.keys() if key not in ["description", "status","templates"]]
+    device_fields = [key for key in device_model.__annotations__.keys() if key not in ["hostgroup","description", "status","templates"]]
     for field in device_fields:
         nb_value = getattr(nb_device, field)
         zb_value = getattr(zb_device, field)
