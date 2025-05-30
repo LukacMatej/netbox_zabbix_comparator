@@ -12,3 +12,11 @@ class Interface:
     
     def __str__(self) -> str:
         return f"{self.name} {self.addresses} {self.mac_address}"
+    
+    def to_dict(self) -> dict:
+        """Creates a dictionary representation of the interface."""
+        return {
+            "name": self.name,
+            "mac_address": self.mac_address,
+            "addresses": [address.to_dict() for address in self.addresses]
+        }

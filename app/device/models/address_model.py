@@ -8,3 +8,10 @@ class Address:
     
     def __str__(self) -> str:
         return f"{self.address} {self.dns_name}"
+    
+    def to_dict(self) -> dict:
+        """Creates a dictionary representation of the address."""
+        return {
+            "address": self.address,
+            "dns_name": self.dns_name
+        }

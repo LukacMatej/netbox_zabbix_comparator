@@ -64,6 +64,8 @@
                     {% endfor %}
                     <div>Hostgroup: {{ device.hostgroup }}, {% if device.description%} Description: {{ device.description }} ,{% endif %} Status: {{ device.status }}</div>
                     <div>Templates: {{ device.templates }}</div>
+                    <div><strong>Zařízení bude vytvořeno v Zabbixu</strong></div>
+                    
                     <div class="line">Oddeleni</div>
                 {% endfor %}
             </div>
@@ -140,6 +142,7 @@
                     {% endfor %}
                     <div>Hostgroup: {{ device.hostgroup }}, {% if device.description%} Description: {{ device.description }} ,{% endif %} Status: {{ device.status }}</div>
                     <div>Templates: {{ device.templates }}</div>
+                    <div><strong>Zařízení bude vytvořeno v Netboxu</strong></div>
                     <div class="line">Oddeleni</div>
                 {% endfor %}
             </div>
