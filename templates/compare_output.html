@@ -91,14 +91,14 @@
                     <br>
                     <div class="differences">
                         <div>
-                            <div><strong>Differences:</strong></div>
-                            {% for difference in difference.differences[0] %}
+                            <div><strong>Same:</strong></div>
+                            {% for difference in difference.differences[1] %}
                                 <div class="tab-interface">{{ difference }}</div>
                             {% endfor %}
                         </div>
                         <div>
-                            <div><strong>Same:</strong></div>
-                            {% for difference in difference.differences[1] %}
+                            <div><strong>Differences:</strong></div>
+                            {% for difference in difference.differences[0] %}
                                 <div class="tab-interface">{{ difference }}</div>
                             {% endfor %}
                         </div>

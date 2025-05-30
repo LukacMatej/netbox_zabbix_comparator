@@ -20,7 +20,10 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
         zb_value = getattr(zb_device, field)
         if nb_value != zb_value:
             found = True
-            fields.append(field)
+            if field == "name":
+                fields.append(f"{field} ({nb_value} != {zb_value}), Hodnota v netboxu přepíše hodnotu v zabbixu")
+            else:
+                fields.append(field)
         else:
             if nb_value == "" and zb_value == "":
                 pass
@@ -35,7 +38,10 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
             zb_value = getattr(zb_interface, field)
             if nb_value != zb_value:
                 found = True
-                fields.append(f"{field}")
+                if field == "mac_address":
+                    fields.append(f"{field} ({device_service.formatMac(nb_value)} != {device_service.formatMac(zb_value)}), Hodnota v zabbixu přepíše hodnotu v netboxu")
+                else:
+                    fields.append(f"{field}")
             else:
                 if nb_value == "" and zb_value == "":
                     pass
@@ -49,7 +55,12 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
                 zb_value = getattr(zb_address, field)
                 if nb_value != zb_value:
                     found = True
-                    fields.append(f"{field}")
+                    if field == "address":
+                        fields.append(f"{field} ({nb_value} != {zb_value}), Hodnota v netboxu přepíše hodnotu v zabbixu")
+                    elif field == "dns_name":
+                        fields.append(f"{field} ({nb_value} != {zb_value}), Hodnota v nettboxu přepíše hodnotu v zabbixu")
+                    else:
+                        fields.append(f"{field}")
                 else:
                     if nb_value == "" and zb_value == "":
                         pass
