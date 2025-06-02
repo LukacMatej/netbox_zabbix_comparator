@@ -28,6 +28,7 @@ import subprocess
 import argparse
 import os
 from app.compare.service import compare_service as ct
+from app.compare.service import synchronization_service as ss
 from app.device.service import device_service as ds
 from app.device.models.difference_model import DeviceDifference
 from app.device.models.device_model import Device
@@ -79,7 +80,30 @@ def RunCompare() -> tuple[str, int]:
 
 @app.route("/RunCompareSync")
 def RunCompareSync() -> tuple[str, int]:
-    return "Not implemented yet", 200
+    netbox_key: str = os.environ.get("NETBOX_KEY")
+    netbox_ip: str = os.environ.get("NETBOX_IP")
+    zabbix_ip: str = os.environ.get("ZABBIX_IP")
+    zabbix_key: str = os.environ.get("ZABBIX_KEY")
+    compare_output: Exception | tuple[list[DeviceDifference], list[Device], list[Device]] = ct.compare(nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key)
+    if isinstance(compare_output, Exception):
+        return str(compare_output), 500
+    differences: list[DeviceDifference] = compare_output[0]
+    netbox_devices: list[Device] = compare_output[1]
+    zabbix_devices: list[Device] = compare_output[2]
+    log.logger.debug(ds.print_differences(differences))
+    log.logger.debug(ds.print_devices(netbox_devices))
+    log.logger.debug(ds.print_devices(zabbix_devices))
+    ss.sync_netbox_zabbix_devices(
+        netbox_devices=netbox_devices,
+        zabbix_devices=zabbix_devices,
+        differences=differences
+    )
+    return render_template(
+        "compare_sync_output.html",
+        differences=compare_output[0],
+        netbox_devices=compare_output[1],
+        zabbix_devices=compare_output[2]
+    ), 200
 
 def parser_init() -> argparse.ArgumentParser:
     """

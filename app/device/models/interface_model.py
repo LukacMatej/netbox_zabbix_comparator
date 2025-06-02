@@ -15,8 +15,14 @@ class Interface:
     
     def to_dict(self) -> dict:
         """Creates a dictionary representation of the interface."""
-        return {
-            "name": self.name,
-            "mac_address": self.mac_address,
-            "addresses": [address.to_dict() for address in self.addresses]
-        }
+        result = []
+        for addr in self.addresses:
+            result.append({
+                "type": 1,
+                "main": 1,
+                "useip": 1,
+                "ip": addr.address,
+                "dns": addr.dns_name,
+                "port": 161, # SNMP port
+            })
+        return result

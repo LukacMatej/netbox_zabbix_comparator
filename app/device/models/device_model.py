@@ -19,22 +19,28 @@ class Device:
     def __str__(self) -> str:
         return f"{self.name} {self.interfaces} {self.hostgroup} {self.description} {self.templates} {self.status}"
 
-    def create_data_zabbix(self) -> dict:
+    def create_data_zabbix(self, hostgroupId, templateids) -> dict:
         """Creates a dictionary representation of the device for Zabbix API."""
         return {
             "jsonrpc": "2.0",
             "method": "host.create",
             "params": {
                 "host": self.name,
-                "groups": [{"name": self.hostgroup}],
                 "interfaces": [interface.to_dict() for interface in self.interfaces],
+                "groups": [{"groupid": hostgroupId}],
                 "description": self.description,
-                "templates": [{"name": template} for template in self.templates.split(",") if template],
-                "status": 0 if self.status == "Active" else 1
+                "templates": [{"templateid": tempId} for tempId in templateids if tempId],
+                "status": 0 if self.status == "Active" else 1,
+                "inventory_mode": 0,
+                "inventory": {
+                    "macaddress_a": self.interfaces[0].mac_address if self.interfaces else "",
+                    "macaddress_b": self.interfaces[1].mac_address if len(self.interfaces) > 1 else "",
+                }
             },
             "auth": None,  # This should be set when calling the API
             "id": 1
         }
+
     def create_data_netbox(self) -> dict:
         """Creates a dictionary representation of the device for Netbox API."""
         return {
