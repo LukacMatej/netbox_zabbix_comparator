@@ -128,14 +128,14 @@ def sync_netbox_zabbix_devices(differences:list[device_difference_model], netbox
         zabbix_devices (list[device_model]): List of devices from Zabbix.
     """
     log.logger.info("Starting synchronization of Netbox and Zabbix devices.")
-    # for netbox_device in netbox_devices:
-    #     if not any(zabbix_device.name == netbox_device.name for zabbix_device in zabbix_devices):
-    #         log.logger.info(f"Device {netbox_device.name} found in Netbox but not in Zabbix, creating in Zabbix.")
-    #         create_zabbix_device(netbox_device)
+    for netbox_device in netbox_devices:
+        if not any(zabbix_device.name == netbox_device.name for zabbix_device in zabbix_devices):
+            log.logger.info(f"Device {netbox_device.name} found in Netbox but not in Zabbix, creating in Zabbix.")
+            create_zabbix_device(netbox_device)
     
-    for zabbix_device in zabbix_devices:
-        if not any(netbox_device.name == zabbix_device.name for netbox_device in netbox_devices):
-            log.logger.info(f"Device {zabbix_device.name} found in Zabbix but not in Netbox, creating in Netbox.")
-            create_netbox_device(zabbix_device)
+    # for zabbix_device in zabbix_devices:
+    #     if not any(netbox_device.name == zabbix_device.name for netbox_device in netbox_devices):
+    #         log.logger.info(f"Device {zabbix_device.name} found in Zabbix but not in Netbox, creating in Netbox.")
+    #         create_netbox_device(zabbix_device)
     
     log.logger.info("Synchronization of Netbox and Zabbix devices completed.")
