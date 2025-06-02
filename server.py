@@ -99,7 +99,7 @@ def RunCompareSync() -> tuple[str, int]:
         differences=differences
     )
     return render_template(
-        "compare_sync_output.html",
+        "compare_output.html",
         differences=compare_output[0],
         netbox_devices=compare_output[1],
         zabbix_devices=compare_output[2]
