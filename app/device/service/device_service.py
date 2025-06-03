@@ -130,7 +130,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                 name=interface["name"],
                 mac_address=formatMac(interface["mac_address"]),
                 addresses=[address_model(
-                  address=ip["address"],
+                  address=str(ip["address"]).split("/")[0],
                   dns_name=ip["dns_name"]
                 ) for ip in interface["ip_addresses"] if "address" in ip and "dns_name" in ip]
               ) for interface in device["interfaces"] if interface["ip_addresses"]]

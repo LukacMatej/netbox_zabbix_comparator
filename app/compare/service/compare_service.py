@@ -53,9 +53,6 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
             for field in address_fields:
                 nb_value = getattr(nb_address, field)
                 zb_value = getattr(zb_address, field)
-                if field == "address":
-                    nb_value = device_service.format_address(nb_value)
-                    zb_value = device_service.format_address(zb_value)
                 if nb_value != zb_value:
                     found = True
                     if field == "address":
