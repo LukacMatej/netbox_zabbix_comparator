@@ -127,7 +127,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
               templates=device["config_context"]["zabbix"]["templates"] if device["config_context"] else "",
               status=formatStatus(device["status"]),
               interfaces=[interface_model(
-                name=interface["name"],
+                name="",
                 mac_address=formatMac(interface["mac_address"]),
                 addresses=[address_model(
                   address=str(ip["address"]).split("/")[0],
@@ -186,7 +186,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
         templates=[template["name"] for template in host["parentTemplates"]],
         status=formatStatus(host["status"]),
         interfaces=[interface_model(
-          name=interface["dns"],
+          name="",
           mac_address=formatMac(host["inventory"]["macaddress_a"]),
           addresses=[address_model(
             address=interface["ip"],
