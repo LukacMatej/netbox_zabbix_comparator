@@ -66,7 +66,7 @@ def find_zabbix_hostgroup_id(hostgroup_name: str) -> int:
         "auth": None,  # This should be set when calling the API
         "id": 1
     })
-    
+    log.logger.info(f"Response from Zabbix for hostgroup get: {response.text}, status code: {response.status_code}")
     if response.status_code == 200:
         data = response.json()
         if data["result"]:
@@ -85,7 +85,8 @@ def find_zabbix_hostgroup_id(hostgroup_name: str) -> int:
         "auth": None,  # This should be set when calling the API
         "id": 1
     })
-    if response.status_code == 201:
+    log.logger.info(f"Response from Zabbix for creating hostgroup: {response.text}, status code: {response.status_code}")
+    if response.status_code == 200:
         data = response.json()
         if "result" in data and "groupids" in data["result"]:
             group_id = data["result"]["groupids"][0]
