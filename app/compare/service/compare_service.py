@@ -88,7 +88,8 @@ def compare_devices(nb_device_list: list[device_model], zb_device_list: list[dev
                 break
             found = False
         if not found:
-            nb_devices.append(nb_device)
+            if nb_device != zb_device:
+                nb_devices.append(nb_device)
     for zb_device in zb_device_list:
         found = False
         for nb_device in nb_device_list:
@@ -98,7 +99,8 @@ def compare_devices(nb_device_list: list[device_model], zb_device_list: list[dev
                 break
             found = False
         if not found:
-            zb_devices.append(zb_device)
+            if nb_device != zb_device:
+                zb_devices.append(zb_device)
     return different_devices, nb_devices, zb_devices
     
 def compare(nb_ip, nb_key, zb_ip, zb_key) -> Exception | tuple[list[device_difference_model], list[device_model], list[device_model]]:
