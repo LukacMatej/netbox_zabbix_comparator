@@ -37,7 +37,6 @@ class Device:
                     "macaddress_b": self.interfaces[1].mac_address if len(self.interfaces) > 1 else "",
                 }
             },
-            "auth": None,  # This should be set when calling the API
             "id": 1
         }
 
