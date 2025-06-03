@@ -63,7 +63,7 @@ def dict_interfaces(interfaces: list[InterfaceModel]) -> list[dict]:
     result = []
     for index, interface in enumerate(interfaces):
         result.append({
-            "type": 1,
+            "type": 2,
             "main": 1 if index == 0 else 0,
             "useip": 1,
             "ip": str(interface.addresses[0].address).split("/")[0] if interface.addresses else "",
