@@ -23,7 +23,7 @@ def find_template_ids(template_name: str) -> int:
         "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
     }
-    response = requests.post(zabbix_ip+"zabbix/api_jsonrpc.php", headers=headers, json={
+    response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json={
         "jsonrpc": "2.0",
         "method": "template.get",
         "params": {
@@ -57,7 +57,7 @@ def find_zabbix_hostgroup_id(hostgroup_name: str) -> int:
         "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
     }
-    response = requests.post(zabbix_ip+"zabbix/api_jsonrpc.php", headers=headers, json={
+    response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json={
         "jsonrpc": "2.0",
         "method": "hostgroup.get",
         "params": {
@@ -75,7 +75,7 @@ def find_zabbix_hostgroup_id(hostgroup_name: str) -> int:
     
     log.logger.info(f"Failed to find Zabbix hostgroup ID for {hostgroup_name}: {response.text}")
     log.logger.info(f"Creating hostgroup {hostgroup_name} in Zabbix.")
-    response = requests.post(zabbix_ip+"zabbix/api_jsonrpc.php", headers=headers, json={
+    response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json={
         "jsonrpc": "2.0",
         "method": "hostgroup.create",
         "params": {
