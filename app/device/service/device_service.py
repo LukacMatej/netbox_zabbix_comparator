@@ -8,6 +8,11 @@ from app.device.models.address_model import Address as address_model
 from app.device.models.difference_model import DeviceDifference as difference_model
 from app.logger import logger_conf as log
 
+def format_address(address: str) -> str:
+  if "/" in address:
+    return address.split("/")[0]
+  return address
+
 def formatStatus(status: str)-> str:
   enabled_statuses = {"ACTIVE",0}
   disabled_statuses = {"OFFLINE","STAGED","PLANNED","FAILED","INVENTORY"}
