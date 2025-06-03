@@ -26,7 +26,7 @@ class Device:
             "method": "host.create",
             "params": {
                 "host": self.name,
-                "interfaces": [interface.to_dict() for interface in self.interfaces],
+                "interfaces": dict_interfaces(self.interfaces),
                 "groups": [{"groupid": hostgroupId}],
                 "description": self.description,
                 "templates": [{"templateid": tempId} for tempId in templateids if tempId],
@@ -52,7 +52,25 @@ class Device:
             },
             "interfaces": [interface.to_dict() for interface in self.interfaces]
         }
+
 def normalize_status(status: str) -> str:
     if status == 0 or status == "Active" or status == "0":
         return "Active"
     return "Inactive"
+
+def dict_interfaces(interfaces: list[InterfaceModel]) -> list[dict]:
+    """Converts a list of InterfaceModel objects to a list of dictionaries."""
+    result = []
+    for index, interface in enumerate(interfaces):
+        result.append({
+            "type": 1,
+            "main": 1 if index == 0 else 0,
+            "useip": 1,
+            "ip": str(interface.addresses[0].address).split("/")[0] if interface.addresses else "",
+            "dns": interface.addresses[0].dns_name if interface.addresses else "",
+            "port": 161,
+            "details": {
+                "version": 3
+            }
+        })
+    return result

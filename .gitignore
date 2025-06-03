@@ -20,3 +20,4 @@ env.list
 *.swp
 compose.yaml
 test.py
+test.json

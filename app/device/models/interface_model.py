@@ -12,20 +12,4 @@ class Interface:
     
     def __str__(self) -> str:
         return f"{self.name} {self.addresses} {self.mac_address}"
-    
-    def to_dict(self) -> dict:
-        """Creates a dictionary representation of the interface."""
-        result = []
-        for index,addr in enumerate(self.addresses):
-            result.append({
-                "type": 2,
-                "main": 1 if index == 0 else 0,
-                "useip": 1,
-                "ip": addr.address,
-                "dns": addr.dns_name,
-                "port": 161,
-                "details": {
-                    "version": 3
-                }
-            })
-        return result
+
