@@ -128,7 +128,7 @@ def create_zabbix_device(device: device_model):
     if hostgroupid == -1:
         log.logger.error(f"Hostgroup {device.hostgroup} not found in Zabbix, cannot create device in Netbox.")
         return
-    templateids = [find_template_ids(template) for template in device.templates.split(",") if template]
+    templateids = [find_template_ids(template) for template in device.templates if template]
     if -1 in templateids:
         log.logger.error(f"No valid templates found for device {device.name}, cannot create in Netbox.")
         return
