@@ -63,7 +63,6 @@ def find_zabbix_hostgroup_id(hostgroup_name: str) -> int:
         "params": {
             "filter": {"name": [hostgroup_name]}
         },
-        "auth": None,  # This should be set when calling the API
         "id": 1
     })
     log.logger.info(f"Response from Zabbix for hostgroup get: {response.text}, status code: {response.status_code}")
@@ -82,7 +81,6 @@ def find_zabbix_hostgroup_id(hostgroup_name: str) -> int:
         "params": {
             "name": hostgroup_name
         },
-        "auth": None,  # This should be set when calling the API
         "id": 1
     })
     log.logger.info(f"Response from Zabbix for creating hostgroup: {response.text}, status code: {response.status_code}")
