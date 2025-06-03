@@ -133,6 +133,9 @@ def create_zabbix_device(device: device_model):
         log.logger.error(f"No valid templates found for device {device.name}, cannot create in Netbox.")
         return
     response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, data=device.create_data_zabbix(hostgroupId=hostgroupid, templateids=templateids))
+    log.logger.info(f"Response from Zabbix for device creation: {response.url}, {response.request.body}, {response.headers}\n {response.raw}")
+    log.logger.info(f"Response from Zabbix for device creation: {response.text}, status code: {response.status_code}")
+    
     if response.status_code == 201:
         log.logger.info(f"Device {device.name} created successfully in Zabbix.")
     else:
