@@ -81,6 +81,8 @@ def compare_devices(nb_device_list: list[device_model], zb_device_list: list[dev
     for nb_device in nb_device_list:
         found = False
         for zb_device in zb_device_list:
+            if nb_device == zb_device:
+                continue
             differences = find_differences(nb_device, zb_device)
             if differences[0]:
                 different_devices.append(device_difference_model(nb_device, zb_device, differences[2]))
@@ -93,6 +95,8 @@ def compare_devices(nb_device_list: list[device_model], zb_device_list: list[dev
     for zb_device in zb_device_list:
         found = False
         for nb_device in nb_device_list:
+            if nb_device == zb_device:
+                continue
             differences = find_differences(nb_device, zb_device)
             if differences[0]:
                 found = True
