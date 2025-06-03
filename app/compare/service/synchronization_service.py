@@ -122,7 +122,7 @@ def create_zabbix_device(device: device_model):
     zabbix_ip = os.environ.get("ZABBIX_IP")
     zabbix_key = os.environ.get("ZABBIX_KEY")
     headers = {
-        "Authorization  ": f"Bearer {zabbix_key}",
+        "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
     }
     hostgroupid = find_zabbix_hostgroup_id(device.hostgroup)
