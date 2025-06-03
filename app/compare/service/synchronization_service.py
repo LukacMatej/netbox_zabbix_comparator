@@ -1,5 +1,6 @@
 import requests
 import os
+import re
 from app.logger import logger_conf as log
 import app.device.service.device_service as device_service
 from app.device.models.device_model import Device as device_model
@@ -133,6 +134,7 @@ def create_zabbix_device(device: device_model):
         log.logger.error(f"No valid templates found for device {device.name}, cannot create in Netbox.")
         return
     data_zabbix = device.create_data_zabbix(hostgroupId=hostgroupid, templateids=templateids)
+    data_zabbix = re.sub("'", '"', str(data_zabbix))
     log.logger.info(f"Data to be sent to Zabbix: {data_zabbix}")
     response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json=data_zabbix)
     
