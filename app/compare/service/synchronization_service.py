@@ -74,7 +74,25 @@ def find_zabbix_hostgroup_id(hostgroup_name: str) -> int:
             log.logger.info(f"Found Zabbix hostgroup ID: {group_id} for {hostgroup_name}.")
             return int(group_id)
     
-    log.logger.error(f"Failed to find Zabbix hostgroup ID for {hostgroup_name}: {response.text}")
+    log.logger.info(f"Failed to find Zabbix hostgroup ID for {hostgroup_name}: {response.text}")
+    log.logger.info(f"Creating hostgroup {hostgroup_name} in Zabbix.")
+    response = requests.post(zabbix_ip+"zabbix/api_jsonrpc.php", headers=headers, json={
+        "jsonrpc": "2.0",
+        "method": "hostgroup.create",
+        "params": {
+            "name": hostgroup_name
+        },
+        "auth": None,  # This should be set when calling the API
+        "id": 1
+    })
+    if response.status_code == 201:
+        data = response.json()
+        if "result" in data and "groupids" in data["result"]:
+            group_id = data["result"]["groupids"][0]
+            log.logger.info(f"Hostgroup {hostgroup_name} created successfully with ID: {group_id}.")
+            return int(group_id)
+        else:
+            log.logger.error(f"Failed to create hostgroup {hostgroup_name}: {data}")
     return -1
 
 def create_netbox_device(device: device_model):
