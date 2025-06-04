@@ -7,9 +7,9 @@ from app.device.models.difference_model import DeviceDifference as device_differ
 from app.device.models.address_model import Address as address_model
 from app.device.models.interface_model import Interface as interface_model
 
-def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[bool, tuple[device_model, device_model], tuple[list[str], list[str]]]:
-    differences: tuple[bool, tuple[device_model, device_model], str] = (False, (nb_device, zb_device), "")
-    found = False
+def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[int, tuple[device_model, device_model], tuple[list[str], list[str]]]:
+    differences: tuple[bool, tuple[device_model, device_model], str] = (0, (nb_device, zb_device), "")
+    found = 0
     fields: list[str] = []
     count = 0
     same: list[str] = []
@@ -19,7 +19,7 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
         nb_value = getattr(nb_device, field)
         zb_value = getattr(zb_device, field)
         if nb_value != zb_value:
-            found = True
+            found = 1
             if field == "name":
                 fields.append(f"{field} ({nb_value} != {zb_value}), Hodnota v netboxu přepíše hodnotu v zabbixu")
             else:
@@ -37,7 +37,7 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
             nb_value = getattr(nb_interface, field)
             zb_value = getattr(zb_interface, field)
             if nb_value != zb_value:
-                found = True
+                found = 1
                 if field == "mac_address":
                     fields.append(f"{field} ({device_service.formatMac(nb_value)} != {device_service.formatMac(zb_value)}), Hodnota v zabbixu přepíše hodnotu v netboxu")
                 else:
@@ -54,7 +54,7 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
                 nb_value = getattr(nb_address, field)
                 zb_value = getattr(zb_address, field)
                 if nb_value != zb_value:
-                    found = True
+                    found = 1
                     if field == "address":
                         fields.append(f"{field} ({nb_value} != {zb_value}), Hodnota v netboxu přepíše hodnotu v zabbixu")
                     elif field == "dns_name":
@@ -68,7 +68,9 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
                         count += 1
                         same.append(field)
     if count < 1 or len(fields) < 1:
-        found = False
+        found = 0
+    if len(same) == (len(device_fields) + len(interface_fields) + len(address_fields)):
+        found = 2
     differences = found, (nb_device, zb_device), (fields, same)
     return differences
 
@@ -84,13 +86,14 @@ def compare_devices(nb_device_list: list[device_model], zb_device_list: list[dev
             if nb_device == zb_device:
                 continue
             differences = find_differences(nb_device, zb_device)
-            if differences[0]:
+            if differences[0] == 1:
                 different_devices.append(device_difference_model(nb_device, zb_device, differences[2]))
                 found = True
                 break
+            elif differences[0] == 2:
+                break
             found = False
         if not found:
-            if nb_device != zb_device:
                 nb_devices.append(nb_device)
     for zb_device in zb_device_list:
         found = False
@@ -98,12 +101,13 @@ def compare_devices(nb_device_list: list[device_model], zb_device_list: list[dev
             if nb_device == zb_device:
                 continue
             differences = find_differences(nb_device, zb_device)
-            if differences[0]:
+            if differences[0] == 1:
                 found = True
+                break
+            elif differences[0] == 2:
                 break
             found = False
         if not found:
-            if nb_device != zb_device:
                 zb_devices.append(zb_device)
     return different_devices, nb_devices, zb_devices
     
