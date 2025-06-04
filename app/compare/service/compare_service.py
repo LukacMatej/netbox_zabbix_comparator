@@ -12,12 +12,14 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
     found = 0
     fields: list[str] = []
     count = 0
+    fields_counter = 0
     same: list[str] = []
     device_fields: list[str] = list(device_model.__annotations__.keys())
     device_fields = [key for key in device_model.__annotations__.keys() if key not in ["hostgroup","description", "status","templates","interfaces"]]
     for field in device_fields:
         nb_value = getattr(nb_device, field)
         zb_value = getattr(zb_device, field)
+        fields_counter += 1
         if nb_value != zb_value:
             found = 1
             if field == "name":
@@ -36,6 +38,7 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
         for field in interface_fields:
             nb_value = getattr(nb_interface, field)
             zb_value = getattr(zb_interface, field)
+            fields_counter += 1
             if nb_value != zb_value:
                 found = 1
                 if field == "mac_address":
@@ -53,6 +56,7 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
             for field in address_fields:
                 nb_value = getattr(nb_address, field)
                 zb_value = getattr(zb_address, field)
+                fields_counter += 1
                 if nb_value != zb_value:
                     found = 1
                     if field == "address":
@@ -71,7 +75,7 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
         found = 0
     if len(same) == (len(device_fields) + len(interface_fields) + len(address_fields)):
         found = 2
-    log.logger.debug(f"Total fields compared: {len(device_fields) + len(interface_fields) + len(address_fields)}, same: {len(same)}, different: {len(fields)}")
+    log.logger.debug(f"Fields counter: {fields_counter}, Total fields compared: {len(device_fields) + len(interface_fields) + len(address_fields)}, same: {len(same)}, different: {len(fields)}")
     log.logger.debug(f"Found differences: {found}, {nb_device.name}, {zb_device.name}, {fields}, {same}")
     differences = found, (nb_device, zb_device), (fields, same)
     return differences
