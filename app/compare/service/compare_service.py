@@ -72,8 +72,8 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
         found = 0
     if len(same) == fields_counter:
         found = 2
-    log.logger.debug(f"Fields counter: {fields_counter}, Total fields compared: {len(device_fields) + len(interface_fields) + len(address_fields)}, same: {len(same)}, different: {len(fields)}")
-    log.logger.debug(f"Found differences: {found}, {nb_device.name}, {zb_device.name}, {fields}, {same}")
+    log.logger.debug(f"Fields counter: {fields_counter}, same: {len(same)}, different: {len(fields)}")
+    log.logger.debug(f"Tag: {found}, {nb_device.name}, {zb_device.name}, {fields}, {same}")
     differences = found, (nb_device, zb_device), (fields, same)
     return differences
 
@@ -94,6 +94,7 @@ def compare_devices(nb_device_list: list[device_model], zb_device_list: list[dev
                 found = True
                 break
             elif differences[0] == 2:
+                found = True
                 break
             found = False
         if not found:
@@ -108,6 +109,7 @@ def compare_devices(nb_device_list: list[device_model], zb_device_list: list[dev
                 found = True
                 break
             elif differences[0] == 2:
+                found = True
                 break
             found = False
         if not found:
