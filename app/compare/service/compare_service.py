@@ -71,6 +71,7 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
         found = 0
     if len(same) == (len(device_fields) + len(interface_fields) + len(address_fields)):
         found = 2
+    log.logger.debug(f"Found differences: {found}, {nb_device.name}, {zb_device.name}, {fields}, {same}")
     differences = found, (nb_device, zb_device), (fields, same)
     return differences
 
