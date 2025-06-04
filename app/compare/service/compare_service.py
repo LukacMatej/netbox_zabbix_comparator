@@ -58,7 +58,7 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
                     if field == "address":
                         fields.append(f"{field} ({nb_value} != {zb_value}), Hodnota v netboxu přepíše hodnotu v zabbixu")
                     elif field == "dns_name":
-                        fields.append(f"{field} ({nb_value} != {zb_value}), Hodnota v nettboxu přepíše hodnotu v zabbixu")
+                        fields.append(f"{field} ({nb_value} != {zb_value}), Hodnota v netboxu přepíše hodnotu v zabbixu")
                     else:
                         fields.append(f"{field}")
                 else:
@@ -71,6 +71,7 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
         found = 0
     if len(same) == (len(device_fields) + len(interface_fields) + len(address_fields)):
         found = 2
+    log.logger.debug(f"Total fields compared: {len(device_fields) + len(interface_fields) + len(address_fields)}, same: {len(same)}, different: {len(fields)}")
     log.logger.debug(f"Found differences: {found}, {nb_device.name}, {zb_device.name}, {fields}, {same}")
     differences = found, (nb_device, zb_device), (fields, same)
     return differences
