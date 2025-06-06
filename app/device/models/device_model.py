@@ -46,7 +46,7 @@ class Device:
         return {
             "name": self.name,
             "device_type": ds.find_nb_device_type_id("Catalyst 2970 Series"), # Replace with actual device type
-            "role": ds.find_nb_device_role_id(str(self.hostgroup).split("/")[1]),
+            "role": ds.find_nb_device_role_id(str(self.hostgroup).split("/")[2]),
             "site": ds.find_nb_site_id(str(self.hostgroup).split("/")[0]),
             "status": format_nb_status(self.status),
             "local_context_data": {
