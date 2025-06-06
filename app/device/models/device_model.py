@@ -52,7 +52,7 @@ class Device:
             "local_context_data": {
                 "zabbix": {
                     "templates": [
-                        {template} for template in self.templates if template
+                        str(template) for template in self.templates if template
                     ]
                     }
             }
