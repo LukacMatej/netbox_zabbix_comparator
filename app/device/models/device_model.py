@@ -45,7 +45,7 @@ class Device:
         """Creates a dictionary representation of the device for Netbox API."""
         return {
             "name": self.name,
-            "device_type": ds.find_nb_device_type_id(None),#how
+            "device_type": ds.find_nb_device_type_id("Catalyst 2970 Series"), # Replace with actual device type
             "role": ds.find_nb_device_role_id(str(self.hostgroup).split("/")[1]),
             "site": ds.find_nb_site_id(str(self.hostgroup).split("/")[0]),
             "status": format_nb_status(self.status),
