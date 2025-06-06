@@ -1,11 +1,11 @@
 class SyncOutput:
-    def __init__(self, synchronization_output_differences: list[str] = [],
-                 synchronization_output_netbox: list[str] = [],
-                 synchronization_output_zabbix: list[str] = []) -> None:
+    def __init__(self, synchronization_output_differences: list[str] = None,
+                 synchronization_output_netbox: list[str] = None,
+                 synchronization_output_zabbix: list[str] = None) -> None:
         """Initializes the synchronization output model with optional lists for differences, Netbox outputs, and Zabbix outputs."""
-        self.synchronization_output_differences: list[str] = synchronization_output_differences
-        self.synchronization_output_netbox: list[str] = synchronization_output_netbox
-        self.synchronization_output_zabbix: list[str] = synchronization_output_zabbix
+        self.synchronization_output_differences: list[str] = synchronization_output_differences if synchronization_output_differences is not None else []
+        self.synchronization_output_netbox: list[str] = synchronization_output_netbox if synchronization_output_netbox is not None else []
+        self.synchronization_output_zabbix: list[str] = synchronization_output_zabbix if synchronization_output_zabbix is not None else []
         
     def add_difference(self, difference: str):
         """Adds a difference to the synchronization output."""
