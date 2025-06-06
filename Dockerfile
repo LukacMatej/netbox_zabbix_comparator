@@ -15,11 +15,6 @@ ADD netbox-zabbix-sync-main /
 ADD app/ /app
 ADD templates/ /templates
 
-
-RUN pip install pynetbox
-RUN pip install pyzabbix
-
-
 EXPOSE 7000
 
 CMD ["python3", "./server.py", "--development"]
