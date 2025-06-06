@@ -2,13 +2,12 @@ import requests
 import os
 import re
 from app.logger import logger_conf as log
-import app.device.service.device_service as device_service
 from app.device.models.device_model import Device as device_model
 from app.device.models.difference_model import DeviceDifference as device_difference_model
-from app.device.models.address_model import Address as address_model
-from app.device.models.interface_model import Interface as interface_model
 from app.device.models.difference_model import DeviceDifference as device_difference_model
+from app.device.models.synchonization_output_model import SyncOutput as sync_output_model
 
+sync_output = sync_output_model()
 
 def find_template_ids(template_name: str) -> int:
     """Finds the Zabbix template ID based on the provided template name.
@@ -111,8 +110,10 @@ def create_netbox_device(device: device_model):
     data_netbox = device.create_data_netbox()
     response = requests.post(netbox_ip+"api/dcim/devices/", headers=headers, json=data_netbox)
     if response.status_code == 201:
+        sync_output.add_netbox_output(f"Device {device.name} created successfully in Netbox.")
         log.logger.info(f"Device {device.name} created successfully in Netbox.")
     else:
+        sync_output.add_netbox_output(f"Failed to create device {device.name} in Netbox: {response.text}")
         log.logger.error(f"Failed to create device {device.name} in Netbox: {response.text} | Request Body: {response.request.body} | Data: {data_netbox}")
 
 def create_zabbix_device(device: device_model):
@@ -129,21 +130,25 @@ def create_zabbix_device(device: device_model):
     }
     hostgroupid = find_zabbix_hostgroup_id(device.hostgroup)
     if hostgroupid == -1:
+        sync_output.add_zabbix_output(f"Hostgroup {device.hostgroup} not found in Zabbix, cannot create device {device.name}.")
         log.logger.error(f"Hostgroup {device.hostgroup} not found in Zabbix, cannot create device in Netbox.")
         return
     templateids = [find_template_ids(template) for template in device.templates if template]
     if -1 in templateids:
+        sync_output.add_zabbix_output(f"No valid templates found for device {device.name}, cannot create in Zabbix.")
         log.logger.error(f"No valid templates found for device {device.name}, cannot create in Netbox.")
         return
     data_zabbix = device.create_data_zabbix(hostgroupId=hostgroupid, templateids=templateids)
     log.logger.info(f"Data to be sent to Zabbix: {data_zabbix}")
     response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json=data_zabbix)
     if response.status_code == 200:
+        sync_output.add_zabbix_output(f"Device {device.name} created successfully in Zabbix.")
         log.logger.info(f"Device {device.name} created successfully in Zabbix.")
     else:
+        sync_output.add_zabbix_output(f"Failed to create device {device.name} in Zabbix: {response.text}")
         log.logger.error(f"Failed to create device {device.name} in Zabbix: {response.text}")
 
-def sync_netbox_zabbix_devices(differences:list[device_difference_model], netbox_devices: list[device_model], zabbix_devices: list[device_model]):
+def sync_netbox_zabbix_devices(differences:list[device_difference_model], netbox_devices: list[device_model], zabbix_devices: list[device_model]) -> sync_output_model:
     """Syncs Netbox and Zabbix devices that don't have matching devices in the other system.
     Args:
         netbox_devices (list[device_model]): List of devices from Netbox.
@@ -161,3 +166,4 @@ def sync_netbox_zabbix_devices(differences:list[device_difference_model], netbox
             create_netbox_device(zabbix_device)
     
     log.logger.info("Synchronization of Netbox and Zabbix devices completed.")
+    return sync_output

@@ -150,5 +150,45 @@
             {% endif %}
         </div>
     </div>
+    {% if synchronization and sync_output %}
+    <div class="container">
+        <div class="column">
+            <div class="header">Synchronization output from Netbox</div>
+            {% if sync_output.synchronization_output_netbox %}
+                <div class="lines">
+                    {% for output in sync_output.synchronization_output_netbox %}
+                        <div>{{ output }}</div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div>No synchronization output found</div>
+            {% endif %}
+        </div>
+        <div class="column">
+            <div class="header">Synchronization output from Differences</div>
+            {% if sync_output.synchronization_output_differences %}
+                <div class="lines">
+                    {% for output in sync_output.synchronization_output_differences %}
+                        <div>{{ output }}</div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div>No synchronization output found</div>
+            {% endif %}
+        </div>
+        <div class="column">
+            <div class="header">Synchronization output from Zabbix</div>
+            {% if sync_output.synchronization_output_zabbix %}
+                <div class="lines">
+                    {% for output in sync_output.synchronization_output_zabbix %}
+                        <div>{{ output }}</div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div>No synchronization output found</div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
 </body>
 </html>

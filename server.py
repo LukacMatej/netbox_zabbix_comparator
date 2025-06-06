@@ -29,6 +29,7 @@ import argparse
 import os
 from app.compare.service import compare_service as ct
 from app.compare.service import synchronization_service as ss
+from app.device.models.synchonization_output_model import SyncOutput as sync_output_model
 from app.device.service import device_service as ds
 from app.device.models.difference_model import DeviceDifference
 from app.device.models.device_model import Device
@@ -80,6 +81,7 @@ def RunCompare() -> tuple[str, int]:
 
 @app.route("/RunCompareSync")
 def RunCompareSync() -> tuple[str, int]:
+    synchronization: bool = True
     netbox_key: str = os.environ.get("NETBOX_KEY")
     netbox_ip: str = os.environ.get("NETBOX_IP")
     zabbix_ip: str = os.environ.get("ZABBIX_IP")
@@ -93,13 +95,15 @@ def RunCompareSync() -> tuple[str, int]:
     log.logger.debug(ds.print_differences(differences))
     log.logger.debug(ds.print_devices(netbox_devices))
     log.logger.debug(ds.print_devices(zabbix_devices))
-    ss.sync_netbox_zabbix_devices(
+    sync_output: sync_output_model = ss.sync_netbox_zabbix_devices(
         netbox_devices=netbox_devices,
         zabbix_devices=zabbix_devices,
         differences=differences
     )
     return render_template(
         "compare_output.html",
+        sync_output=sync_output,
+        synchronization=synchronization,
         differences=compare_output[0],
         netbox_devices=compare_output[1],
         zabbix_devices=compare_output[2]
