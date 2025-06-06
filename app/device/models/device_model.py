@@ -1,4 +1,5 @@
 from app.device.models.interface_model import Interface as InterfaceModel
+from app.device.service import device_service as ds
 
 class Device:
     name: str = ""
@@ -26,7 +27,7 @@ class Device:
             "method": "host.create",
             "params": {
                 "host": self.name,
-                "interfaces": dict_interfaces(self.interfaces),
+                "interfaces": dict_interfaces_zb(self.interfaces),
                 "groups": [{"groupid": hostgroupId}],
                 "description": self.description,
                 "templates": [{"templateid": tempId} for tempId in templateids if tempId],
@@ -44,21 +45,37 @@ class Device:
         """Creates a dictionary representation of the device for Netbox API."""
         return {
             "name": self.name,
-            "device_type": self.hostgroup,
-            "device_role": self.description,
-            "status": self.status,
-            "custom_fields": {
-                "templates": self.templates
-            },
-            "interfaces": [interface.to_dict() for interface in self.interfaces]
+            "device_type": ds.find_nb_device_type_id(None),#how
+            "role": ds.find_nb_device_role_id(str(self.hostgroup).split("/")[1]),
+            "site": ds.find_nb_site_id(str(self.hostgroup).split("/")[0]),
+            "status": format_nb_status(self.status),
+            "local_context_data": {
+                "zabbix": {
+                    "templates": [
+                        {template} for template in self.templates.split(",\n") if template
+                    ]
+                    }
+            }
         }
+
+def format_nb_status(status: str) -> str:
+    status_map = {
+        "Active": "active",
+        "Inactive": "offline",
+        "Planned": "planned",
+        "Staged": "staged",
+        "Failed": "failed",
+        "Inventory": "inventory",
+        "Decommissioning": "decommissioning"
+    }
+    return status_map.get(status, "offline")
 
 def normalize_status(status: str) -> str:
     if status == 0 or status == "Active" or status == "0":
         return "Active"
     return "Inactive"
 
-def dict_interfaces(interfaces: list[InterfaceModel]) -> list[dict]:
+def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
     """Converts a list of InterfaceModel objects to a list of dictionaries."""
     result = []
     for index, interface in enumerate(interfaces):

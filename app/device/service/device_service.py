@@ -2,11 +2,93 @@
 """
 import requests
 import re
+import os
 from app.device.models.device_model import Device as device_model
 from app.device.models.interface_model import Interface as interface_model
 from app.device.models.address_model import Address as address_model
 from app.device.models.difference_model import DeviceDifference as difference_model
 from app.logger import logger_conf as log
+
+def find_nb_site_id(site_name: str) -> int:
+    """Finds the Netbox site ID based on the provided site name.
+    Args:
+        site_name (str): The name of the site to find.
+    Returns:
+        int: The ID of the site if found, otherwise -1.
+    """
+    log.logger.info(f"Finding Netbox site ID for {site_name}.")
+    nb_ip = os.environ.get("NETBOX_IP")
+    nb_key = os.environ.get("NETBOX_KEY")
+    headers = {
+        "Authorization": f"Token {nb_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    response = requests.get(f"{nb_ip}/api/dcim/sites/?name={site_name}", headers=headers)
+    
+    if response.status_code == 200:
+        data = response.json()
+        if data["count"] > 0:
+            site_id = data["results"][0]["id"]
+            log.logger.info(f"Found Netbox site ID: {site_id} for {site_name}.")
+            return int(site_id)
+    
+    log.logger.error(f"Failed to find Netbox site ID for {site_name}: {response.text}")
+    return -1
+
+def find_nb_device_type_id(device_type: str) -> int:
+    """Finds the Netbox device type ID based on the provided device type.
+    Args:
+        device_type (str): The name of the device type to find.
+    Returns:
+        int: The ID of the device type if found, otherwise -1.
+    """
+    log.logger.info(f"Finding Netbox device type ID for {device_type}.")
+    nb_ip = os.environ.get("NETBOX_IP")
+    nb_key = os.environ.get("NETBOX_KEY")
+    headers = {
+        "Authorization": f"Token {nb_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    response = requests.get(f"{nb_ip}/api/dcim/device-types/?model={device_type}", headers=headers)
+    
+    if response.status_code == 200:
+        data = response.json()
+        if data["count"] > 0:
+            device_type_id = data["results"][0]["id"]
+            log.logger.info(f"Found Netbox device type ID: {device_type_id} for {device_type}.")
+            return int(device_type_id)
+    
+    log.logger.error(f"Failed to find Netbox device type ID for {device_type}: {response.text}")
+    return -1
+  
+def find_nb_device_role_id(device_role: str) -> int:
+    """Finds the Netbox device role ID based on the provided device role.
+    Args:
+        device_role (str): The name of the device role to find.
+    Returns:
+        int: The ID of the device role if found, otherwise -1.
+    """
+    log.logger.info(f"Finding Netbox device role ID for {device_role}.")
+    nb_ip = os.environ.get("NETBOX_IP")
+    nb_key = os.environ.get("NETBOX_KEY")
+    headers = {
+        "Authorization": f"Token {nb_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    response = requests.get(f"{nb_ip}/api/dcim/device-roles/?name={device_role}", headers=headers)
+    
+    if response.status_code == 200:
+        data = response.json()
+        if data["count"] > 0:
+            device_role_id = data["results"][0]["id"]
+            log.logger.info(f"Found Netbox device role ID: {device_role_id} for {device_role}.")
+            return int(device_role_id)
+    
+    log.logger.error(f"Failed to find Netbox device role ID for {device_role}: {response.text}")
+    return -1
 
 def format_address(address: str) -> str:
   if "/" in address:

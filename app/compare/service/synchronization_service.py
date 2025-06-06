@@ -106,6 +106,7 @@ def create_netbox_device(device: device_model):
     headers = {
         "Authorization": f"Token {netbox_key}",
         "Content-Type": "application/json",
+        "Accept": "application/json"
     }
     response = requests.post(netbox_ip+"api/dcim/devices/", headers=headers, data=device.create_data_netbox())
     if response.status_code == 201:
@@ -153,9 +154,9 @@ def sync_netbox_zabbix_devices(differences:list[device_difference_model], netbox
             log.logger.info(f"Device {netbox_device.name} found in Netbox but not in Zabbix, creating in Zabbix.")
             create_zabbix_device(netbox_device)
     
-    # for zabbix_device in zabbix_devices:
-    #     if not any(netbox_device.name == zabbix_device.name for netbox_device in netbox_devices):
-    #         log.logger.info(f"Device {zabbix_device.name} found in Zabbix but not in Netbox, creating in Netbox.")
-    #         create_netbox_device(zabbix_device)
+    for zabbix_device in zabbix_devices:
+        if not any(netbox_device.name == zabbix_device.name for netbox_device in netbox_devices):
+            log.logger.info(f"Device {zabbix_device.name} found in Zabbix but not in Netbox, creating in Netbox.")
+            create_netbox_device(zabbix_device)
     
     log.logger.info("Synchronization of Netbox and Zabbix devices completed.")
