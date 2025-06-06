@@ -1,8 +1,10 @@
-FROM python:bookworm
+FROM python:3.11-bookworm
 
-RUN apt update && apt install -y \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     python3-pip \
-    curl
+    curl && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /
 RUN pip3 install -r requirements.txt 
@@ -20,4 +22,4 @@ RUN pip install pyzabbix
 
 EXPOSE 7000
 
-CMD python3 ./server.py --development
+CMD ["python3", "./server.py", "--development"]
