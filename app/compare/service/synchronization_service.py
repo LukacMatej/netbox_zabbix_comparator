@@ -109,7 +109,7 @@ def create_netbox_device(device: device_model):
         "Accept": "application/json"
     }
     data_netbox = device.create_data_netbox()
-    response = requests.post(netbox_ip+"api/dcim/devices/", headers=headers, data=data_netbox)
+    response = requests.post(netbox_ip+"api/dcim/devices/", headers=headers, json=data_netbox)
     if response.status_code == 201:
         log.logger.info(f"Device {device.name} created successfully in Netbox.")
     else:
