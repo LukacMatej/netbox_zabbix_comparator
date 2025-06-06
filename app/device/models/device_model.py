@@ -6,7 +6,7 @@ class Device:
     interfaces: list[InterfaceModel] = []
     hostgroup: str = ""
     description: str = ""
-    templates: str = ""
+    templates: list[str] = []
     status: str = ""
             
     def __init__(self, name, interfaces, hostgroup, description, templates, status) -> None:
@@ -52,7 +52,7 @@ class Device:
             "local_context_data": {
                 "zabbix": {
                     "templates": [
-                        {template} for template in self.templates.split(",") if template
+                        {template} for template in self.templates if template
                     ]
                     }
             }
