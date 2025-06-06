@@ -7,8 +7,6 @@ from app.device.models.difference_model import DeviceDifference as device_differ
 from app.device.models.difference_model import DeviceDifference as device_difference_model
 from app.device.models.synchonization_output_model import SyncOutput as sync_output_model
 
-sync_output = sync_output_model()
-
 def find_template_ids(template_name: str) -> int:
     """Finds the Zabbix template ID based on the provided template name.
     Args:
@@ -94,7 +92,7 @@ def find_zabbix_hostgroup_id(hostgroup_name: str) -> int:
             log.logger.error(f"Failed to create hostgroup {hostgroup_name}: {data}")
     return -1
 
-def create_netbox_device(device: device_model):
+def create_netbox_device(device: device_model, sync_output: sync_output_model):
     """Creates a device in Netbox based on the provided device model.
     Args:
         device (device_model): The device model to create in Netbox.
@@ -116,7 +114,7 @@ def create_netbox_device(device: device_model):
         sync_output.add_netbox_output(f"Failed to create device {device.name} in Netbox: {response.text}")
         log.logger.error(f"Failed to create device {device.name} in Netbox: {response.text} | Request Body: {response.request.body} | Data: {data_netbox}")
 
-def create_zabbix_device(device: device_model):
+def create_zabbix_device(device: device_model,sync_output: sync_output_model):
     """Creates a device in Zabbix based on the provided device model.
     Args:
         device (device_model): The device model to create in Zabbix.
@@ -154,16 +152,17 @@ def sync_netbox_zabbix_devices(differences:list[device_difference_model], netbox
         netbox_devices (list[device_model]): List of devices from Netbox.
         zabbix_devices (list[device_model]): List of devices from Zabbix.
     """
+    sync_output = sync_output_model()
     log.logger.info("Starting synchronization of Netbox and Zabbix devices.")
     for netbox_device in netbox_devices:
         if not any(zabbix_device.name == netbox_device.name for zabbix_device in zabbix_devices):
             log.logger.info(f"Device {netbox_device.name} found in Netbox but not in Zabbix, creating in Zabbix.")
-            create_zabbix_device(netbox_device)
+            create_zabbix_device(netbox_device,sync_output)
     
     for zabbix_device in zabbix_devices:
         if not any(netbox_device.name == zabbix_device.name for netbox_device in netbox_devices):
             log.logger.info(f"Device {zabbix_device.name} found in Zabbix but not in Netbox, creating in Netbox.")
-            create_netbox_device(zabbix_device)
+            create_netbox_device(zabbix_device,sync_output)
     
     log.logger.info("Synchronization of Netbox and Zabbix devices completed.")
     return sync_output
