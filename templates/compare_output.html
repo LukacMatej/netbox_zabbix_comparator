@@ -161,9 +161,9 @@
     <div class="container">
         <div class="column">
             <div class="header">Synchronization output from Netbox</div>
-            {% if sync_output.synchronization_output_netbox %}
+            {% if sync_output.synchronization_output_zabbix %}
                 <div class="lines">
-                    {% for output in sync_output.synchronization_output_netbox %}
+                    {% for output in sync_output.synchronization_output_zabbix %}
                         <div>{{ output }}</div>
                     {% endfor %}
                 </div>
@@ -185,9 +185,9 @@
         </div>
         <div class="column">
             <div class="header">Synchronization output from Zabbix</div>
-            {% if sync_output.synchronization_output_zabbix %}
+            {% if sync_output.synchronization_output_netbox %}
                 <div class="lines">
-                    {% for output in sync_output.synchronization_output_zabbix %}
+                    {% for output in sync_output.synchronization_output_netbox %}
                         <div>{{ output }}</div>
                     {% endfor %}
                 </div>
