@@ -82,6 +82,7 @@ def RunCompare() -> tuple[str, int]:
 @app.route("/RunCompareSync")
 def RunCompareSync() -> tuple[str, int]:
     synchronization: bool = True
+    sync_output: sync_output_model = None
     netbox_key: str = os.environ.get("NETBOX_KEY")
     netbox_ip: str = os.environ.get("NETBOX_IP")
     zabbix_ip: str = os.environ.get("ZABBIX_IP")
