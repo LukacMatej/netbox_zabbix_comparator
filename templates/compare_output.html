@@ -33,6 +33,12 @@
         .line:last-child {
             border-bottom: none;
         }
+        .line_sync {
+            font-size: 0;
+            color: white;
+            border-bottom: 1px solid black;
+            margin-top: 20px;
+        }
         .tab-interface {
             margin-left: 20px;
         }
@@ -151,6 +157,7 @@
         </div>
     </div>
     {% if synchronization and sync_output %}
+    <div class="line_sync">Oddeleni</div>
     <div class="container">
         <div class="column">
             <div class="header">Synchronization output from Netbox</div>
