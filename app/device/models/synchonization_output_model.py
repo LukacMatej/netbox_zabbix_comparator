@@ -18,3 +18,9 @@ class SyncOutput:
     def add_zabbix_output(self, output: str):
         """Adds a Zabbix output to the synchronization output."""
         self.synchronization_output_zabbix.append(output)
+        
+    def __str__(self):
+        """Returns a string representation of the synchronization output."""
+        return (f"Synchronization Output Differences: {self.synchronization_output_differences}\n"
+                f"Netbox Outputs: {self.synchronization_output_netbox}\n"
+                f"Zabbix Outputs: {self.synchronization_output_zabbix}")

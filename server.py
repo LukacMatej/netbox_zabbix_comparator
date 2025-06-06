@@ -101,6 +101,7 @@ def RunCompareSync() -> tuple[str, int]:
         zabbix_devices=zabbix_devices,
         differences=differences
     )
+    log.logger.debug(f"Synchronization Output: {sync_output}")
     return render_template(
         "compare_output.html",
         sync_output=sync_output,
