@@ -244,6 +244,9 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
       "selectInventory": [
         "macaddress_a"
       ],
+      "filter": {
+        "status": [0]
+      }
     },
     "auth": key,
     "id": 1
