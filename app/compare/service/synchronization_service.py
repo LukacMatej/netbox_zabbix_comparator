@@ -108,11 +108,12 @@ def create_netbox_device(device: device_model):
         "Content-Type": "application/json",
         "Accept": "application/json"
     }
-    response = requests.post(netbox_ip+"api/dcim/devices/", headers=headers, data=device.create_data_netbox())
+    data_netbox = device.create_data_netbox()
+    response = requests.post(netbox_ip+"api/dcim/devices/", headers=headers, data=data_netbox)
     if response.status_code == 201:
         log.logger.info(f"Device {device.name} created successfully in Netbox.")
     else:
-        log.logger.error(f"Failed to create device {device.name} in Netbox: {response.text}")
+        log.logger.error(f"Failed to create device {device.name} in Netbox: {response.text} | Request Body: {response.request.body} | Data: {data_netbox}")
 
 def create_zabbix_device(device: device_model):
     """Creates a device in Zabbix based on the provided device model.
