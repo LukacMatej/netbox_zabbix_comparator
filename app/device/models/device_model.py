@@ -27,16 +27,11 @@ class Device:
             "method": "host.create",
             "params": {
                 "host": self.name,
-                "interfaces": dict_interfaces_zb(self.interfaces),
+                "interfaces": dict_interfaces_zb(self.interfaces) if self.interfaces else [],
                 "groups": [{"groupid": hostgroupId}],
                 "description": self.description,
                 "templates": [{"templateid": tempId} for tempId in templateids if tempId],
-                "status": 0 if self.status == "Active" else 1,
-                "inventory_mode": 0,
-                "inventory": {
-                    "macaddress_a": self.interfaces[0].mac_address if self.interfaces else "",
-                    "macaddress_b": self.interfaces[1].mac_address if len(self.interfaces) > 1 else "",
-                }
+                "status": 0 if self.status == "Active" else 1
             },
             "id": 1
         }
