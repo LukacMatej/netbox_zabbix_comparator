@@ -263,5 +263,9 @@ def sync_netbox_zabbix_devices(differences:list[device_difference_model], netbox
             log.logger.info(f"Device {zabbix_device.name} found in Zabbix but not in Netbox, creating in Netbox.")
             create_netbox_device(zabbix_device,sync_output)
     
+    for difference in differences:
+        log.logger.info(f"Applying differences for device {difference.nb_device.name} and {difference.zb_device.name}.")
+        apply_differences(difference, sync_output)
+    
     log.logger.info("Synchronization of Netbox and Zabbix devices completed.")
     return sync_output
