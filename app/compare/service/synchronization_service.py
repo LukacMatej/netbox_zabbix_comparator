@@ -109,6 +109,14 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             return field.split('(')[0].strip()
         return field.strip()
 
+    # Prepare Zabbix API update call
+    zabbix_ip = os.environ.get("ZABBIX_IP")
+    zabbix_key = os.environ.get("ZABBIX_KEY")
+    headers = {
+        "Authorization": f"Bearer {zabbix_key}",
+        "Content-Type": "application/json-rpc",
+    }
+    
     hostid = None
     # Try to get hostid from zabbix by name
     response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json={
@@ -141,13 +149,6 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             updated_fields[field_name] = netbox_device.interfaces
         # Add more special cases as needed
 
-    # Prepare Zabbix API update call
-    zabbix_ip = os.environ.get("ZABBIX_IP")
-    zabbix_key = os.environ.get("ZABBIX_KEY")
-    headers = {
-        "Authorization": f"Bearer {zabbix_key}",
-        "Content-Type": "application/json-rpc",
-    }
 
     # Build update params
     params = {"hostid": hostid}
