@@ -92,19 +92,104 @@ def find_zabbix_hostgroup_id(hostgroup_name: str) -> int:
             log.logger.error(f"Failed to create hostgroup {hostgroup_name}: {data}")
     return -1
 
-def update_netbox_device(device: device_model, sync_output: sync_output_model):
-    pass
-
-def update_zabbix_device(device: device_model, sync_output: sync_output_model):
-    pass
-
-def apply_differences(device: device_model, differences: device_difference_model, sync_output: sync_output_model):
-    """Applies the differences to the device in Netbox and Zabbix.
+def apply_differences(differences: device_difference_model, sync_output: sync_output_model):
+    """Applies the differences between Netbox and Zabbix devices.
     Args:
-        device (device_model): The device model to update.
-        differences (device_difference_model): The differences to apply.
+        differences (device_difference_model): The differences between the Netbox and Zabbix devices.
+        sync_output (sync_output_model): The synchronization output model to log the results.
     """
-    pass
+    netbox_device = differences.nb_device
+    zabbix_device = differences.zb_device
+    different_fields = differences.differences[0]  # tuple: (different_fields, same_fields)
+
+    # Map field names in different_fields to actual attribute names
+    # If the field is in the format 'field (x != y), ...', extract the field name
+    def extract_field_name(field):
+        if '(' in field:
+            return field.split('(')[0].strip()
+        return field.strip()
+
+    updated_fields = {}
+    for field in different_fields:
+        field_name = extract_field_name(field)
+        # Always take the value from netbox_device and set it on zabbix_device if possible
+        if hasattr(netbox_device, field_name):
+            new_value = getattr(netbox_device, field_name)
+            if hasattr(zabbix_device, field_name):
+                setattr(zabbix_device, field_name, new_value)
+            updated_fields[field_name] = new_value
+        # Special handling for interfaces and addresses
+        elif field_name == "interfaces":
+            zabbix_device.interfaces = netbox_device.interfaces
+            updated_fields[field_name] = netbox_device.interfaces
+        # Add more special cases as needed
+
+    # Prepare Zabbix API update call
+    zabbix_ip = os.environ.get("ZABBIX_IP")
+    zabbix_key = os.environ.get("ZABBIX_KEY")
+    headers = {
+        "Authorization": f"Bearer {zabbix_key}",
+        "Content-Type": "application/json-rpc",
+    }
+    # You need the hostid for update. Assume zabbix_device has .hostid or .name to look it up.
+    # For this example, let's assume you can get hostid by name (you may want to cache this in real code)
+    # Get hostid
+    hostid = None
+    # Try to get hostid from zabbix by name
+    response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json={
+        "jsonrpc": "2.0",
+        "method": "host.get",
+        "params": {"filter": {"host": [zabbix_device.name]}},
+        "id": 1
+    })
+    if response.status_code == 200:
+        data = response.json()
+        if data["result"]:
+            hostid = data["result"][0]["hostid"]
+    if not hostid:
+        sync_output.add_zabbix_output(f"Failed to find Zabbix hostid for {zabbix_device.name}, cannot update device.")
+        log.logger.error(f"Failed to find Zabbix hostid for {zabbix_device.name}, cannot update device.")
+        return
+
+    # Build update params
+    params = {"hostid": hostid}
+    # Map updated fields to Zabbix API fields
+    if "name" in updated_fields:
+        params["host"] = updated_fields["name"]
+    if "description" in updated_fields:
+        params["description"] = updated_fields["description"]
+    if "status" in updated_fields:
+        params["status"] = 0 if updated_fields["status"] == "Active" else 1
+    if "templates" in updated_fields:
+        # Convert template names to IDs
+        templateids = [find_template_ids(t) for t in updated_fields["templates"] if t]
+        params["templates"] = [{"templateid": tid} for tid in templateids if tid != -1]
+    if "hostgroup" in updated_fields:
+        groupid = find_zabbix_hostgroup_id(updated_fields["hostgroup"])
+        if groupid != -1:
+            params["groups"] = [{"groupid": groupid}]
+    if "interfaces" in updated_fields:
+        from app.device.models.device_model import dict_interfaces_zb
+        params["interfaces"] = dict_interfaces_zb(updated_fields["interfaces"])
+
+    # Log updated fields to sync_output
+    sync_output.add_zabbix_output(f"Updated fields for {zabbix_device.name}: {list(updated_fields.keys())}")
+
+    # Send update to Zabbix
+    update_payload = {
+        "jsonrpc": "2.0",
+        "method": "host.update",
+        "params": params,
+        "id": 1
+    }
+    response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json=update_payload)
+    if response.status_code == 200:
+        sync_output.add_zabbix_output(f"Device {zabbix_device.name} updated successfully in Zabbix.")
+        log.logger.info(f"Device {zabbix_device.name} updated successfully in Zabbix.")
+    else:
+        sync_output.add_zabbix_output(f"Failed to update device {zabbix_device.name} in Zabbix: {response.text}")
+        log.logger.error(f"Failed to update device {zabbix_device.name} in Zabbix: {response.text}")
+            
 
 def create_netbox_device(device: device_model, sync_output: sync_output_model):
     """Creates a device in Netbox based on the provided device model.
