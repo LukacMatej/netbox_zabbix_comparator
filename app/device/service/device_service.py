@@ -207,7 +207,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
             if device["config_context"] and "zabbix" in device["config_context"] and "templates" in device["config_context"]["zabbix"] and "port_type" in device["config_context"]["zabbix"]:
               device_list.append(device_model(
                 name=device["name"],
-                hostgroup=device["site"]["name"]+"/"+device["device_type"]["manufacturer"]["name"]+"/"+device["role"]["name"],
+                hostgroup="Netbox synchronized devices",
                 description=device["description"],
                 templates=device["config_context"]["zabbix"]["templates"] if device["config_context"] else "",
                 status=formatStatus(device["status"]),
