@@ -7,7 +7,7 @@ class SyncOutput:
         self.synchronization_output_netbox: list[str] = synchronization_output_netbox if synchronization_output_netbox is not None else []
         self.synchronization_output_zabbix: list[str] = synchronization_output_zabbix if synchronization_output_zabbix is not None else []
         
-    def add_difference(self, difference: str):
+    def add_difference_output(self, difference: str):
         """Adds a difference to the synchronization output."""
         self.synchronization_output_differences.append(difference)
     

@@ -109,6 +109,23 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             return field.split('(')[0].strip()
         return field.strip()
 
+    hostid = None
+    # Try to get hostid from zabbix by name
+    response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json={
+        "jsonrpc": "2.0",
+        "method": "host.get",
+        "params": {"filter": {"host": [zabbix_device.name]}},
+        "id": 1
+    })
+    if response.status_code == 200:
+        data = response.json()
+        if data["result"]:
+            hostid = data["result"][0]["hostid"]
+    if not hostid:
+        sync_output.add_difference_output(f"Failed to find Zabbix hostid for {zabbix_device.name}, cannot update device.")
+        log.logger.error(f"Failed to find Zabbix hostid for {zabbix_device.name}, cannot update device.")
+        return
+
     updated_fields = {}
     for field in different_fields:
         field_name = extract_field_name(field)
@@ -131,25 +148,6 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
     }
-    # You need the hostid for update. Assume zabbix_device has .hostid or .name to look it up.
-    # For this example, let's assume you can get hostid by name (you may want to cache this in real code)
-    # Get hostid
-    hostid = None
-    # Try to get hostid from zabbix by name
-    response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json={
-        "jsonrpc": "2.0",
-        "method": "host.get",
-        "params": {"filter": {"host": [zabbix_device.name]}},
-        "id": 1
-    })
-    if response.status_code == 200:
-        data = response.json()
-        if data["result"]:
-            hostid = data["result"][0]["hostid"]
-    if not hostid:
-        sync_output.add_zabbix_output(f"Failed to find Zabbix hostid for {zabbix_device.name}, cannot update device.")
-        log.logger.error(f"Failed to find Zabbix hostid for {zabbix_device.name}, cannot update device.")
-        return
 
     # Build update params
     params = {"hostid": hostid}
@@ -173,7 +171,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         params["interfaces"] = dict_interfaces_zb(updated_fields["interfaces"])
 
     # Log updated fields to sync_output
-    sync_output.add_zabbix_output(f"Updated fields for {zabbix_device.name}: {list(updated_fields.keys())}")
+    sync_output.add_difference_output(f"Updated fields for {zabbix_device.name}: {list(updated_fields.keys())}")
 
     # Send update to Zabbix
     update_payload = {
@@ -184,10 +182,10 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     }
     response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json=update_payload)
     if response.status_code == 200:
-        sync_output.add_zabbix_output(f"Device {zabbix_device.name} updated successfully in Zabbix.")
+        sync_output.add_difference_output(f"Device {zabbix_device.name} updated successfully in Zabbix.")
         log.logger.info(f"Device {zabbix_device.name} updated successfully in Zabbix.")
     else:
-        sync_output.add_zabbix_output(f"Failed to update device {zabbix_device.name} in Zabbix: {response.text}")
+        sync_output.add_difference_output(f"Failed to update device {zabbix_device.name} in Zabbix: {response.text}")
         log.logger.error(f"Failed to update device {zabbix_device.name} in Zabbix: {response.text}")
             
 
