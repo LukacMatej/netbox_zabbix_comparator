@@ -258,10 +258,10 @@ def sync_netbox_zabbix_devices(differences:list[device_difference_model], netbox
             log.logger.info(f"Device {netbox_device.name} found in Netbox but not in Zabbix, creating in Zabbix.")
             create_zabbix_device(netbox_device,sync_output)
     
-    for zabbix_device in zabbix_devices:
-        if not any(netbox_device.name == zabbix_device.name for netbox_device in netbox_devices):
-            log.logger.info(f"Device {zabbix_device.name} found in Zabbix but not in Netbox, creating in Netbox.")
-            create_netbox_device(zabbix_device,sync_output)
+    # for zabbix_device in zabbix_devices:
+    #     if not any(netbox_device.name == zabbix_device.name for netbox_device in netbox_devices):
+    #         log.logger.info(f"Device {zabbix_device.name} found in Zabbix but not in Netbox, creating in Netbox.")
+    #         create_netbox_device(zabbix_device,sync_output)
     
     for difference in differences:
         log.logger.info(f"Applying differences for device {difference.nb_device.name} and {difference.zb_device.name}.")
