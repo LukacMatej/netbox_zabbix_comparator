@@ -134,6 +134,7 @@ def print_devices(nb_device_list: list[device_model]) -> str:
     for interface in device.interfaces:
       txt_builder += f"  Interface Name: {interface.name}\n"
       txt_builder += f"  MAC Address: {interface.mac_address}\n"
+      txt_builder += f"  Port Type: {interface.port_type}\n"
       for address in interface.addresses:
         txt_builder += f"    IP Address: {address.address}\n"
         txt_builder += f"    DNS Name: {address.dns_name}\n"
@@ -149,6 +150,7 @@ def print_device(device: device_model) -> str:
   for interface in device.interfaces:
     txt_builder += f"  Interface Name: {interface.name}\n"
     txt_builder += f"  MAC Address: {interface.mac_address}\n"
+    txt_builder += f"  Port Type: {interface.port_type}\n"
     for address in interface.addresses:
       txt_builder += f"    IP Address: {address.address}\n"
       txt_builder += f"    DNS Name: {address.dns_name}\n"
@@ -208,11 +210,11 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                 hostgroup=device["site"]["name"]+"/"+device["device_type"]["manufacturer"]["name"]+"/"+device["role"]["name"],
                 description=device["description"],
                 templates=device["config_context"]["zabbix"]["templates"] if device["config_context"] else "",
-                port_type=device["config_context"]["zabbix"]["port_type"] if device["config_context"] else "",
                 status=formatStatus(device["status"]),
                 interfaces=[interface_model(
                   name=interface["name"],
                   mac_address=formatMac(interface["mac_address"]),
+                  port_type=device["config_context"]["zabbix"]["port_type"] if device["config_context"] else "",
                   addresses=[address_model(
                     address=str(ip["address"]).split("/")[0],
                     dns_name=ip["dns_name"]
@@ -272,11 +274,11 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
         hostgroup=host["groups"][0]["name"],
         description=host["description"],
         templates=[template["name"] for template in host["parentTemplates"]],
-        port_type=host["interfaces"][0]["type"] if host["interfaces"] else "",
         status=formatStatus(host["status"]),
         interfaces=[interface_model(
           name=interface["dns"],
           mac_address=formatMac(host["inventory"]["macaddress_a"]),
+          port_type=interface["type"],
           addresses=[address_model(
             address=interface["ip"],
             dns_name=interface["dns"]

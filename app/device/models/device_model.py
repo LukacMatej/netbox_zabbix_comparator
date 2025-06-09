@@ -8,16 +8,14 @@ class Device:
     description: str = ""
     templates: list[str] = []
     status: str = ""
-    port_type: str = ""
             
-    def __init__(self, name, interfaces, hostgroup, description, templates, status, port_type) -> None:
+    def __init__(self, name, interfaces, hostgroup, description, templates, status) -> None:
         self.name = name
         self.interfaces = interfaces
         self.hostgroup = hostgroup
         self.description = description
         self.templates = templates
         self.status = normalize_status(status)
-        self.port_type = port_type
         
     def __str__(self) -> str:
         return f"{self.name} {self.interfaces} {self.hostgroup} {self.description} {self.templates} {self.status}"
@@ -72,6 +70,16 @@ def format_nb_status(status: str) -> str:
     }
     return status_map.get(status, "offline")
 
+def map_port_type(port_type: str) -> str:
+    """Maps the port type to a Netbox compatible format."""
+    port_type_map = {
+        "Agent": "1",
+        "SNMP": "2",
+        "IPMI": "3",
+        "JMX": "4"
+    }
+    return port_type_map.get(port_type, "1")
+
 def normalize_status(status: str) -> str:
     if status == 0 or status == "Active" or status == "0":
         return "Active"
@@ -82,7 +90,7 @@ def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
     result = []
     for index, interface in enumerate(interfaces):
         result.append({
-            "type": 2,
+            "type": map_port_type(interface.port_type),
             "main": 1 if index == 0 else 0,
             "useip": 1,
             "ip": str(interface.addresses[0].address).split("/")[0] if interface.addresses else "",
