@@ -89,7 +89,7 @@ docker_run_devel:
   script:
     - echo "Using docker ${DOCKER_HOST_2}"
     - echo "${PWD}"
-    - DOCKER_HOST=${DOCKER_HOST_2} docker run --detach --restart unless-stopped --name ${CI_PROJECT_NAME}-dev -v /srv/netbox_dhcp/certs/nblab-root-ca.crt:/usr/local/share/ca-certificates/nblab-root-ca.crt:ro,z -v /srv/netbox_dhcp/certs/netsys-ca.pem:/usr/local/share/ca-certificates/netsys-ca.pem:ro,z -e LISTEN_ADDRESS=0.0.0.0 -e HTTP_PORT=7000 -e NETBOX_IP=https://netbox-test.int.netsystem.cz -e NETBOX_KEY=22548c0c73603b896d4acfb3aecad1f5128f9d4e --network bridge_network ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev
+    - DOCKER_HOST=${DOCKER_HOST_2} docker run --detach --restart unless-stopped --name ${CI_PROJECT_NAME}-dev -v /srv/netbox_dhcp/certs/nblab-root-ca.crt:/usr/local/share/ca-certificates/nblab-root-ca.crt:ro,z -v /srv/netbox_dhcp/certs/netsys-ca.pem:/usr/local/share/ca-certificates/netsys-ca.pem:ro,z -e LISTEN_ADDRESS=0.0.0.0 -e HTTP_PORT=7000 -e ZABBIX_IP=https://zabbix.int.netsystem.cz -e ZABBIX_KEY=013607f6d9aed36e19381da456c550bc5bd67208c3a903c50f9a96f0025fcd9c -e NETBOX_IP=https://netbox-test.int.netsystem.cz -e NETBOX_KEY=22548c0c73603b896d4acfb3aecad1f5128f9d4e --network bridge_network ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev
     - DOCKER_HOST=${DOCKER_HOST_2} docker restart apache-revproxy
   except:
     - tags
