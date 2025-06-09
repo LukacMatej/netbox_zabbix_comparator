@@ -92,6 +92,20 @@ def find_zabbix_hostgroup_id(hostgroup_name: str) -> int:
             log.logger.error(f"Failed to create hostgroup {hostgroup_name}: {data}")
     return -1
 
+def update_netbox_device(device: device_model, sync_output: sync_output_model):
+    pass
+
+def update_zabbix_device(device: device_model, sync_output: sync_output_model):
+    pass
+
+def apply_differences(device: device_model, differences: device_difference_model, sync_output: sync_output_model):
+    """Applies the differences to the device in Netbox and Zabbix.
+    Args:
+        device (device_model): The device model to update.
+        differences (device_difference_model): The differences to apply.
+    """
+    pass
+
 def create_netbox_device(device: device_model, sync_output: sync_output_model):
     """Creates a device in Netbox based on the provided device model.
     Args:

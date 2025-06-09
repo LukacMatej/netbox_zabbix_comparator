@@ -188,7 +188,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
       }
     }
   }
-  }
+}
   """
   
   try:
@@ -200,6 +200,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
       device_list: list[device_model] = []
       log.logger.debug(response)
       if response.status_code == 200:
+        if device["config_context"] and "zabbix" in device["config_context"]:
           data = response.json()
           for device in data["data"]["device_list"]:
             device_list.append(device_model(
@@ -207,6 +208,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
               hostgroup=device["site"]["name"]+"/"+device["device_type"]["manufacturer"]["name"]+"/"+device["role"]["name"],
               description=device["description"],
               templates=device["config_context"]["zabbix"]["templates"] if device["config_context"] else "",
+              port_type=device["config_context"]["zabbix"]["port_type"] if device["config_context"] else "",
               status=formatStatus(device["status"]),
               interfaces=[interface_model(
                 name=interface["name"],

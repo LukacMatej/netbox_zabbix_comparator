@@ -8,14 +8,16 @@ class Device:
     description: str = ""
     templates: list[str] = []
     status: str = ""
+    port_type: str = ""
             
-    def __init__(self, name, interfaces, hostgroup, description, templates, status) -> None:
+    def __init__(self, name, interfaces, hostgroup, description, templates, status, port_type) -> None:
         self.name = name
         self.interfaces = interfaces
         self.hostgroup = hostgroup
         self.description = description
         self.templates = templates
         self.status = normalize_status(status)
+        self.port_type = port_type
         
     def __str__(self) -> str:
         return f"{self.name} {self.interfaces} {self.hostgroup} {self.description} {self.templates} {self.status}"
