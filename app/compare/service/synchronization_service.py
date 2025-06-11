@@ -187,6 +187,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         templateids=[find_template_ids(template) for template in zb_device.templates if template]
     )
     log.logger.info(update_data_zabbix)
+    log.logger.info(zb_device.interfaces[0].port_type)
     response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json=update_data_zabbix)
     if response.status_code == 200:
         sync_output.add_difference_output(f"Device {zb_device.name} updated successfully in Zabbix.")
