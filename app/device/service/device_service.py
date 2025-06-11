@@ -18,7 +18,7 @@ def find_hostinterface_id(hostid: str) -> int:
   Returns:
     int: The interface ID if found, otherwise -1.
   """
-  zb_url = os.environ.get("ZABBIX_URL")
+  zb_url = os.environ.get("ZABBIX_IP")
   zb_key = os.environ.get("ZABBIX_KEY")
   headers = {
     "Authorization": f"Bearer {zb_key}",
