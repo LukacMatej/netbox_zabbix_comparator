@@ -6,9 +6,8 @@ from app.device.models.device_model import Device as device_model
 from app.device.models.interface_model import Interface as interface_model
 from app.device.models.address_model import Address as address_model
 from app.device.models.difference_model import DeviceDifference as device_difference_model
-from app.device.models.difference_model import DeviceDifference as device_difference_model
 from app.device.models.synchonization_output_model import SyncOutput as sync_output_model
-
+from app.device.service import device_service
 def find_template_ids(template_name: str) -> int:
     """Finds the Zabbix template ID based on the provided template name.
     Args:
@@ -135,7 +134,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         sync_output.add_difference_output(f"Failed to find Zabbix hostid for {zb_device.name}, cannot update device.")
         log.logger.error(f"Failed to find Zabbix hostid for {zb_device.name}, cannot update device.")
         return
-
+    log.logger.info("Zabbix Device before update "+device_service.print_device(zb_device))
     updated_fields = {}
     interface_keys = ["port_type"]
     address_keys = ["address", "dns_name"]
@@ -180,6 +179,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
                                     log.logger.info(f"Address field {key} is different: Netbox value: {nb_value}, Zabbix value: {zb_value}")
     # Log updated fields to sync_output
     sync_output.add_difference_output(f"Updated fields for {zb_device.name}: {list(updated_fields.keys())}")
+    log.logger.info("Zabbix Device before update "+device_service.print_device(zb_device))
 
     update_data_zabbix = zb_device.update_data_zabbix(
         hostid=hostid,
