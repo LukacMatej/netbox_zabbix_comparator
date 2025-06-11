@@ -20,6 +20,21 @@ class Device:
     def __str__(self) -> str:
         return f"{self.name} {self.interfaces} {self.hostgroup} {self.description} {self.templates} {self.status}"
 
+    def update_data_zabbix(self, hostid, hostgroupId, templateids) -> dict:
+        """Creates a dictionary representation of the device for Zabbix API."""
+        return {
+            "jsonrpc": "2.0",
+            "method": "host.update",
+            "params": {
+                "hostid": hostid,
+                "interfaces": dict_interfaces_zb(self.interfaces) if self.interfaces else [],
+                "groups": [{"groupid": hostgroupId}],
+                "description": self.description,
+                "templates": [{"templateid": tempId} for tempId in templateids if tempId],
+                "status": 0 if self.status == "Active" else 1
+            },
+            "id": 1
+        }
     def create_data_zabbix(self, hostgroupId, templateids) -> dict:
         """Creates a dictionary representation of the device for Zabbix API."""
         return {

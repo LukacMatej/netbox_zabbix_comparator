@@ -178,55 +178,21 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
                                     updated_fields[f"{key} {nb_address.address}"] = nb_value
                                     setattr(zb_address, key, nb_value)
                                     log.logger.info(f"Address field {key} is different: Netbox value: {nb_value}, Zabbix value: {zb_value}")
-    # Build update params
-    params = {"hostid": hostid}
-
-    # Map updated fields to Zabbix API fields
-    if "name" in updated_fields:
-        params["host"] = updated_fields["name"]
-    if "description" in updated_fields:
-        params["description"] = updated_fields["description"]
-    if "status" in updated_fields:
-        params["status"] = 0 if updated_fields["status"] == "Active" else 1
-    if "templates" in updated_fields:
-        # Convert template names to IDs
-        templateids = [find_template_ids(t) for t in updated_fields["templates"] if t]
-        params["templates"] = [{"templateid": tid} for tid in templateids if tid != -1]
-    if "hostgroup" in updated_fields:
-        groupid = find_zabbix_hostgroup_id(updated_fields["hostgroup"])
-        if groupid != -1:
-            params["groups"] = [{"groupid": groupid}]
-    # Handle interface updates if any interface fields were updated
-    interface_keys = ["port_type"]
-    interfaces_updated = any(key in updated_fields for key in interface_keys)
-    if interfaces_updated:
-        from app.device.models.device_model import dict_interfaces_zb
-        params["interfaces"] = dict_interfaces_zb(zb_device.interfaces)
-    # Handle address updates if any address fields were updated
-    address_keys = ["address", "dns_name"]
-    addresses_updated = any(key in updated_fields for key in address_keys)
-    if addresses_updated:
-        # Zabbix API does not directly update addresses, but you may need to update interfaces
-        from app.device.models.device_model import dict_interfaces_zb
-        params["interfaces"] = dict_interfaces_zb(zb_device.interfaces)
-
     # Log updated fields to sync_output
     sync_output.add_difference_output(f"Updated fields for {zb_device.name}: {list(updated_fields.keys())}")
 
-    # Send update to Zabbix
-    update_payload = {
-        "jsonrpc": "2.0",
-        "method": "host.update",
-        "params": params,
-        "id": 1
-    }
-    response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json=update_payload)
+    update_data_zabbix = zb_device.update_data_zabbix(
+        hostid=hostid,
+        hostgroupId=find_zabbix_hostgroup_id(zb_device.hostgroup),
+        templateids=[find_template_ids(template) for template in zb_device.templates if template]
+    )
+    response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json=update_data_zabbix)
     if response.status_code == 200:
         sync_output.add_difference_output(f"Device {zb_device.name} updated successfully in Zabbix.")
-        log.logger.info(f"Device {zb_device.name} updated successfully in Zabbix.")
+        log.logger.info(f"Device {zb_device.name} updated successfully in Zabbix with response status {response.status_code}.")
     else:
         sync_output.add_difference_output(f"Failed to update device {zb_device.name} in Zabbix: {response.text}")
-        log.logger.error(f"Failed to update device {zb_device.name} in Zabbix: {response.text}")
+        log.logger.error(f"Failed to update device {zb_device.name} in Zabbix: {response.text} with response status {response.status_code}.")
             
 
 def create_netbox_device(device: device_model, sync_output: sync_output_model):
