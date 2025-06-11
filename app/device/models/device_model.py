@@ -88,7 +88,11 @@ def map_port_type(port_type: str) -> str:
         "Agent": "1",
         "SNMP": "2",
         "IPMI": "3",
-        "JMX": "4"
+        "JMX": "4",
+        "1": "1",
+        "2": "2",
+        "3": "3",
+        "4": "4"
     }
     return port_type_map.get(port_type, "1")
 
