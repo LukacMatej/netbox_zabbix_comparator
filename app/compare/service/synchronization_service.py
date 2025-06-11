@@ -137,35 +137,45 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         return
 
     updated_fields = {}
+    interface_keys = ["port_type"]
+    address_keys = ["address", "dns_name"]
+    # Check which fields are different and prepare update params
     for field in different_fields:
         field_name = extract_field_name(field)
-        # Update the Zabbix field with Netbox data if the field exists in both
         if hasattr(nb_device, field_name) and hasattr(zb_device, field_name):
             nb_value = getattr(nb_device, field_name)
-            # Handle updates for fields inside interfaces and addresses lists
-            if hasattr(nb_device, "interfaces") and hasattr(zb_device, "interfaces"):
-                # Check if the field is inside any interface
-                for nb_iface, zb_iface in zip(nb_device.interfaces, zb_device.interfaces):
-                    if hasattr(nb_iface, field_name) and hasattr(zb_iface, field_name):
-                        nb_iface_value = getattr(nb_iface, field_name)
-                        setattr(zb_iface, field_name, nb_iface_value)
-                        updated_fields.setdefault("interfaces", nb_device.interfaces)
-                        log.logger.info(f"Updating Zabbix interface field '{field_name}' with Netbox value: {nb_iface_value}")
-                    # Check if the field is inside any address within interfaces
-                    if hasattr(nb_iface, "addresses") and hasattr(zb_iface, "addresses"):
-                        for nb_addr, zb_addr in zip(nb_iface.addresses, zb_iface.addresses):
-                            if hasattr(nb_addr, field_name) and hasattr(zb_addr, field_name):
-                                nb_addr_value = getattr(nb_addr, field_name)
-                                setattr(zb_addr, field_name, nb_addr_value)
-                                updated_fields.setdefault("addresses", [])
-                                updated_fields["addresses"].append(nb_iface.addresses)
-                                log.logger.info(f"Updating Zabbix address field '{field_name}' in interface '{nb_iface}' with Netbox value: {nb_addr_value}")
-            
-            if not (field_name in [f for iface in getattr(nb_device, "interfaces", []) for f in vars(iface)] or
-                    field_name in [f for addr in getattr(nb_device, "addresses", []) for f in vars(addr)]):
+            zb_value = getattr(zb_device, field_name)
+            if nb_value != zb_value:
                 updated_fields[field_name] = nb_value
-                log.logger.info(f"Updating Zabbix field '{field_name}' with Netbox value: {nb_value}")
-                
+                log.logger.info(f"Field {field_name} is different: Netbox value: {nb_value}, Zabbix value: {zb_value}")
+        elif field_name in interface_keys:
+            # Handle interface fields
+            nb_interfaces = nb_device.interfaces
+            zb_interfaces = zb_device.interfaces
+            for nb_interface in nb_interfaces:
+                for zb_interface in zb_interfaces:
+                    if nb_interface.name == zb_interface.name:
+                        for key in interface_keys:
+                            if hasattr(nb_interface, key) and hasattr(zb_interface, key):
+                                nb_value = getattr(nb_interface, key)
+                                zb_value = getattr(zb_interface, key)
+                                if nb_value != zb_value:
+                                    updated_fields[f"interface_{nb_interface.name}_{key}"] = nb_value
+                                    log.logger.info(f"Interface field {key} is different: Netbox value: {nb_value}, Zabbix value: {zb_value}")
+        elif field_name in address_keys:
+            # Handle address fields
+            nb_addresses = nb_device.addresses
+            zb_addresses = zb_device.addresses
+            for nb_address in nb_addresses:
+                for zb_address in zb_addresses:
+                    if nb_address.address == zb_address.address:
+                        for key in address_keys:
+                            if hasattr(nb_address, key) and hasattr(zb_address, key):
+                                nb_value = getattr(nb_address, key)
+                                zb_value = getattr(zb_address, key)
+                                if nb_value != zb_value:
+                                    updated_fields[f"address_{nb_address.address}_{key}"] = nb_value
+                                    log.logger.info(f"Address field {key} is different: Netbox value: {nb_value}, Zabbix value: {zb_value}")                
     # Build update params
     params = {"hostid": hostid}
     # Map updated fields to Zabbix API fields
