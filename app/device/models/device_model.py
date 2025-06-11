@@ -20,14 +20,14 @@ class Device:
     def __str__(self) -> str:
         return f"{self.name} {self.interfaces} {self.hostgroup} {self.description} {self.templates} {self.status}"
 
-    def update_data_zabbix(self, hostid, hostgroupId, templateids) -> dict:
+    def update_data_zabbix(self, hostid, interface_id, hostgroupId, templateids) -> dict:
         """Creates a dictionary representation of the device for Zabbix API."""
         return {
             "jsonrpc": "2.0",
             "method": "host.update",
             "params": {
                 "hostid": hostid,
-                "interfaces": dict_interfaces_zb(self.interfaces) if self.interfaces else [],
+                "interfaces": dict_interfaces_zb_id(self.interfaces,interface_id=interface_id) if self.interfaces else [],
                 "groups": [{"groupid": hostgroupId}],
                 "description": self.description,
                 "templates": [{"templateid": tempId} for tempId in templateids if tempId],
@@ -107,6 +107,24 @@ def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
     for index, interface in enumerate(interfaces):
         result.append({
             "type": map_port_type(interface.port_type),
+            "main": 1 if index == 0 else 0,
+            "useip": 1,
+            "ip": str(interface.addresses[0].address).split("/")[0] if interface.addresses else "",
+            "dns": interface.addresses[0].dns_name if interface.addresses else "",
+            "port": 161,
+            "details": {
+                "version": 3
+            }
+        })
+    return result
+
+def dict_interfaces_zb_id(interfaces: list[InterfaceModel],interface_id) -> list[dict]:
+    """Converts a list of InterfaceModel objects to a list of dictionaries."""
+    result = []
+    for index, interface in enumerate(interfaces):
+        result.append({
+            "type": map_port_type(interface.port_type),
+            "interfaceid": interface_id,
             "main": 1 if index == 0 else 0,
             "useip": 1,
             "ip": str(interface.addresses[0].address).split("/")[0] if interface.addresses else "",

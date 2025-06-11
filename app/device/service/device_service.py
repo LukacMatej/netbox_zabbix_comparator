@@ -9,6 +9,44 @@ from app.device.models.address_model import Address as address_model
 from app.device.models.difference_model import DeviceDifference as difference_model
 from app.logger import logger_conf as log
 
+def find_hostinterface_id(hostid: str) -> int:
+  """
+  Finds the interface ID for a given Zabbix host ID and interface name.
+  Args:
+    hostid (str): The Zabbix host ID.
+    interface_name (str): The name (DNS or IP) of the interface to find.
+  Returns:
+    int: The interface ID if found, otherwise -1.
+  """
+  zb_url = os.environ.get("ZABBIX_URL")
+  zb_key = os.environ.get("ZABBIX_KEY")
+  headers = {
+    "Authorization": f"Bearer {zb_key}",
+    "Content-Type": "application/json-rpc",
+    "Accept": "application/json"
+  }
+  payload = {
+    "jsonrpc": "2.0",
+    "method": "hostinterface.get",
+    "params": {
+      "hostids": hostid,
+      "output": ["interfaceid", "dns", "ip"]
+    },
+    "id": 1
+  }
+  try:
+    response = requests.post(f"{zb_url}/api_jsonrpc.php", headers=headers, json=payload)
+    response.raise_for_status()
+    if "error" in response.json():
+      log.logger.error(f"Error finding Zabbix interface ID: {response.json()['error']}")
+      return -1
+    result = response.json()
+    for interface in result.get("result", []):
+        return int(interface["interfaceid"])
+  except Exception as e:
+    log.logger.error(f"Failed to find Zabbix interface ID for hostid {hostid}: {e}")
+  return -1
+
 def find_nb_site_id(site_name: str) -> int:
     """Finds the Netbox site ID based on the provided site name.
     Args:
@@ -62,7 +100,7 @@ def find_nb_device_type_id(device_type: str) -> int:
     
     log.logger.error(f"Failed to find Netbox device type ID for {device_type}: {response.text}")
     return -1
-  
+
 def find_nb_device_role_id(device_role: str) -> int:
     """Finds the Netbox device role ID based on the provided device role.
     Args:
