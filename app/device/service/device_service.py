@@ -23,14 +23,13 @@ def find_hostinterface_id(hostid: str) -> int:
   headers = {
     "Authorization": f"Bearer {zb_key}",
     "Content-Type": "application/json-rpc",
-    "Accept": "application/json"
   }
   payload = {
     "jsonrpc": "2.0",
     "method": "hostinterface.get",
     "params": {
       "hostids": hostid,
-      "output": ["interfaceid", "dns", "ip"]
+      "output": ["interfaceid"]
     },
     "id": 1
   }
@@ -41,8 +40,8 @@ def find_hostinterface_id(hostid: str) -> int:
       log.logger.error(f"Error finding Zabbix interface ID: {response.json()['error']}")
       return -1
     result = response.json()
-    for interface in result.get("result", []):
-        return int(interface["interfaceid"])
+    interface = result.get("result", [])
+    return int(interface[0]["interfaceid"]) if interface else -1
   except Exception as e:
     log.logger.error(f"Failed to find Zabbix interface ID for hostid {hostid}: {e}")
   return -1
