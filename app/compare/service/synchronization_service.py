@@ -147,36 +147,40 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             zb_value = getattr(zb_device, field_name)
             if nb_value != zb_value:
                 updated_fields[field_name] = nb_value
+                setattr(zb_device, field_name, nb_value)
                 log.logger.info(f"Field {field_name} is different: Netbox value: {nb_value}, Zabbix value: {zb_value}")
         elif field_name in interface_keys:
             # Handle interface fields
             nb_interfaces: list[interface_model] = nb_device.interfaces
             zb_interfaces: list[interface_model] = zb_device.interfaces
-            for nb_interface,zb_interface in zip(nb_interfaces, zb_interfaces):
+            for nb_interface, zb_interface in zip(nb_interfaces, zb_interfaces):
                 if isinstance(nb_interface, interface_model) and isinstance(zb_interface, interface_model):
                     for key in interface_keys:
                         if hasattr(nb_interface, key) and hasattr(zb_interface, key):
                             nb_value = getattr(nb_interface, key)
                             zb_value = getattr(zb_interface, key)
                             if nb_value != zb_value:
-                                updated_fields[f"interface_{nb_interface.name}_{key}"] = nb_value
+                                updated_fields[f"{key} {nb_interface.name}"] = nb_value
+                                setattr(zb_interface, key, nb_value)
                                 log.logger.info(f"Interface field {key} is different: Netbox value: {nb_value}, Zabbix value: {zb_value}")
         elif field_name in address_keys:
             # Handle address fields
             for nb_addresses, zb_addresses in zip(nb_device.interfaces, zb_device.interfaces):
                 if not nb_addresses or not zb_addresses:
                     continue
-                for nb_address,zb_address in zip(nb_addresses.addresses, zb_addresses.addresses):
+                for nb_address, zb_address in zip(nb_addresses.addresses, zb_addresses.addresses):
                     if isinstance(nb_address, address_model) and isinstance(zb_address, address_model):
                         for key in address_keys:
                             if hasattr(nb_address, key) and hasattr(zb_address, key):
                                 nb_value = getattr(nb_address, key)
                                 zb_value = getattr(zb_address, key)
                                 if nb_value != zb_value:
-                                    updated_fields[f"address_{nb_address.address}_{key}"] = nb_value
-                                    log.logger.info(f"Address field {key} is different: Netbox value: {nb_value}, Zabbix value: {zb_value}")                
+                                    updated_fields[f"{key} {nb_address.address}"] = nb_value
+                                    setattr(zb_address, key, nb_value)
+                                    log.logger.info(f"Address field {key} is different: Netbox value: {nb_value}, Zabbix value: {zb_value}")
     # Build update params
     params = {"hostid": hostid}
+
     # Map updated fields to Zabbix API fields
     if "name" in updated_fields:
         params["host"] = updated_fields["name"]
@@ -192,9 +196,19 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         groupid = find_zabbix_hostgroup_id(updated_fields["hostgroup"])
         if groupid != -1:
             params["groups"] = [{"groupid": groupid}]
-    if "interfaces" in updated_fields:
+    # Handle interface updates if any interface fields were updated
+    interface_keys = ["port_type"]
+    interfaces_updated = any(key in updated_fields for key in interface_keys)
+    if interfaces_updated:
         from app.device.models.device_model import dict_interfaces_zb
-        params["interfaces"] = dict_interfaces_zb(updated_fields["interfaces"])
+        params["interfaces"] = dict_interfaces_zb(zb_device.interfaces)
+    # Handle address updates if any address fields were updated
+    address_keys = ["address", "dns_name"]
+    addresses_updated = any(key in updated_fields for key in address_keys)
+    if addresses_updated:
+        # Zabbix API does not directly update addresses, but you may need to update interfaces
+        from app.device.models.device_model import dict_interfaces_zb
+        params["interfaces"] = dict_interfaces_zb(zb_device.interfaces)
 
     # Log updated fields to sync_output
     sync_output.add_difference_output(f"Updated fields for {zb_device.name}: {list(updated_fields.keys())}")
