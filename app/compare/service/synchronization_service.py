@@ -145,8 +145,23 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             updated_fields[field_name] = new_value
         # Special handling for interfaces and addresses
         elif field_name == "interfaces":
-            zabbix_device.interfaces = netbox_device.interfaces
-            updated_fields[field_name] = netbox_device.interfaces
+            # Deep update of interfaces and their IP addresses
+            if hasattr(netbox_device, "interfaces") and hasattr(zabbix_device, "interfaces"):
+                zabbix_device.interfaces = []
+                for nb_iface in netbox_device.interfaces:
+                    # Create a new interface object for Zabbix device, copying all attributes
+                    zb_iface = nb_iface.__class__(**nb_iface.__dict__)
+                    # If interface has ip_addresses, deep copy them as well
+                    if hasattr(nb_iface, "ip_addresses"):
+                        zb_iface.ip_addresses = []
+                        for nb_ip in nb_iface.ip_addresses:
+                            zb_ip = nb_ip.__class__(**nb_ip.__dict__)
+                            zb_iface.ip_addresses.append(zb_ip)
+                    zabbix_device.interfaces.append(zb_iface)
+                updated_fields[field_name] = zabbix_device.interfaces
+            else:
+                zabbix_device.interfaces = netbox_device.interfaces
+                updated_fields[field_name] = netbox_device.interfaces
         # Add more special cases as needed
 
 
