@@ -166,7 +166,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             for nb_addresses, zb_addresses in zip(nb_device.interfaces, zb_device.interfaces):
                 if not nb_addresses or not zb_addresses:
                     continue
-                for nb_address,zb_address in zip(nb_addresses, zb_addresses):
+                for nb_address,zb_address in zip(nb_addresses.addresses, zb_addresses.addresses):
                     if isinstance(nb_address, address_model) and isinstance(zb_address, address_model):
                         for key in address_keys:
                             if hasattr(nb_address, key) and hasattr(zb_address, key):
