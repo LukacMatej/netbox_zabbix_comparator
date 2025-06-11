@@ -188,7 +188,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         params["interfaces"] = dict_interfaces_zb(updated_fields["interfaces"])
 
     # Log updated fields to sync_output
-    sync_output.add_difference_output(f"Updated fields for {zabbix_device.name}: {list(updated_fields.keys())}")
+    sync_output.add_difference_output(f"Updated fields for {zb_device.name}: {list(updated_fields.keys())}")
 
     # Send update to Zabbix
     update_payload = {
@@ -199,11 +199,11 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     }
     response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json=update_payload)
     if response.status_code == 200:
-        sync_output.add_difference_output(f"Device {zabbix_device.name} updated successfully in Zabbix.")
-        log.logger.info(f"Device {zabbix_device.name} updated successfully in Zabbix.")
+        sync_output.add_difference_output(f"Device {zb_device.name} updated successfully in Zabbix.")
+        log.logger.info(f"Device {zb_device.name} updated successfully in Zabbix.")
     else:
-        sync_output.add_difference_output(f"Failed to update device {zabbix_device.name} in Zabbix: {response.text}")
-        log.logger.error(f"Failed to update device {zabbix_device.name} in Zabbix: {response.text}")
+        sync_output.add_difference_output(f"Failed to update device {zb_device.name} in Zabbix: {response.text}")
+        log.logger.error(f"Failed to update device {zb_device.name} in Zabbix: {response.text}")
             
 
 def create_netbox_device(device: device_model, sync_output: sync_output_model):
