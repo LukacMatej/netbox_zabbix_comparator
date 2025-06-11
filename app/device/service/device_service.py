@@ -246,9 +246,6 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
         "templateid",
         "name"
       ],
-      "selectInventory": [
-        "macaddress_a"
-      ],
       "filter": {
         "status": [0]
       }
@@ -277,7 +274,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
         status=formatStatus(host["status"]),
         interfaces=[interface_model(
           name=interface["dns"],
-          mac_address=formatMac(host["inventory"]["macaddress_a"]),
+          mac_address="",
           port_type=interface["type"],
           addresses=[address_model(
             address=interface["ip"],
