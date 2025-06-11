@@ -150,25 +150,24 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
                 log.logger.info(f"Field {field_name} is different: Netbox value: {nb_value}, Zabbix value: {zb_value}")
         elif field_name in interface_keys:
             # Handle interface fields
-            nb_interfaces = nb_device.interfaces
-            zb_interfaces = zb_device.interfaces
-            for nb_interface in nb_interfaces:
-                for zb_interface in zb_interfaces:
-                    if nb_interface.name == zb_interface.name:
-                        for key in interface_keys:
-                            if hasattr(nb_interface, key) and hasattr(zb_interface, key):
-                                nb_value = getattr(nb_interface, key)
-                                zb_value = getattr(zb_interface, key)
-                                if nb_value != zb_value:
-                                    updated_fields[f"interface_{nb_interface.name}_{key}"] = nb_value
-                                    log.logger.info(f"Interface field {key} is different: Netbox value: {nb_value}, Zabbix value: {zb_value}")
+            nb_interfaces: list[interface_model] = nb_device.interfaces
+            zb_interfaces: list[interface_model] = zb_device.interfaces
+            for nb_interface,zb_interface in zip(nb_interfaces, zb_interfaces):
+                if isinstance(nb_interface, interface_model) and isinstance(zb_interface, interface_model):
+                    for key in interface_keys:
+                        if hasattr(nb_interface, key) and hasattr(zb_interface, key):
+                            nb_value = getattr(nb_interface, key)
+                            zb_value = getattr(zb_interface, key)
+                            if nb_value != zb_value:
+                                updated_fields[f"interface_{nb_interface.name}_{key}"] = nb_value
+                                log.logger.info(f"Interface field {key} is different: Netbox value: {nb_value}, Zabbix value: {zb_value}")
         elif field_name in address_keys:
             # Handle address fields
-            nb_addresses = nb_device.addresses
-            zb_addresses = zb_device.addresses
-            for nb_address in nb_addresses:
-                for zb_address in zb_addresses:
-                    if nb_address.address == zb_address.address:
+            for nb_addresses, zb_addresses in zip(nb_device.interfaces, zb_device.interfaces):
+                if not nb_addresses or not zb_addresses:
+                    continue
+                for nb_address,zb_address in zip(nb_addresses, zb_addresses):
+                    if isinstance(nb_address, address_model) and isinstance(zb_address, address_model):
                         for key in address_keys:
                             if hasattr(nb_address, key) and hasattr(zb_address, key):
                                 nb_value = getattr(nb_address, key)
