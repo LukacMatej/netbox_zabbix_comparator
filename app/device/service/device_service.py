@@ -36,9 +36,7 @@ def find_hostinterface_id(hostid: str) -> int:
   try:
     response = requests.post(f"{zb_url}/api_jsonrpc.php", headers=headers, json=payload)
     response.raise_for_status()
-    if "error" in response.json():
-      log.logger.error(f"Error finding Zabbix interface ID: {response.json()['error']}")
-      return -1
+    log.logger.debug(f"Response from Zabbix API: {response.json()}")
     result = response.json()
     interface = result.get("result", [])
     return int(interface[0]["interfaceid"]) if interface else -1
