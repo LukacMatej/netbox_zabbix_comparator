@@ -3,6 +3,8 @@ import os
 import re
 from app.logger import logger_conf as log
 from app.device.models.device_model import Device as device_model
+from app.device.models.interface_model import Interface as interface_model
+from app.device.models.address_model import Address as address_model
 from app.device.models.difference_model import DeviceDifference as device_difference_model
 from app.device.models.difference_model import DeviceDifference as device_difference_model
 from app.device.models.synchonization_output_model import SyncOutput as sync_output_model
@@ -98,13 +100,13 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         differences (device_difference_model): The differences between the Netbox and Zabbix devices.
         sync_output (sync_output_model): The synchronization output model to log the results.
     """
-    netbox_device = differences.nb_device
-    zabbix_device = differences.zb_device
-    different_fields = differences.differences[0]  # tuple: (different_fields, same_fields)
+    nb_device: device_model = differences.nb_device
+    zb_device: device_model = differences.zb_device
+    different_fields: list[str] = differences.differences[0]  # tuple: (different_fields, same_fields)
 
     # Map field names in different_fields to actual attribute names
     # If the field is in the format 'field (x != y), ...', extract the field name
-    def extract_field_name(field):
+    def extract_field_name(field: str):
         if '(' in field:
             return field.split('(')[0].strip()
         return field.strip()
@@ -122,7 +124,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json={
         "jsonrpc": "2.0",
         "method": "host.get",
-        "params": {"filter": {"host": [zabbix_device.name]}},
+        "params": {"filter": {"host": [zb_device.name]}},
         "id": 1
     })
     if response.status_code == 200:
@@ -130,39 +132,40 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         if data["result"]:
             hostid = data["result"][0]["hostid"]
     if not hostid:
-        sync_output.add_difference_output(f"Failed to find Zabbix hostid for {zabbix_device.name}, cannot update device.")
-        log.logger.error(f"Failed to find Zabbix hostid for {zabbix_device.name}, cannot update device.")
+        sync_output.add_difference_output(f"Failed to find Zabbix hostid for {zb_device.name}, cannot update device.")
+        log.logger.error(f"Failed to find Zabbix hostid for {zb_device.name}, cannot update device.")
         return
 
     updated_fields = {}
     for field in different_fields:
         field_name = extract_field_name(field)
-        # Always take the value from netbox_device and set it on zabbix_device if possible
-        if hasattr(netbox_device, field_name):
-            new_value = getattr(netbox_device, field_name)
-            if hasattr(zabbix_device, field_name):
-                setattr(zabbix_device, field_name, new_value)
-            updated_fields[field_name] = new_value
-        # Special handling for interfaces and addresses
-        elif field_name == "interfaces":
-            # Deep update of interfaces and their IP addresses
-            if hasattr(netbox_device, "interfaces") and hasattr(zabbix_device, "interfaces"):
-                zabbix_device.interfaces = []
-                for nb_iface in netbox_device.interfaces:
-                    zb_iface = nb_iface.__class__(**nb_iface.__dict__)
-                    if hasattr(nb_iface, "addresses"):
-                        zb_iface.addresses = []
-                        for nb_ip in nb_iface.addresses:
-                            zb_ip = nb_ip.__class__(**nb_ip.__dict__)
-                            zb_iface.addresses.append(zb_ip)
-                    zabbix_device.interfaces.append(zb_iface)
-                updated_fields[field_name] = zabbix_device.interfaces
-            else:
-                zabbix_device.interfaces = netbox_device.interfaces
-                updated_fields[field_name] = netbox_device.interfaces
-        # Add more special cases as needed
-
-
+        # Update the Zabbix field with Netbox data if the field exists in both
+        if hasattr(nb_device, field_name) and hasattr(zb_device, field_name):
+            nb_value = getattr(nb_device, field_name)
+            # Handle updates for fields inside interfaces and addresses lists
+            if hasattr(nb_device, "interfaces") and hasattr(zb_device, "interfaces"):
+                # Check if the field is inside any interface
+                for nb_iface, zb_iface in zip(nb_device.interfaces, zb_device.interfaces):
+                    if hasattr(nb_iface, field_name) and hasattr(zb_iface, field_name):
+                        nb_iface_value = getattr(nb_iface, field_name)
+                        setattr(zb_iface, field_name, nb_iface_value)
+                        updated_fields.setdefault("interfaces", nb_device.interfaces)
+                        log.logger.info(f"Updating Zabbix interface field '{field_name}' with Netbox value: {nb_iface_value}")
+                    # Check if the field is inside any address within interfaces
+                    if hasattr(nb_iface, "addresses") and hasattr(zb_iface, "addresses"):
+                        for nb_addr, zb_addr in zip(nb_iface.addresses, zb_iface.addresses):
+                            if hasattr(nb_addr, field_name) and hasattr(zb_addr, field_name):
+                                nb_addr_value = getattr(nb_addr, field_name)
+                                setattr(zb_addr, field_name, nb_addr_value)
+                                updated_fields.setdefault("addresses", [])
+                                updated_fields["addresses"].append(nb_iface.addresses)
+                                log.logger.info(f"Updating Zabbix address field '{field_name}' in interface '{nb_iface}' with Netbox value: {nb_addr_value}")
+            
+            if not (field_name in [f for iface in getattr(nb_device, "interfaces", []) for f in vars(iface)] or
+                    field_name in [f for addr in getattr(nb_device, "addresses", []) for f in vars(addr)]):
+                updated_fields[field_name] = nb_value
+                log.logger.info(f"Updating Zabbix field '{field_name}' with Netbox value: {nb_value}")
+                
     # Build update params
     params = {"hostid": hostid}
     # Map updated fields to Zabbix API fields
