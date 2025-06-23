@@ -4,7 +4,7 @@ from app.device.service import device_service as ds
 class Device:
     name: str = ""
     interfaces: list[InterfaceModel] = []
-    hostgroup: str = ""
+    hostgroup: list[str] = []
     description: str = ""
     templates: list[str] = []
     status: str = ""
@@ -35,7 +35,7 @@ class Device:
             },
             "id": 1
         }
-    def create_data_zabbix(self, hostgroupId, templateids) -> dict:
+    def create_data_zabbix(self, hostgroupIds, templateids) -> dict:
         """Creates a dictionary representation of the device for Zabbix API."""
         return {
             "jsonrpc": "2.0",
@@ -43,7 +43,7 @@ class Device:
             "params": {
                 "host": self.name,
                 "interfaces": dict_interfaces_zb(self.interfaces) if self.interfaces else [],
-                "groups": [{"groupid": hostgroupId}],
+                "groups": [{"groupid": groupId} for groupId in hostgroupIds if groupId],
                 "description": self.description,
                 "templates": [{"templateid": tempId} for tempId in templateids if tempId],
                 "status": 0 if self.status == "Active" else 1
