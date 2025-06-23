@@ -43,7 +43,7 @@ class Device:
             "params": {
             "host": self.name,
             "interfaces": dict_interfaces_zb(self.interfaces) if self.interfaces else [],
-            "groups": [{"groupid": int(groupId)} for groupId in hostgroupIds if groupId],
+            "groups": [{"groupid": int(groupId[0]) if isinstance(groupId, list) and groupId else int(groupId)} for groupId in hostgroupIds if groupId],
             "description": self.description,
             "templates": [{"templateid": tempId} for tempId in templateids if tempId],
             "status": 0 if self.status == "Active" else 1
