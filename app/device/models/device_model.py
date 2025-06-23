@@ -41,12 +41,12 @@ class Device:
             "jsonrpc": "2.0",
             "method": "host.create",
             "params": {
-                "host": self.name,
-                "interfaces": dict_interfaces_zb(self.interfaces) if self.interfaces else [],
-                "groups": [{"groupid": groupId} for groupId in hostgroupIds if groupId],
-                "description": self.description,
-                "templates": [{"templateid": tempId} for tempId in templateids if tempId],
-                "status": 0 if self.status == "Active" else 1
+            "host": self.name,
+            "interfaces": dict_interfaces_zb(self.interfaces) if self.interfaces else [],
+            "groups": [{"groupid": int(groupId)} for groupId in hostgroupIds if groupId],
+            "description": self.description,
+            "templates": [{"templateid": tempId} for tempId in templateids if tempId],
+            "status": 0 if self.status == "Active" else 1
             },
             "id": 1
         }
