@@ -194,7 +194,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     update_data_zabbix = zb_device.update_data_zabbix(
         hostid=hostid,
         interface_id=device_service.find_hostinterface_id(hostid),
-        hostgroupId=find_zabbix_hostgroup_ids(zb_device.hostgroup),
+        hostgroupIds=find_zabbix_hostgroup_ids(zb_device.hostgroup),
         templateids=[find_template_ids(template) for template in zb_device.templates if template]
     )
     log.logger.info(update_data_zabbix)
