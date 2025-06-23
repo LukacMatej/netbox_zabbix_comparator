@@ -255,8 +255,8 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                   mac_address=formatMac(interface["mac_address"]),
                   port_type=device["config_context"]["zabbix"]["port_type"] if device["config_context"] else "",
                   addresses=[address_model(
-                    address=str(device["primary_ip4"]["address"]).split("/")[0] if device["primary_ip4"]["address"] else "",
-                    dns_name=device["primary_ip4"]["dns_name"] if device["primary_ip4"]["dns_name"] else ""
+                    address=str(device["primary_ip4"]["address"]).split("/")[0] if device["primary_ip4"] else "",
+                    dns_name=device["primary_ip4"]["dns_name"] if device["primary_ip4"] else ""
                   )]
                 ) for interface in device["interfaces"] if interface["ip_addresses"]]
               ))
