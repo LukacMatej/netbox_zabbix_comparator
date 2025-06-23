@@ -50,6 +50,15 @@ def find_zabbix_hostgroup_ids(hostgroup_names: list[str]) -> list[int]:
     Returns:
         list[int]: The IDs of the hostgroups, -1 for any that could not be found or created.
     """
+    # If hostgroup_names is a string (not a list), convert to list
+    if isinstance(hostgroup_names, str):
+        hostgroup_names = [hostgroup_names]
+    # If hostgroup_names is a list with a single string, and that string is not a list, keep as is
+    if len(hostgroup_names) == 1 and isinstance(hostgroup_names[0], str):
+        names_to_check = [hostgroup_names[0]]
+    else:
+        names_to_check = hostgroup_names
+
     group_ids = []
     zabbix_ip = os.environ.get("ZABBIX_IP")
     zabbix_key = os.environ.get("ZABBIX_KEY")
@@ -57,7 +66,7 @@ def find_zabbix_hostgroup_ids(hostgroup_names: list[str]) -> list[int]:
         "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
     }
-    for hostgroup_name in hostgroup_names:
+    for hostgroup_name in names_to_check:
         log.logger.info(f"Finding Zabbix hostgroup ID for {hostgroup_name}.")
         response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json={
             "jsonrpc": "2.0",
