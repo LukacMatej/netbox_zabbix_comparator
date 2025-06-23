@@ -20,15 +20,17 @@ class Device:
     def __str__(self) -> str:
         return f"{self.name} {self.interfaces} {self.hostgroup} {self.description} {self.templates} {self.status}"
 
-    def update_data_zabbix(self, hostid, interface_id, hostgroupId, templateids) -> dict:
+    def update_data_zabbix(self, hostid, interface_id, hostgroupIds, templateids) -> dict:
         """Creates a dictionary representation of the device for Zabbix API."""
+        # Ensure hostgroupIds is a list of ints
+        groups = [{"groupid": int(gid[0]) if isinstance(gid, list) and gid else int(gid)} for gid in hostgroupIds if gid]
         return {
             "jsonrpc": "2.0",
             "method": "host.update",
             "params": {
                 "hostid": hostid,
                 "interfaces": dict_interfaces_zb_id(self.interfaces,interface_id=interface_id) if self.interfaces else [],
-                "groups": [{"groupid": hostgroupId}],
+                "groups": groups,
                 "description": self.description,
                 "templates": [{"templateid": tempId} for tempId in templateids if tempId],
                 "status": 0 if self.status == "Active" else 1
@@ -37,16 +39,17 @@ class Device:
         }
     def create_data_zabbix(self, hostgroupIds, templateids) -> dict:
         """Creates a dictionary representation of the device for Zabbix API."""
+        groups = [{"groupid": int(gid[0]) if isinstance(gid, list) and gid else int(gid)} for gid in hostgroupIds if gid]
         return {
             "jsonrpc": "2.0",
             "method": "host.create",
             "params": {
-            "host": self.name,
-            "interfaces": dict_interfaces_zb(self.interfaces) if self.interfaces else [],
-            "groups": [{"groupid": int(groupId[0]) if isinstance(groupId, list) and groupId else int(groupId)} for groupId in hostgroupIds if groupId],
-            "description": self.description,
-            "templates": [{"templateid": tempId} for tempId in templateids if tempId],
-            "status": 0 if self.status == "Active" else 1
+                "host": self.name,
+                "interfaces": dict_interfaces_zb(self.interfaces) if self.interfaces else [],
+                "groups": groups,
+                "description": self.description,
+                "templates": [{"templateid": tempId} for tempId in templateids if tempId],
+                "status": 0 if self.status == "Active" else 1
             },
             "id": 1
         }
