@@ -241,8 +241,10 @@ def create_zabbix_device(device: device_model,sync_output: sync_output_model):
         "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
     }
-    hostgroupids = [group["groupid"] for group in device.hostgroup]
-    if hostgroupids == -1:
+    hostgroupids = []
+    for hostgroup in device.hostgroup:
+        hostgroupids.append(hostgroup['groupid']) if isinstance(hostgroup, dict) else hostgroupids.append(hostgroup)
+    if not hostgroupids:
         sync_output.add_zabbix_output(f"Hostgroup {device.hostgroup} not found in Zabbix, cannot create device {device.name}.")
         log.logger.error(f"Hostgroup {device.hostgroup} not found in Zabbix, cannot create device in Netbox.")
         return
