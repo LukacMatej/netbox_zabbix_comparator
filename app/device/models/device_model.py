@@ -108,7 +108,17 @@ def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
     """Converts a list of InterfaceModel objects to a list of dictionaries."""
     result = []
     for index, interface in enumerate(interfaces):
-        result.append({
+        if interface.port_type == "1":
+            result.append({
+            "type": map_port_type(interface.port_type),
+            "main": 1 if index == 0 else 0,
+            "useip": 1,
+            "ip": str(interface.addresses[0].address).split("/")[0] if interface.addresses else "",
+            "dns": interface.addresses[0].dns_name if interface.addresses else "",
+            "port": 161
+        })
+        elif interface.port_type == "2":
+            result.append({
             "type": map_port_type(interface.port_type),
             "main": 1 if index == 0 else 0,
             "useip": 1,
@@ -119,6 +129,18 @@ def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
                 "version": 3
             }
         })
+        else:
+            result.append({
+                "type": map_port_type(interface.port_type),
+                "main": 1 if index == 0 else 0,
+                "useip": 1,
+                "ip": str(interface.addresses[0].address).split("/")[0] if interface.addresses else "",
+                "dns": interface.addresses[0].dns_name if interface.addresses else "",
+                "port": 161,
+                "details": {
+                    "version": 3
+                }
+            })
     return result
 
 def dict_interfaces_zb_id(interfaces: list[InterfaceModel],interface_id) -> list[dict]:
