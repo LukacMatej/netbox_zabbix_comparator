@@ -79,10 +79,7 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
             if nb_value == "" and zb_value == "":
                 continue
             if nb_value != zb_value:
-                if field == "name":
-                    fields.append(f"{field} ({nb_value} != {zb_value}), Hodnota v netboxu přepíše hodnotu v zabbixu")
-                else:
-                    fields.append(field)
+                fields.append(field)
             else:
                 same.append(field)
     log.logger.debug(f"Fields counter: {fields_counter}, same: {len(same)}, different: {len(fields)}")
@@ -128,8 +125,6 @@ def compare_devices(nb_device_list: list[device_model], zb_device_list: list[dev
         if not found:
                 zb_devices.append(zb_device)
     return different_devices, nb_devices, zb_devices
-
-
 
 def compare(nb_ip, nb_key, zb_ip, zb_key) -> Exception | tuple[list[device_difference_model], list[device_model], list[device_model]]:
     log.logger.info("Starting compare")
