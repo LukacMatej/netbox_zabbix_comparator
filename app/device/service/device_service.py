@@ -289,7 +289,6 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
         "status": [0]
       }
     },
-    "auth": key,
     "id": 1
   }
   headers: dict[str, str] = {
@@ -307,7 +306,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
     for host in result["result"]:
       zb_device_list.append(device_model(
         name=host["name"],
-        hostgroup=host["groups"][0]["name"],
+        hostgroup=host["groups"],
         description=host["description"],
         templates=[template["name"] for template in host["parentTemplates"]],
         status=formatStatus(host["status"]),
