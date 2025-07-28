@@ -42,69 +42,6 @@ def find_template_ids(template_name: str) -> int:
     log.logger.error(f"Failed to find Zabbix template ID for {template_name}: {response.text}")
     return -1
 
-def find_zabbix_hostgroup_ids(hostgroup_names: list[str]) -> list[int]:
-    """
-    Finds the Zabbix hostgroup IDs for a list of hostgroup names.
-    Args:
-        hostgroup_names (list[str]): The names of the hostgroups to find or create.
-    Returns:
-        list[int]: The IDs of the hostgroups, -1 for any that could not be found or created.
-    """
-    # If hostgroup_names is a string (not a list), convert to list
-    if isinstance(hostgroup_names, str):
-        hostgroup_names = [hostgroup_names]
-    # If hostgroup_names is a list with a single string, and that string is not a list, keep as is
-    if len(hostgroup_names) == 1 and isinstance(hostgroup_names[0], str):
-        names_to_check = [hostgroup_names[0]]
-    else:
-        names_to_check = hostgroup_names
-
-    group_ids = []
-    zabbix_ip = os.environ.get("ZABBIX_IP")
-    zabbix_key = os.environ.get("ZABBIX_KEY")
-    headers = {
-        "Authorization": f"Bearer {zabbix_key}",
-        "Content-Type": "application/json-rpc",
-    }
-    for hostgroup_name in names_to_check:
-        log.logger.info(f"Finding Zabbix hostgroup ID for {hostgroup_name}.")
-        response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json={
-            "jsonrpc": "2.0",
-            "method": "hostgroup.get",
-            "params": {
-                "filter": {"name": [hostgroup_name]}
-            },
-            "id": 1
-        })
-        log.logger.info(f"Response from Zabbix for hostgroup get: {response.text}, status code: {response.status_code}")
-        group_id = -1
-        if response.status_code == 200:
-            data = response.json()
-            if data["result"]:
-                group_id = int(data["result"][0]["groupid"])
-                log.logger.info(f"Found Zabbix hostgroup ID: {group_id} for {hostgroup_name}.")
-        if group_id == -1:
-            log.logger.info(f"Failed to find Zabbix hostgroup ID for {hostgroup_name}: {response.text}")
-            log.logger.info(f"Creating hostgroup {hostgroup_name} in Zabbix.")
-            response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json={
-                "jsonrpc": "2.0",
-                "method": "hostgroup.create",
-                "params": {
-                    "name": hostgroup_name
-                },
-                "id": 1
-            })
-            log.logger.info(f"Response from Zabbix for creating hostgroup: {response.text}, status code: {response.status_code}")
-            if response.status_code == 200:
-                data = response.json()
-                if "result" in data and "groupids" in data["result"]:
-                    group_id = int(data["result"]["groupids"][0])
-                    log.logger.info(f"Hostgroup {hostgroup_name} created successfully with ID: {group_id}.")
-                else:
-                    log.logger.error(f"Failed to create hostgroup {hostgroup_name}: {data}")
-        group_ids.append(group_id)
-    return group_ids
-
 def apply_differences(differences: device_difference_model, sync_output: sync_output_model):
     """Applies the differences between Netbox and Zabbix devices.
     Args:
@@ -190,11 +127,13 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
                                     log.logger.info(f"Address field {key} is different: Netbox value: {nb_value}, Zabbix value: {zb_value}")
     sync_output.add_difference_output(f"Updated fields for {zb_device.name}: {list(updated_fields.keys())}")
     log.logger.info("Zabbix Device before update "+device_service.print_device(zb_device))
-
+    hostgroupids = []
+    for hostgroup in zb_device.hostgroup:
+        hostgroupids.append(hostgroup['groupid']) if isinstance(hostgroup, dict) else hostgroupids.append(hostgroup)
     update_data_zabbix = zb_device.update_data_zabbix(
         hostid=hostid,
         interface_id=device_service.find_hostinterface_id(hostid),
-        hostgroupIds=find_zabbix_hostgroup_ids(zb_device.hostgroup),
+        hostgroupIds=hostgroupids,
         templateids=[find_template_ids(template) for template in zb_device.templates if template]
     )
     log.logger.info(update_data_zabbix)
