@@ -70,7 +70,7 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
         found = 0
     if len(same) == fields_counter:
         found = 2
-    if len(fields) > 1 :
+    if len(fields) > 0:
         device_fields: list[str] = list(device_model.__annotations__.keys())
         device_fields = [key for key in device_model.__annotations__.keys() if key not in ["hostgroup","description","name","status","interfaces"]]
         for field in device_fields:
