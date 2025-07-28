@@ -70,8 +70,6 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
         found = 0
     if len(same) == fields_counter:
         found = 2
-    log.logger.debug(f"Fields counter: {fields_counter}, same: {len(same)}, different: {len(fields)}")
-    log.logger.debug(f"Tag: {found}, {nb_device.name}, {zb_device.name}, {fields}, {same}")
     if len(fields) > 1 :
         device_fields: list[str] = list(device_model.__annotations__.keys())
         device_fields = [key for key in device_model.__annotations__.keys() if key not in ["hostgroup","description","name","status","interfaces"]]
@@ -87,6 +85,8 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
                     fields.append(field)
             else:
                 same.append(field)
+    log.logger.debug(f"Fields counter: {fields_counter}, same: {len(same)}, different: {len(fields)}")
+    log.logger.debug(f"Tag: {found}, {nb_device.name}, {zb_device.name}, {fields}, {same}")
     differences = found, (nb_device, zb_device), (fields, same)
     return differences
 
