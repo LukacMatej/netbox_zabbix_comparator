@@ -87,7 +87,7 @@ def map_port_type(port_type: str) -> str:
     """Maps the port type to a Netbox compatible format."""
     if isinstance(port_type, list):
         port_type = port_type[0] if port_type else ""
-    port_type_map = {
+    port_type_map: dict[str, str] = {
         "Agent": "1",
         "SNMP": "2",
         "IPMI": "3",
