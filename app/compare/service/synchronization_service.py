@@ -9,6 +9,39 @@ from app.device.models.difference_model import DeviceDifference as device_differ
 from app.device.models.synchonization_output_model import SyncOutput as sync_output_model
 from app.device.service import device_service
 
+def find_hostgroup_id(hostgroup_name: str) -> int:
+    """Finds the Zabbix hostgroup ID based on the provided hostgroup name.
+    Args:
+        hostgroup_name (str): The name of the hostgroup to find.
+    Returns:
+        int: The ID of the hostgroup if found, otherwise -1.
+    """
+    log.logger.info(f"Finding Zabbix hostgroup ID for {hostgroup_name}.")
+    zabbix_ip = os.environ.get("ZABBIX_IP")
+    zabbix_key = os.environ.get("ZABBIX_KEY")
+    headers = {
+        "Authorization": f"Bearer {zabbix_key}",
+        "Content-Type": "application/json-rpc",
+    }
+    response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json={
+        "jsonrpc": "2.0",
+        "method": "hostgroup.get",
+        "params": {
+            "filter": {"name": [hostgroup_name]}
+        },
+        "id": 1
+    })
+    
+    if response.status_code == 200:
+        data = response.json()
+        if data["result"]:
+            group_id = data["result"][0]["groupid"]
+            log.logger.info(f"Found Zabbix hostgroup ID: {group_id} for {hostgroup_name}.")
+            return int(group_id)
+    
+    log.logger.error(f"Failed to find Zabbix hostgroup ID for {hostgroup_name}: {response.text}")
+    return -1
+
 def find_template_ids(template_name: str) -> int:
     """Finds the Zabbix template ID based on the provided template name.
     Args:
@@ -29,7 +62,6 @@ def find_template_ids(template_name: str) -> int:
         "params": {
             "filter": {"host": [template_name]}
         },
-        "auth": None,  # This should be set when calling the API
         "id": 1
     })
     
@@ -178,7 +210,7 @@ def create_zabbix_device(device: device_model,sync_output: sync_output_model):
     }
     hostgroupids = []
     for hostgroup in device.hostgroup:
-        hostgroupids.append(hostgroup['groupid']) if isinstance(hostgroup, dict) else hostgroupids.append(hostgroup)
+        hostgroupids.append(hostgroup['groupid']) if isinstance(hostgroup, dict) else find_hostgroup_id(hostgroupids.append(hostgroup))
     if not hostgroupids:
         sync_output.add_zabbix_output(f"Hostgroup {device.hostgroup} not found in Zabbix, cannot create device {device.name}.")
         log.logger.error(f"Hostgroup {device.hostgroup} not found in Zabbix, cannot create device in Netbox.")
