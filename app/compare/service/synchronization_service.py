@@ -210,7 +210,6 @@ def create_zabbix_device(device: device_model,sync_output: sync_output_model):
         "Content-Type": "application/json-rpc",
     }
     
-    # Use the find_zabbix_hostgroup_ids function to get proper hostgroup IDs
     hostgroupids = find_zabbix_hostgroup_ids(device.hostgroup)
     
     if not hostgroupids or -1 in hostgroupids:
