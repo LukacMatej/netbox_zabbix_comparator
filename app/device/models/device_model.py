@@ -22,8 +22,18 @@ class Device:
 
     def update_data_zabbix(self, hostid, interface_id, hostgroupIds, templateids) -> dict:
         """Creates a dictionary representation of the device for Zabbix API."""
-        # Ensure hostgroupIds is a list of ints
-        groups = [{"groupid": int(gid[0]) if isinstance(gid, list) and gid else int(gid)} for gid in hostgroupIds if gid]
+        groups = []
+        for gid in hostgroupIds:
+            if gid and gid != -1:  # Skip invalid IDs
+                try:
+                    if isinstance(gid, (int, str)):
+                        groups.append({"groupid": int(gid)})
+                    elif isinstance(gid, list) and gid:
+                        groups.append({"groupid": int(gid[0])})
+                    elif isinstance(gid, dict) and 'groupid' in gid:
+                        groups.append({"groupid": int(gid['groupid'])})
+                except (ValueError, TypeError):
+                    continue
         return {
             "jsonrpc": "2.0",
             "method": "host.update",
@@ -39,7 +49,18 @@ class Device:
         }
     def create_data_zabbix(self, hostgroupIds, templateids) -> dict:
         """Creates a dictionary representation of the device for Zabbix API."""
-        groups = [{"groupid": int(gid[0]) if isinstance(gid, list) and gid else int(gid)} for gid in hostgroupIds if gid]
+        groups = []
+        for gid in hostgroupIds:
+            if gid and gid != -1:  # Skip invalid IDs
+                try:
+                    if isinstance(gid, (int, str)):
+                        groups.append({"groupid": int(gid)})
+                    elif isinstance(gid, list) and gid:
+                        groups.append({"groupid": int(gid[0])})
+                    elif isinstance(gid, dict) and 'groupid' in gid:
+                        groups.append({"groupid": int(gid['groupid'])})
+                except (ValueError, TypeError):
+                    continue
         return {
             "jsonrpc": "2.0",
             "method": "host.create",
