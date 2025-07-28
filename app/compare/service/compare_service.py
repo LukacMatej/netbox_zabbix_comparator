@@ -72,6 +72,21 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
         found = 2
     log.logger.debug(f"Fields counter: {fields_counter}, same: {len(same)}, different: {len(fields)}")
     log.logger.debug(f"Tag: {found}, {nb_device.name}, {zb_device.name}, {fields}, {same}")
+    if len(fields) > 1 :
+        device_fields: list[str] = list(device_model.__annotations__.keys())
+        device_fields = [key for key in device_model.__annotations__.keys() if key not in ["hostgroup","description","name","status","interfaces"]]
+        for field in device_fields:
+            nb_value = getattr(nb_device, field)
+            zb_value = getattr(zb_device, field)
+            if nb_value == "" and zb_value == "":
+                continue
+            if nb_value != zb_value:
+                if field == "name":
+                    fields.append(f"{field} ({nb_value} != {zb_value}), Hodnota v netboxu přepíše hodnotu v zabbixu")
+                else:
+                    fields.append(field)
+            else:
+                same.append(field)
     differences = found, (nb_device, zb_device), (fields, same)
     return differences
 
@@ -113,7 +128,9 @@ def compare_devices(nb_device_list: list[device_model], zb_device_list: list[dev
         if not found:
                 zb_devices.append(zb_device)
     return different_devices, nb_devices, zb_devices
-    
+
+
+
 def compare(nb_ip, nb_key, zb_ip, zb_key) -> Exception | tuple[list[device_difference_model], list[device_model], list[device_model]]:
     log.logger.info("Starting compare")
     nb_graphql = nb_ip + "/graphql/"

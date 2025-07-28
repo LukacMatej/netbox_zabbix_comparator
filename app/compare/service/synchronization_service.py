@@ -8,6 +8,7 @@ from app.device.models.address_model import Address as address_model
 from app.device.models.difference_model import DeviceDifference as device_difference_model
 from app.device.models.synchonization_output_model import SyncOutput as sync_output_model
 from app.device.service import device_service
+
 def find_template_ids(template_name: str) -> int:
     """Finds the Zabbix template ID based on the provided template name.
     Args:
@@ -52,14 +53,11 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     zb_device: device_model = differences.zb_device
     different_fields: list[str] = differences.differences[0]  # tuple: (different_fields, same_fields)
 
-    # Map field names in different_fields to actual attribute names
-    # If the field is in the format 'field (x != y), ...', extract the field name
     def extract_field_name(field: str):
         if '(' in field:
             return field.split('(')[0].strip()
         return field.strip()
 
-    # Prepare Zabbix API update call
     zabbix_ip = os.environ.get("ZABBIX_IP")
     zabbix_key = os.environ.get("ZABBIX_KEY")
     headers = {
@@ -68,7 +66,6 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     }
     
     hostid = None
-    # Try to get hostid from zabbix by name
     response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json={
         "jsonrpc": "2.0",
         "method": "host.get",
@@ -144,7 +141,6 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     else:
         sync_output.add_difference_output(f"Failed to update device {zb_device.name} in Zabbix: {response.text}")
         log.logger.error(f"Failed to update device {zb_device.name} in Zabbix: {response.text} with response status {response.status_code}.")
-            
 
 def create_netbox_device(device: device_model, sync_output: sync_output_model):
     """Creates a device in Netbox based on the provided device model.
