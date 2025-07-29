@@ -1,30 +1,70 @@
 image: docker:latest
 
 stages:
-  - docker_stop
+  # - lint
+  - docker_rm
   - docker_build
+  - publish
+  - docker_stop
   - docker_copy
   - docker_run
+  # - docker_test
 
-docker_stop_devel:
-  stage: docker_stop
+docker_rm_local_devel:
+  stage: docker_rm
   image: docker:latest
   script:
-    - echo "Using docker ${DOCKER_HOST_1} and ${DOCKER_HOST_2}"
-    - DOCKER_HOST=${DOCKER_HOST_2} docker stop ${CI_PROJECT_NAME}-dev || true
-    - DOCKER_HOST=${DOCKER_HOST_2} docker rm ${CI_PROJECT_NAME}-dev || true
-    - DOCKER_HOST=${DOCKER_HOST_2} docker image rm -f netsystemcz/${CI_PROJECT_NAME}:test || true
-    - DOCKER_HOST=${DOCKER_HOST_1} docker image rm -f netsystemcz/${CI_PROJECT_NAME}:test || true
+    - echo "Using docker ${DOCKER_HOST_2}"
+    - docker image rm -f netsystemcz/${CI_PROJECT_NAME}:dev || true
   except:
     - tags
-
 
 docker_build_devel:
   stage: docker_build
   image: docker:latest
   script:
-    - echo "Using docker ${DOCKER_HOST_1}"
-    - DOCKER_HOST=${DOCKER_HOST_1} docker build -t netsystemcz/${CI_PROJECT_NAME}:test .
+    - docker build -t netsystemcz/${CI_PROJECT_NAME}:dev -f Dockerfile .
+  except:
+    - tags
+
+docker_build_prod:
+  stage: docker_build
+  image: docker:latest
+  variables:
+    tag_name: ${CI_COMMIT_TAG}
+  script:
+    - docker build -t netsystemcz/${CI_PROJECT_NAME}:${tag_name} -f Dockerfile .
+  only:
+    - tags
+
+docker_publish_prod:
+  stage: publish
+  variables:
+    tag_name: ${CI_COMMIT_TAG}
+  script:
+    - docker login -u netsystemcz -p ${DOCKER_HUB_TOKEN}
+    - docker push netsystemcz/${CI_PROJECT_NAME}:$tag_name
+    - JOB_CONTAINER_ID=`docker ps -q -f "label=com.gitlab.gitlab-runner.job.id=${CI_JOB_ID}"`
+    - docker run --rm -t
+        --volumes-from ${JOB_CONTAINER_ID}
+        -e DOCKER_USER=netsystemcz
+        -e DOCKER_PASS=${DOCKER_HUB_TOKEN}
+        -e PUSHRM_PROVIDER=dockerhub
+        -e PUSHRM_FILE=${CI_PROJECT_DIR}/README.md
+        -e PUSHRM_TARGET=docker.io/netsystemcz/${CI_PROJECT_NAME}
+        -e PUSHRM_DEBUG=1
+        chko/docker-pushrm:1
+  only:
+    - tags
+
+docker_stop_remote_devel:
+  stage: docker_stop
+  image: docker:latest
+  script:
+    - echo "Using docker ${DOCKER_HOST_2}"
+    - DOCKER_HOST=${DOCKER_HOST_2} docker stop ${CI_PROJECT_NAME}-dev || true
+    - DOCKER_HOST=${DOCKER_HOST_2} docker rm ${CI_PROJECT_NAME}-dev || true
+    - DOCKER_HOST=${DOCKER_HOST_2} docker image rm -f netsystemcz/${CI_PROJECT_NAME}:dev || true
   except:
     - tags
 
@@ -32,8 +72,12 @@ docker_copy_devel:
   stage: docker_copy
   image: docker:latest
   script:
-    - echo "Using docker ${DOCKER_HOST_1} and ${DOCKER_HOST_2}"
-    - DOCKER_HOST=${DOCKER_HOST_1} docker save netsystemcz/${CI_PROJECT_NAME}:test | gzip | DOCKER_HOST=${DOCKER_HOST_2} docker load
+    - echo "Using docker ${DOCKER_HOST_2}"
+    - docker login -u ${REPO_USERNAME} -p ${REPO_PASSWORD} ${REPO_HOST}
+    - docker tag netsystemcz/${CI_PROJECT_NAME}:dev ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev
+    - docker push ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev
+    - DOCKER_HOST=${DOCKER_HOST_2} docker login -u ${REPO_USERNAME} -p ${REPO_PASSWORD} ${REPO_HOST}
+    - DOCKER_HOST=${DOCKER_HOST_2} docker pull ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev
   except:
     - tags
 
@@ -44,7 +88,47 @@ docker_run_devel:
     - docker_build_devel
   script:
     - echo "Using docker ${DOCKER_HOST_2}"
-    - DOCKER_HOST=${DOCKER_HOST_2} docker run --detach -p 5002:5000 --dns 192.168.200.10 --dns 192.168.200.13 --name ${CI_PROJECT_NAME}-dev netsystemcz/${CI_PROJECT_NAME}:test
+    - echo "${PWD}"
+    - DOCKER_HOST=${DOCKER_HOST_2} docker run --detach --restart unless-stopped --name ${CI_PROJECT_NAME}-dev -v /srv/netbox_dhcp/certs/nblab-root-ca.crt:/usr/local/share/ca-certificates/nblab-root-ca.crt:ro,z -v /srv/netbox_dhcp/certs/netsys-ca.pem:/usr/local/share/ca-certificates/netsys-ca.pem:ro,z -e LISTEN_ADDRESS=0.0.0.0 -e HTTP_PORT=7000 -e ZABBIX_IP=https://zabbix.int.netsystem.cz -e ZABBIX_KEY=013607f6d9aed36e19381da456c550bc5bd67208c3a903c50f9a96f0025fcd9c -e NETBOX_IP=https://netbox-test.int.netsystem.cz -e NETBOX_KEY=22548c0c73603b896d4acfb3aecad1f5128f9d4e --network bridge_network ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev
+    - DOCKER_HOST=${DOCKER_HOST_2} docker restart apache-revproxy
   except:
     - tags
+# docker_run_devel:
+#   stage: docker_run
+#   image: docker:latest
+#   dependencies:
+#     - docker_build_devel
+#   script:
+#     - echo "Using docker ${DOCKER_HOST_2}"
+#     - DOCKER_HOST=${DOCKER_HOST_2} docker run --detach -p 5002:5000 --dns 192.168.200.10 --dns 192.168.200.13 --name ${CI_PROJECT_NAME}-dev netsystemcz/${CI_PROJECT_NAME}:test -e LISTEN_ADDRESS=0.0.0.0 -e HTTP_PORT=7000 -e NETBOX_IP=https://netbox-test.int.netsystem.cz -e NETBOX_KEY=22548c0c73603b896d4acfb3aecad1f5128f9d4e
+#   except:
+#     - tags
+# docker_test_devel:
+#   stage: docker_test
+#   image: docker:latest
+#   dependencies:
+#     - docker_run_devel
+#   before_script:
+#     - apk add curl
+#     - chmod +x ./test_add_update.sh
+#     - chmod +x ./test_delete.sh
+#   script:
+#     - echo "Using docker ${DOCKER_HOST_2}"
+#     - echo "Testing"
+#     - sh ./test_add_update.sh
+#     - sh ./test_delete.sh
+#   except:
+#     - tags
+
+# lint:
+#   stage: lint
+#   image: python:3.9
+#   before_script:
+#     - pip install pre-commit pylint
+#   script:
+#     - pre-commit run --all-files
+#   except:
+#     - tags
+
+
 

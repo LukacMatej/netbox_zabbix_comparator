@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        .container {
+            display: flex;
+            flex-direction: row;
+        }
+        .column {
+            border-right: 1px solid black;
+            flex: 33.33%;
+            padding: 10px;
+        }
+        .column:last-child {
+            border-right: none;
+        }
+        .header {
+            font-weight: bold;
+        }
+        .header:first-child {
+            font-size: 1.5em;
+        }
+        .lines {
+            line-height: 2;
+        }
+        .line {
+            font-size: 0;
+            color: white;
+            border-bottom: 1px solid black;
+        }
+        .line:last-child {
+            border-bottom: none;
+        }
+        .line_sync {
+            font-size: 0;
+            color: white;
+            border-bottom: 1px solid black;
+            margin-top: 20px;
+        }
+        .tab-interface {
+            margin-left: 20px;
+        }
+        .tab-address {
+            margin-left: 40px;
+        }
+        .differences {
+            display: flex;
+            flex: 50% 50%;
+        }
+    </style>
+    <title>Comparison Output</title>
+</head>
+<body>
+    <nav style="position: relative; padding: 16px 0 16px 0; margin-bottom: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.07);">
+        <div style="display: flex; align-items: center; max-width: 1100px; margin-left: 2;">
+            <div id="burger-menu" style="width: 36px; height: 36px; display: flex; flex-direction: column; justify-content: center; cursor: pointer;">
+                <span style="height: 4px; background:rgb(0, 0, 0); margin: 4px 0; border-radius: 2px; display: block;"></span>
+                <span style="height: 4px; background:rgb(0, 0, 0); margin: 4px 0; border-radius: 2px; display: block;"></span>
+                <span style="height: 4px; background:rgb(0, 0, 0); margin: 4px 0; border-radius: 2px; display: block;"></span>
+            </div>
+            <div style="flex: 1;"></div>
+        </div>
+        <div id="nav-links" style="display: none; flex-direction: column; position: absolute; top: 56px; left: 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border-radius: 8px; min-width: 180px; z-index: 100;">
+            <a href="/" style="text-decoration: none; padding: 12px 20px; color:rgb(0, 0, 0); font-size: 1em; font-weight: 500; border-bottom: 1px solid #eee;">Home</a>
+            <a href="RunCompare" style="text-decoration: none; padding: 12px 20px; color:rgb(0, 0, 0); font-size: 1em; font-weight: 500; border-bottom: 1px solid #eee;">Go to Comparison</a>
+            <a href="RunCompareSync" style="text-decoration: none; padding: 12px 20px; color:rgb(0, 0, 0); font-size: 1em; font-weight: 500;">Go to Synchronization</a>
+        </div>
+        <script>
+            const burger = document.getElementById('burger-menu');
+            const navLinks = document.getElementById('nav-links');
+            burger.onclick = function() {
+                navLinks.style.display = navLinks.style.display === 'flex' ? 'none' : 'flex';
+            };
+            document.addEventListener('click', function(e) {
+                if (!burger.contains(e.target) && !navLinks.contains(e.target)) {
+                    navLinks.style.display = 'none';
+                }
+            });
+        </script>
+    </nav>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+        nav {
+            margin-top: 0 !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            background: none !important;
+            width: 100%;
+            display: flex;
+            justify-content: flex-start;
+        }
+        #nav-links a:hover {
+            background: #f0f0f0;
+        }
+        @media (min-width: 600px) {
+            #nav-links {
+                left: 36px;
+            }
+        }
+        nav > div {
+            margin-left: 2vh !important;
+        }
+    </style>
+    <div class="container">
+        <div class="column">
+            <div class="header">Netbox Devices</div>
+            {% if netbox_devices %}
+            <div class="lines">
+                {% for device in netbox_devices %}
+                    <div><strong>{{ device.name }}</strong></div>
+                    <div>Interfaces:</div>
+                    {% for interface in device.interfaces %}
+                        <div class="tab-interface">Interface: {{ interface.name }}, MAC Address:{% if interface.mac_address%} {{interface.mac_address}} {% else %} None {% endif %}</div>
+                        <div class="tab-interface">Addresses:</div>
+                        {% for address in interface.addresses %}
+                            <div class="tab-address">IP adress: {{ address.address }}, DNS Name: {{address.dns_name}}</div>
+                        {% endfor %}
+                    {% endfor %}
+                    <div>Hostgroup: {{ device.hostgroup }}, {% if device.description%} Description: {{ device.description }} ,{% endif %} Status: {{ device.status }}</div>
+                    <div>Templates: {{ device.templates }}</div>
+                    <div><strong>Zařízení bude vytvořeno v Zabbixu</strong></div>
+                    
+                    <div class="line">Oddeleni</div>
+                {% endfor %}
+            </div>
+            {% else %}
+                <div>No Netbox devices found</div>
+            {% endif %}
+        </div>
+
+        <div class="column">
+            <div class="header">Differences</div>
+            {% if differences %}
+            <div class="lines">
+                {% for difference in differences %}
+                    <div><strong>Netbox: {{ difference.nb_device.name }}</strong></div>
+                    <div class="interfaces">Interfaces:</div>
+                    {% for interface in difference.nb_device.interfaces %}
+                        <div class="tab-interface">Interface: {{ interface.name }}, MAC Address:{% if interface.mac_address%} {{interface.mac_address}} {% else %} None {% endif %}</div>
+                        <div class="tab-interface">Addresses:</div>
+                        {% for address in interface.addresses %}
+                            <div class="tab-address">IP adress: {{ address.address }}, DNS Name: {{ address.dns_name }}</div>
+                        {% endfor %}
+                    {% endfor %}
+                    <div>Hostgroup: {{ difference.nb_device.hostgroup }},{% if difference.nb_device.description %} Description: {{ difference.nb_device.description }} ,{% endif %} Status: {{ difference.nb_device.status }}</div>
+                    <div>Templates: {{ difference.nb_device.templates }}</div>
+                    <br>
+                    <div class="differences">
+                        <div>
+                            <div><strong>Same:</strong></div>
+                            {% for difference in difference.differences[1] %}
+                                <div class="tab-interface">{{ difference }}</div>
+                            {% endfor %}
+                        </div>
+                        <div>
+                            <div><strong>Differences:</strong></div>
+                            {% for difference in difference.differences[0] %}
+                                <div class="tab-interface">{{ difference }}</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <br>
+                    <div><strong>Zabbix: {{ difference.zb_device.name }}</strong></div>
+                    <div>Interfaces:</div>
+                    {% for interface in difference.zb_device.interfaces %}
+                        <div class="tab-interface">Interface: {{ interface.name }}, MAC Address: {% if interface.mac_address%} {{interface.mac_address}} {% else %} None {% endif %}</div>
+                        <div class="tab-interface">Addresses:</div>
+                        {% for address in interface.addresses %}
+                            <div class="tab-address">IP adress: {{ address.address }}, DNS Name: {{ address.dns_name }}</div>
+                        {% endfor %}
+                    {% endfor %}
+                    <div>Hostgroup: {{ difference.zb_device.hostgroup }}, {% if difference.zb_device.description%} Description: {{ difference.zb_device.description }} ,{% endif %} Status: {{ difference.zb_device.status }}</div>
+                    <div>Templates: {{ difference.zb_device.templates }}</div>
+                    <div class="line">Oddeleni</div>
+                {% endfor %}
+            </div>
+            {% else %}
+                <div>No differences found</div>
+            {% endif %}
+        </div>
+
+        <div class="column">
+            <div class="header">Zabbix Devices</div>
+            {% if zabbix_devices %}
+            <div class="lines">
+                {% for device in zabbix_devices %}
+                    <div><strong>{{ device.name }}</strong></div>
+                    <div>Interfaces:</div>
+                    {% for interface in device.interfaces %}
+                        <div class="tab-interface">Interface: {{ interface.name }}, MAC Address:{% if interface.mac_address%} {{interface.mac_address}} {% else %} None {% endif %}</div>
+                        <div class="tab-interface">Addresses:</div>
+                        {% for address in interface.addresses %}
+                            <div class="tab-address">IP adress: {{ address.address }}, DNS Name: {{address.dns_name}}</div>
+                        {% endfor %}
+                    {% endfor %}
+                    <div>Hostgroup: {{ device.hostgroup }}, {% if device.description%} Description: {{ device.description }} ,{% endif %} Status: {{ device.status }}</div>
+                    <div>Templates: {{ device.templates }}</div>
+                    <div class="line">Oddeleni</div>
+                {% endfor %}
+            </div>
+            {% else %}
+                <div>No Zabbix devices found</div>
+            {% endif %}
+        </div>
+    </div>
+    {% if synchronization and sync_output %}
+    <div class="line_sync">Oddeleni</div>
+    <div class="container">
+        <div class="column">
+            <div class="header">Synchronization output from Netbox</div>
+            {% if sync_output.synchronization_output_zabbix %}
+                <div class="lines">
+                    {% for output in sync_output.synchronization_output_zabbix %}
+                        <div>{{ output }}</div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div>No synchronization output found</div>
+            {% endif %}
+        </div>
+        <div class="column">
+            <div class="header">Synchronization output from Differences</div>
+            {% if sync_output.synchronization_output_differences %}
+                <div class="lines">
+                    {% for output in sync_output.synchronization_output_differences %}
+                        <div>{{ output }}</div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div>No synchronization output found</div>
+            {% endif %}
+        </div>
+        <div class="column">
+            <div class="header">Synchronization output from Zabbix</div>
+            {% if sync_output.synchronization_output_netbox %}
+                <div class="lines">
+                    {% for output in sync_output.synchronization_output_netbox %}
+                        <div>{{ output }}</div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div>No synchronization output found</div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</body>
+</html>
