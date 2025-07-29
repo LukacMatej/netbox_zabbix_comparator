@@ -38,6 +38,9 @@ def find_hostinterface_id(hostid: str) -> int:
     response.raise_for_status()
     log.logger.debug(f"Response from Zabbix API: {response.json()}")
     result = response.json()
+    if "error" in result:
+      log.logger.error(f"Error in Zabbix API response: {result['error']}")
+      return -1
     interface = result.get("result", [])
     return int(interface[0]["interfaceid"]) if interface else -1
   except Exception as e:
@@ -302,6 +305,9 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
     log.logger.debug(response)
     response.raise_for_status()
     result = response.json()
+    if "error" in result:
+      log.logger.error(f"Error in Zabbix API response: {result['error']}")
+      return f"Error in Zabbix API response: {result['error']}"
     log.logger.debug(result)
     for host in result["result"]:
       zb_device_list.append(device_model(

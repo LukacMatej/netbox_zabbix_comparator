@@ -34,6 +34,9 @@ def find_hostgroup_id(hostgroup_name: str) -> int:
     
     if response.status_code == 200:
         data = response.json()
+        if "error" in data:
+            log.logger.error(f"Error in Zabbix API response: {data['error']}")
+            return -1
         if data["result"]:
             group_id = data["result"][0]["groupid"]
             log.logger.info(f"Found Zabbix hostgroup ID: {group_id} for {hostgroup_name}.")
@@ -67,6 +70,9 @@ def find_template_ids(template_name: str) -> int:
     
     if response.status_code == 200:
         data = response.json()
+        if "error" in data:
+            log.logger.error(f"Error in Zabbix API response: {data['error']}")
+            return -1
         if data["result"]:
             template_id = data["result"][0]["templateid"]
             log.logger.info(f"Found Zabbix template ID: {template_id} for {template_name}.")
@@ -106,6 +112,10 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     })
     if response.status_code == 200:
         data = response.json()
+        if "error" in data:
+            sync_output.add_difference_output(f"Error in Zabbix API response: {data['error']}")
+            log.logger.error(f"Error in Zabbix API response: {data['error']}")
+            return
         if data["result"]:
             hostid = data["result"][0]["hostid"]
     if not hostid:
@@ -168,6 +178,11 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     )
     log.logger.info(update_data_zabbix)
     response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json=update_data_zabbix)
+    response_json = response.json()
+    if "error" in response_json:
+        sync_output.add_difference_output(f"Error in Zabbix API response: {response_json['error']['data']}")
+        log.logger.error(f"Error in Zabbix API response: {response_json['error']}")
+        return
     if response.status_code == 200:
         sync_output.add_difference_output(f"Device {zb_device.name} updated successfully in Zabbix.")
         log.logger.info(f"Device {zb_device.name} updated successfully in Zabbix with response status {response.status_code}.")
@@ -224,6 +239,11 @@ def create_zabbix_device(device: device_model,sync_output: sync_output_model):
     data_zabbix = device.create_data_zabbix(hostgroupIds=hostgroupids, templateids=templateids)
     log.logger.info(f"Data to be sent to Zabbix: {data_zabbix}")
     response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json=data_zabbix)
+    reponse_json = response.json()
+    if "error" in reponse_json:
+        sync_output.add_zabbix_output(f"Error in Zabbix API response: {reponse_json['error']['data']}")
+        log.logger.error(f"Error in Zabbix API response: {reponse_json['error']}")
+        return
     if response.status_code == 200:
         sync_output.add_zabbix_output(f"Device {device.name} created successfully in Zabbix.")
         log.logger.info(f"Device {device.name} created successfully in Zabbix.")
@@ -276,6 +296,11 @@ def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
         })
         log.logger.info(f"Response from Zabbix for hostgroup get: {response.text}, status code: {response.status_code}")
         group_id = -1
+        reponse_json = response.json()
+        if "error" in reponse_json:
+            log.logger.error(f"Error in Zabbix API response: {reponse_json['error']}")
+            group_ids.append(-1)
+            continue
         if response.status_code == 200:
             data = response.json()
             if data["result"]:
@@ -293,6 +318,11 @@ def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
                 "id": 1
             })
             log.logger.info(f"Response from Zabbix for creating hostgroup: {response.text}, status code: {response.status_code}")
+            response_json = response.json()
+            if "error" in response_json:
+                log.logger.error(f"Error in Zabbix API response: {response_json['error']}")
+                group_ids.append(-1)
+                continue
             if response.status_code == 200:
                 data = response.json()
                 if "result" in data and "groupids" in data["result"]:
