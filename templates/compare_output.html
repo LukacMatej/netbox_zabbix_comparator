@@ -53,17 +53,59 @@
     <title>Comparison Output</title>
 </head>
 <body>
-    <div style="margin-bottom: 20px; display: flex; gap: 10px;">
-        <a href="/">
-            <button type="button">Index</button>
-        </a>
-        <a href="RunCompare">
-            <button type="button">Go to Comparison</button>
-        </a>
-        <a href="RunCompareSync">
-            <button type="button">Go to Synchronization</button>
-        </a>
-    </div>
+    <nav style="position: relative; padding: 16px 0 16px 0; margin-bottom: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.07);">
+        <div style="display: flex; align-items: center; max-width: 1100px; margin-left: 2;">
+            <div id="burger-menu" style="width: 36px; height: 36px; display: flex; flex-direction: column; justify-content: center; cursor: pointer;">
+                <span style="height: 4px; background:rgb(0, 0, 0); margin: 4px 0; border-radius: 2px; display: block;"></span>
+                <span style="height: 4px; background:rgb(0, 0, 0); margin: 4px 0; border-radius: 2px; display: block;"></span>
+                <span style="height: 4px; background:rgb(0, 0, 0); margin: 4px 0; border-radius: 2px; display: block;"></span>
+            </div>
+            <div style="flex: 1;"></div>
+        </div>
+        <div id="nav-links" style="display: none; flex-direction: column; position: absolute; top: 56px; left: 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border-radius: 8px; min-width: 180px; z-index: 100;">
+            <a href="/" style="text-decoration: none; padding: 12px 20px; color:rgb(0, 0, 0); font-size: 1em; font-weight: 500; border-bottom: 1px solid #eee;">Home</a>
+            <a href="RunCompare" style="text-decoration: none; padding: 12px 20px; color:rgb(0, 0, 0); font-size: 1em; font-weight: 500; border-bottom: 1px solid #eee;">Go to Comparison</a>
+            <a href="RunCompareSync" style="text-decoration: none; padding: 12px 20px; color:rgb(0, 0, 0); font-size: 1em; font-weight: 500;">Go to Synchronization</a>
+        </div>
+        <script>
+            const burger = document.getElementById('burger-menu');
+            const navLinks = document.getElementById('nav-links');
+            burger.onclick = function() {
+                navLinks.style.display = navLinks.style.display === 'flex' ? 'none' : 'flex';
+            };
+            document.addEventListener('click', function(e) {
+                if (!burger.contains(e.target) && !navLinks.contains(e.target)) {
+                    navLinks.style.display = 'none';
+                }
+            });
+        </script>
+    </nav>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+        nav {
+            margin-top: 0 !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            background: none !important;
+            width: 100%;
+            display: flex;
+            justify-content: flex-start;
+        }
+        #nav-links a:hover {
+            background: #f0f0f0;
+        }
+        @media (min-width: 600px) {
+            #nav-links {
+                left: 36px;
+            }
+        }
+        nav > div {
+            margin-left: 2vh !important;
+        }
+    </style>
     <div class="container">
         <div class="column">
             <div class="header">Netbox Devices</div>
