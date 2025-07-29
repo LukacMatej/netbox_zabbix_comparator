@@ -36,7 +36,7 @@ Port Type
 Potřeba nastavit primární IP adresu v Netboxu, podle které bude fungovat v Zabbixu
 
 
-REST API
+### REST API
 
 - /RunCompare
   - Spuštění porovnání zařízení v netboxu a zabbixu
