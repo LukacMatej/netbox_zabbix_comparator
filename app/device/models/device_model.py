@@ -20,7 +20,7 @@ class Device:
     def __str__(self) -> str:
         return f"{self.name} {self.interfaces} {self.hostgroup} {self.description} {self.templates} {self.status}"
 
-    def update_data_zabbix(self, hostid, interface_id, hostgroupIds, templateids) -> dict:
+    def update_data_zabbix(self, hostid, interface_id, hostgroupIds, templateids, name) -> dict:
         """Creates a dictionary representation of the device for Zabbix API."""
         groups = []
         for gid in hostgroupIds:
@@ -39,6 +39,7 @@ class Device:
             "method": "host.update",
             "params": {
                 "hostid": hostid,
+                "name": name,
                 "interfaces": dict_interfaces_zb_id(self.interfaces,interface_id=interface_id) if self.interfaces else [],
                 "groups": groups,
                 "description": self.description,
