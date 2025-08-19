@@ -83,24 +83,24 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
                 fields.append(field)
             else:
                 same.append(field)
-        for nb_interface, zb_interface in zip(nb_device.interfaces, zb_device.interfaces):
-            interface_fields: list[str] = list(interface_model.__annotations__.keys())
-            interface_fields = [key for key in interface_model.__annotations__.keys() if key not in ["name","addresses","mac_address"]]
-            for field in interface_fields:
-                nb_value = getattr(nb_interface, field)
-                zb_value = getattr(zb_interface, field)
-                if field == "port_type":
-                    nb_value = ds.formatPortType(nb_value)
-                    zb_value = ds.formatPortType(zb_value)
-                if nb_value == "" and zb_value == "":
-                    continue
-                fields_counter += 1
-                if nb_value != zb_value:
-                    found = 1
-                    fields.append(f"{field}")
-                else:
-                    count += 1
-                    same.append(field)
+        # for nb_interface, zb_interface in zip(nb_device.interfaces, zb_device.interfaces):
+        #     interface_fields: list[str] = list(interface_model.__annotations__.keys())
+        #     interface_fields = [key for key in interface_model.__annotations__.keys() if key not in ["name","addresses","mac_address"]]
+        #     for field in interface_fields:
+        #         nb_value = getattr(nb_interface, field)
+        #         zb_value = getattr(zb_interface, field)
+        #         if field == "port_type":
+        #             nb_value = ds.formatPortType(nb_value)
+        #             zb_value = ds.formatPortType(zb_value)
+        #         if nb_value == "" and zb_value == "":
+        #             continue
+        #         fields_counter += 1
+        #         if nb_value != zb_value:
+        #             found = 1
+        #             fields.append(f"{field}")
+        #         else:
+        #             count += 1
+        #             same.append(field)
     log.logger.debug(f"Fields counter: {fields_counter}, same: {len(same)}, different: {len(fields)}")
     log.logger.debug(f"Tag: {found}, {nb_device.name}, {zb_device.name}, {fields}, {same}")
     differences = found, (nb_device, zb_device), (fields, same)
