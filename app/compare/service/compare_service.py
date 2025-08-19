@@ -6,6 +6,7 @@ from app.device.models.device_model import Device as device_model
 from app.device.models.difference_model import DeviceDifference as device_difference_model
 from app.device.models.address_model import Address as address_model
 from app.device.models.interface_model import Interface as interface_model
+from app.device.service import device_service as ds
 
 def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[int, tuple[device_model, device_model], tuple[list[str], list[str]]]:
     differences: tuple[bool, tuple[device_model, device_model], str] = (0, (nb_device, zb_device), "")
@@ -37,6 +38,9 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
         for field in interface_fields:
             nb_value = getattr(nb_interface, field)
             zb_value = getattr(zb_interface, field)
+            if field == "port_type":
+                nb_value = ds.formatPortType(nb_value)
+                zb_value = ds.formatPortType(zb_value)
             if nb_value == "" and zb_value == "":
                 continue
             fields_counter += 1
