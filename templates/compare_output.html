@@ -118,7 +118,7 @@
                         <div class="tab-interface">Interface: {{ interface.name }}, MAC Address:{% if interface.mac_address%} {{interface.mac_address}} {% else %} None {% endif %}</div>
                         <div class="tab-interface">Addresses:</div>
                         {% for address in interface.addresses %}
-                            <div class="tab-address">IP adress: {{ address.address }}, DNS Name: {{address.dns_name}}</div>
+                            <div class="tab-address">IP address: {{ address.address }}, DNS Name: {{address.dns_name}}</div>
                         {% endfor %}
                     {% endfor %}
                     <div>Hostgroup: {{ device.hostgroup }}, {% if device.description%} Description: {{ device.description }} ,{% endif %} Status: {{ device.status }}</div>
@@ -144,7 +144,7 @@
                         <div class="tab-interface">Interface: {{ interface.name }}, MAC Address:{% if interface.mac_address%} {{interface.mac_address}} {% else %} None {% endif %}</div>
                         <div class="tab-interface">Addresses:</div>
                         {% for address in interface.addresses %}
-                            <div class="tab-address">IP adress: {{ address.address }}, DNS Name: {{ address.dns_name }}</div>
+                            <div class="tab-address">IP address: {{ address.address }}, DNS Name: {{ address.dns_name }}</div>
                         {% endfor %}
                     {% endfor %}
                     <div>Hostgroup: {{ difference.nb_device.hostgroup }},{% if difference.nb_device.description %} Description: {{ difference.nb_device.description }} ,{% endif %} Status: {{ difference.nb_device.status }}</div>
@@ -171,7 +171,7 @@
                         <div class="tab-interface">Interface: {{ interface.name }}, MAC Address: {% if interface.mac_address%} {{interface.mac_address}} {% else %} None {% endif %}</div>
                         <div class="tab-interface">Addresses:</div>
                         {% for address in interface.addresses %}
-                            <div class="tab-address">IP adress: {{ address.address }}, DNS Name: {{ address.dns_name }}</div>
+                            <div class="tab-address">IP address: {{ address.address }}, DNS Name: {{ address.dns_name }}</div>
                         {% endfor %}
                     {% endfor %}
                     <div>Hostgroup: {{ difference.zb_device.hostgroup }}, {% if difference.zb_device.description%} Description: {{ difference.zb_device.description }} ,{% endif %} Status: {{ difference.zb_device.status }}</div>
@@ -195,7 +195,7 @@
                         <div class="tab-interface">Interface: {{ interface.name }}, MAC Address:{% if interface.mac_address%} {{interface.mac_address}} {% else %} None {% endif %}</div>
                         <div class="tab-interface">Addresses:</div>
                         {% for address in interface.addresses %}
-                            <div class="tab-address">IP adress: {{ address.address }}, DNS Name: {{address.dns_name}}</div>
+                            <div class="tab-address">IP address: {{ address.address }}, DNS Name: {{address.dns_name}}</div>
                         {% endfor %}
                     {% endfor %}
                     <div>Hostgroup: {{ device.hostgroup }}, {% if device.description%} Description: {{ device.description }} ,{% endif %} Status: {{ device.status }}</div>

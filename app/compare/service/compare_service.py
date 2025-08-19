@@ -32,23 +32,20 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
             count += 1
             same.append(field)
     for nb_interface, zb_interface in zip(nb_device.interfaces, zb_device.interfaces):
-        # interface_fields: list[str] = list(interface_model.__annotations__.keys())
-        # interface_fields = [key for key in interface_model.__annotations__.keys() if key not in ["name","addresses","mac_address"]]
-        # for field in interface_fields:
-        #     nb_value = getattr(nb_interface, field)
-        #     zb_value = getattr(zb_interface, field)
-        #     if nb_value == "" and zb_value == "":
-        #         continue
-        #     fields_counter += 1
-        #     if nb_value != zb_value:
-        #         found = 1
-        #         if field == "mac_address":
-        #             fields.append(f"{field} ({device_service.formatMac(nb_value)} != {device_service.formatMac(zb_value)}), Hodnota v zabbixu přepíše hodnotu v netboxu")
-        #         else:
-        #             fields.append(f"{field}")
-        #     else:
-        #         count += 1
-        #         same.append(field)
+        interface_fields: list[str] = list(interface_model.__annotations__.keys())
+        interface_fields = [key for key in interface_model.__annotations__.keys() if key not in ["name","addresses","mac_address"]]
+        for field in interface_fields:
+            nb_value = getattr(nb_interface, field)
+            zb_value = getattr(zb_interface, field)
+            if nb_value == "" and zb_value == "":
+                continue
+            fields_counter += 1
+            if nb_value != zb_value:
+                found = 1
+                fields.append(f"{field}")
+            else:
+                count += 1
+                same.append(field)
         for nb_address, zb_address in zip(nb_interface.addresses, zb_interface.addresses):
             address_fields: list[str] = list(address_model.__annotations__.keys())
             for field in address_fields:
