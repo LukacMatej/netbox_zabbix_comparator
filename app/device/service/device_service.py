@@ -330,3 +330,20 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
   except requests.exceptions.RequestException as e:
     return (f"Request failed: {e}")
   return zb_device_list
+
+def formatPortType(port_type: str) -> str:
+    """Maps the port type to a Netbox compatible format."""
+    if isinstance(port_type, list):
+        port_type = port_type[0] if port_type else ""
+    port_type_map: dict[str, str] = {
+        "Agent": "1",
+        "SNMP": "2",
+        "IPMI": "3",
+        "JMX": "4",
+        "1": "1",
+        "2": "2",
+        "3": "3",
+        "4": "4"
+    }
+    return port_type_map.get(port_type, "1")
+  

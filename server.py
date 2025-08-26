@@ -76,7 +76,9 @@ def RunCompare() -> tuple[str, int]:
         "compare_output.html",
         differences=compare_output[0],
         netbox_devices=compare_output[1],
-        zabbix_devices=compare_output[2]
+        zabbix_devices=compare_output[2],
+        netbox_url=netbox_ip,
+        zabbix_url=zabbix_ip
     ), 200
 
 @app.route("/RunCompareSync")
@@ -108,7 +110,9 @@ def RunCompareSync() -> tuple[str, int]:
         synchronization=synchronization,
         differences=compare_output[0],
         netbox_devices=compare_output[1],
-        zabbix_devices=compare_output[2]
+        zabbix_devices=compare_output[2],
+        netbox_url=netbox_ip,
+        zabbix_url=zabbix_ip
     ), 200
 
 def parser_init() -> argparse.ArgumentParser:

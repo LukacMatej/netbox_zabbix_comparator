@@ -165,12 +165,14 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
                                     setattr(zb_address, key, nb_value)
                                     log.logger.info(f"Address field {key} is different: Netbox value: {nb_value}, Zabbix value: {zb_value}")
     sync_output.add_difference_output(f"Updated fields for {zb_device.name}: {list(updated_fields.keys())}")
-    log.logger.info("Zabbix Device before update "+device_service.print_device(zb_device))
+    log.logger.info("Zabbix Device after update "+device_service.print_device(zb_device))
     
     # Use the find_zabbix_hostgroup_ids function to get proper hostgroup IDs
     hostgroupids = find_zabbix_hostgroup_ids(zb_device.hostgroup)
     
     update_data_zabbix = zb_device.update_data_zabbix(
+        name=nb_device.name,
+        
         hostid=hostid,
         interface_id=device_service.find_hostinterface_id(hostid),
         hostgroupIds=hostgroupids,
