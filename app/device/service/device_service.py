@@ -225,7 +225,9 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
     }
     interfaces {
       name
-      mac_address
+      mac_addresses {
+        mac_address
+      }
       ip_addresses {
         address
         dns_name
@@ -255,7 +257,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                 status=formatStatus(device["status"]),
                 interfaces=[interface_model(
                   name=interface["name"],
-                  mac_address=formatMac(interface["mac_address"]),
+                  mac_address=formatMac(interface["mac_addresses"][0]["mac_address"]) if interface["mac_addresses"] else "",
                   port_type=device["config_context"]["zabbix"]["port_type"] if device["config_context"] else "",
                   addresses=[address_model(
                     address=str(device["primary_ip4"]["address"]).split("/")[0] if device["primary_ip4"] else "",
