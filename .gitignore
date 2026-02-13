@@ -21,3 +21,5 @@ env.list
 compose.yaml
 test.py
 test.json
+compose.yaml
+netbox-zabbix-sync-main*

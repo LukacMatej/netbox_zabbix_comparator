@@ -197,7 +197,6 @@ def print_device(device: device_model) -> str:
 def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
   headers: dict[str, str] = {
       "Authorization": f"Token {key}",
-      "Content-Type": "application/json",
       "Accept": "application/json" 
   }
   query = """
@@ -225,7 +224,9 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
     }
     interfaces {
       name
-      mac_address
+      mac_addresses {
+        mac_address
+      }
       ip_addresses {
         address
         dns_name
@@ -236,13 +237,17 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
   """
   
   try:
-      response: requests.Response = requests.get(
+      response: requests.Response = requests.post(
           ip,
           headers=headers,
           json={"query": query}
       )
+      log.logger.debug(f"Request to Netbox API: {response.request.method} {response.request.url} with headers {response.request.headers} and body {response.request.body}")
       device_list: list[device_model] = []
       log.logger.debug(response)
+      if response.status_code != 200:
+          log.logger.error(f"Failed to fetch devices from Netbox: {response.text}")
+          return f"Failed to fetch devices from Netbox: {response.text}"
       if response.status_code == 200:
           data = response.json()
           for device in data["data"]["device_list"]:
@@ -255,7 +260,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                 status=formatStatus(device["status"]),
                 interfaces=[interface_model(
                   name=interface["name"],
-                  mac_address=formatMac(interface["mac_address"]),
+                  mac_address=formatMac(interface["mac_addresses"][0]["mac_address"]) if interface["mac_addresses"] else "",
                   port_type=device["config_context"]["zabbix"]["port_type"] if device["config_context"] else "",
                   addresses=[address_model(
                     address=str(device["primary_ip4"]["address"]).split("/")[0] if device["primary_ip4"] else "",

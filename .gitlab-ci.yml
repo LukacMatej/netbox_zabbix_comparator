@@ -8,24 +8,6 @@ stages:
   - docker_stop
   - docker_copy
   - docker_run
-  # - docker_test
-
-docker_rm_local_devel:
-  stage: docker_rm
-  image: docker:latest
-  script:
-    - echo "Using docker ${DOCKER_HOST_2}"
-    - docker image rm -f netsystemcz/${CI_PROJECT_NAME}:dev || true
-  except:
-    - tags
-
-docker_build_devel:
-  stage: docker_build
-  image: docker:latest
-  script:
-    - docker build -t netsystemcz/${CI_PROJECT_NAME}:dev -f Dockerfile .
-  except:
-    - tags
 
 docker_build_prod:
   stage: docker_build
@@ -55,6 +37,23 @@ docker_publish_prod:
         -e PUSHRM_DEBUG=1
         chko/docker-pushrm:1
   only:
+    - tags
+
+docker_rm_local_devel:
+  stage: docker_rm
+  image: docker:latest
+  script:
+    - echo "Using docker ${DOCKER_HOST_2}"
+    - docker image rm -f netsystemcz/${CI_PROJECT_NAME}:dev || true
+  except:
+    - tags
+
+docker_build_devel:
+  stage: docker_build
+  image: docker:latest
+  script:
+    - docker build -t netsystemcz/${CI_PROJECT_NAME}:dev -f Dockerfile .
+  except:
     - tags
 
 docker_stop_remote_devel:
@@ -89,36 +88,10 @@ docker_run_devel:
   script:
     - echo "Using docker ${DOCKER_HOST_2}"
     - echo "${PWD}"
-    - DOCKER_HOST=${DOCKER_HOST_2} docker run --detach --restart unless-stopped --name ${CI_PROJECT_NAME}-dev -v /srv/netbox_dhcp/certs/nblab-root-ca.crt:/usr/local/share/ca-certificates/nblab-root-ca.crt:ro,z -v /srv/netbox_dhcp/certs/netsys-ca.pem:/usr/local/share/ca-certificates/netsys-ca.pem:ro,z -e LISTEN_ADDRESS=0.0.0.0 -e HTTP_PORT=7000 -e ZABBIX_IP=https://zabbix.int.netsystem.cz -e ZABBIX_KEY=013607f6d9aed36e19381da456c550bc5bd67208c3a903c50f9a96f0025fcd9c -e NETBOX_IP=https://netbox-test.int.netsystem.cz -e NETBOX_KEY=22548c0c73603b896d4acfb3aecad1f5128f9d4e --network bridge_network ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev
+    - DOCKER_HOST=${DOCKER_HOST_2} docker run --detach --restart unless-stopped --name ${CI_PROJECT_NAME}-dev -v /srv/netbox_zabbix/certs/nblab-root-ca.crt:/usr/local/share/ca-certificates/nblab-root-ca.crt:ro,z -v /srv/netbox_zabbix/certs/netsys-ca.pem:/usr/local/share/ca-certificates/netsys-ca.pem:ro,z -e LISTEN_ADDRESS=0.0.0.0 -e HTTP_PORT=7000 -e ZABBIX_IP=${ZABBIX_URL} -e ZABBIX_KEY=${ZABBIX_KEY} -e NETBOX_IP=${NETBOX_IP} -e NETBOX_KEY=${NETBOX_KEY} --network bridge_network ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev
     - DOCKER_HOST=${DOCKER_HOST_2} docker restart apache-revproxy
   except:
     - tags
-# docker_run_devel:
-#   stage: docker_run
-#   image: docker:latest
-#   dependencies:
-#     - docker_build_devel
-#   script:
-#     - echo "Using docker ${DOCKER_HOST_2}"
-#     - DOCKER_HOST=${DOCKER_HOST_2} docker run --detach -p 5002:5000 --dns 192.168.200.10 --dns 192.168.200.13 --name ${CI_PROJECT_NAME}-dev netsystemcz/${CI_PROJECT_NAME}:test -e LISTEN_ADDRESS=0.0.0.0 -e HTTP_PORT=7000 -e NETBOX_IP=https://netbox-test.int.netsystem.cz -e NETBOX_KEY=22548c0c73603b896d4acfb3aecad1f5128f9d4e
-#   except:
-#     - tags
-# docker_test_devel:
-#   stage: docker_test
-#   image: docker:latest
-#   dependencies:
-#     - docker_run_devel
-#   before_script:
-#     - apk add curl
-#     - chmod +x ./test_add_update.sh
-#     - chmod +x ./test_delete.sh
-#   script:
-#     - echo "Using docker ${DOCKER_HOST_2}"
-#     - echo "Testing"
-#     - sh ./test_add_update.sh
-#     - sh ./test_delete.sh
-#   except:
-#     - tags
 
 # lint:
 #   stage: lint
@@ -129,6 +102,3 @@ docker_run_devel:
 #     - pre-commit run --all-files
 #   except:
 #     - tags
-
-
-
