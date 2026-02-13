@@ -245,6 +245,9 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
       )
       device_list: list[device_model] = []
       log.logger.debug(response)
+      if response.status_code != 200:
+          log.logger.error(f"Failed to fetch devices from Netbox: {response.text}")
+          return f"Failed to fetch devices from Netbox: {response.text}"
       if response.status_code == 200:
           data = response.json()
           for device in data["data"]["device_list"]:
