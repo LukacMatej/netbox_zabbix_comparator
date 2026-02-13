@@ -238,7 +238,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
   """
   
   try:
-      response: requests.Response = requests.get(
+      response: requests.Response = requests.post(
           ip,
           headers=headers,
           data={"query": query}
