@@ -241,7 +241,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
       response: requests.Response = requests.get(
           ip,
           headers=headers,
-          json={"query": query}
+          data={"query": query}
       )
       device_list: list[device_model] = []
       log.logger.debug(response)
