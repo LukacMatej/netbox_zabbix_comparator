@@ -241,8 +241,9 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
       response: requests.Response = requests.get(
           ip,
           headers=headers,
-          data={"query": query}
+          data={"data": query}
       )
+      log.logger.debug(f"Request to Netbox API: {response.request.method} {response.request.url} with headers {response.request.headers} and body {response.request.body}")
       device_list: list[device_model] = []
       log.logger.debug(response)
       if response.status_code != 200:
