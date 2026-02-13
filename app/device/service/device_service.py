@@ -194,157 +194,83 @@ def print_device(device: device_model) -> str:
       txt_builder += f"    DNS Name: {address.dns_name}\n"
   return txt_builder
 
-# def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
-#   headers: dict[str, str] = {
-#       "Authorization": f"Token {key}",
-#       "Content-Type": "application/json",
-#       "Accept": "application/json" 
-#   }
-#   query = """
-#   {
-#   device_list {
-#     id
-#     name
-#     site {
-#       name
-#     }
-#     device_type {
-#       manufacturer {
-#         name
-#       }
-#     }
-#     role {
-#       name
-#     }
-#     config_context
-#     status
-#     description
-#     primary_ip4 {
-#       address
-#       dns_name
-#     }
-#     interfaces {
-#       name
-#       mac_addresses {
-#         mac_address
-#       }
-#       ip_addresses {
-#         address
-#         dns_name
-#       }
-#     }
-#   }
-# }
-#   """
-  
-#   try:
-#       response: requests.Response = requests.post(
-#           ip,
-#           headers=headers,
-#           data={"query": query}
-#       )
-#       log.logger.debug(f"Request to Netbox API: {response.request.method} {response.request.url} with headers {response.request.headers} and body {response.request.body}")
-#       device_list: list[device_model] = []
-#       log.logger.debug(response)
-#       if response.status_code != 200:
-#           log.logger.error(f"Failed to fetch devices from Netbox: {response.text}")
-#           return f"Failed to fetch devices from Netbox: {response.text}"
-#       if response.status_code == 200:
-#           data = response.json()
-#           for device in data["data"]["device_list"]:
-#             if device["config_context"] and "zabbix" in device["config_context"] and "templates" in device["config_context"]["zabbix"] and "port_type" in device["config_context"]["zabbix"]:
-#               device_list.append(device_model(
-#                 name=device["name"],
-#                 hostgroup="Netbox synchronized devices",
-#                 description=device["description"],
-#                 templates=device["config_context"]["zabbix"]["templates"] if device["config_context"] else "",
-#                 status=formatStatus(device["status"]),
-#                 interfaces=[interface_model(
-#                   name=interface["name"],
-#                   mac_address=formatMac(interface["mac_addresses"][0]["mac_address"]) if interface["mac_addresses"] else "",
-#                   port_type=device["config_context"]["zabbix"]["port_type"] if device["config_context"] else "",
-#                   addresses=[address_model(
-#                     address=str(device["primary_ip4"]["address"]).split("/")[0] if device["primary_ip4"] else "",
-#                     dns_name=device["primary_ip4"]["dns_name"] if device["primary_ip4"] else ""
-#                   )]
-#                 ) for interface in device["interfaces"] if interface["ip_addresses"]]
-#               ))
-#       return device_list
-#   except requests.exceptions.RequestException as e:
-#       return (f"Request failed: {e}")
-
 def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
-    headers: dict[str, str] = {
-        "Authorization": f"Token {key}",
-        "Accept": "application/json" 
-    }
-
-    # Your GraphQL query string remains the same
-    query = """
-    {
-    device_list {
-      id
+  headers: dict[str, str] = {
+      "Authorization": f"Token {key}",
+      "Accept": "application/json" 
+  }
+  query = """
+  {
+  device_list {
+    id
+    name
+    site {
       name
-      site {
+    }
+    device_type {
+      manufacturer {
         name
       }
-      device_type {
-        manufacturer {
-          name
-        }
+    }
+    role {
+      name
+    }
+    config_context
+    status
+    description
+    primary_ip4 {
+      address
+      dns_name
+    }
+    interfaces {
+      name
+      mac_addresses {
+        mac_address
       }
-      role {
-        name
-      }
-      config_context
-      status
-      description
-      primary_ip4 {
+      ip_addresses {
         address
         dns_name
       }
-      interfaces {
-        name
-        mac_addresses {
-          mac_address
-        }
-        ip_addresses {
-          address
-          dns_name
-        }
-      }
     }
-    } 
-    """
-
-    try:
-        # 1. Use POST instead of GET
-        # 2. Use json= instead of data=
-        response: requests.Response = requests.post(
-            ip, 
-            headers=headers, 
-            json={"query": query},
-            timeout=10
-        )
-
-        # Log the raw response for debugging
-        log.logger.debug(f"Netbox Response Code: {response.status_code}")
-        
-        if response.status_code == 200:
-            result = response.json()
-            # Netbox wraps GraphQL results in a 'data' key
-            if "errors" in result:
-                log.logger.error(f"GraphQL Errors: {result['errors']}")
-                return "GraphQL Error"
-            
-            return result.get("data", {}).get("device_list", [])
-        else:
-            log.logger.error(f"API Failed: {response.status_code} - {response.text}")
-            return f"Error: {response.status_code}"
-
-    except Exception as e:
-        log.logger.error(f"Connection Exception: {e}")
-        return str(e)
+  }
+}
+  """
+  
+  try:
+      response: requests.Response = requests.post(
+          ip,
+          headers=headers,
+          json={"query": query}
+      )
+      log.logger.debug(f"Request to Netbox API: {response.request.method} {response.request.url} with headers {response.request.headers} and body {response.request.body}")
+      device_list: list[device_model] = []
+      log.logger.debug(response)
+      if response.status_code != 200:
+          log.logger.error(f"Failed to fetch devices from Netbox: {response.text}")
+          return f"Failed to fetch devices from Netbox: {response.text}"
+      if response.status_code == 200:
+          data = response.json()
+          for device in data["data"]["device_list"]:
+            if device["config_context"] and "zabbix" in device["config_context"] and "templates" in device["config_context"]["zabbix"] and "port_type" in device["config_context"]["zabbix"]:
+              device_list.append(device_model(
+                name=device["name"],
+                hostgroup="Netbox synchronized devices",
+                description=device["description"],
+                templates=device["config_context"]["zabbix"]["templates"] if device["config_context"] else "",
+                status=formatStatus(device["status"]),
+                interfaces=[interface_model(
+                  name=interface["name"],
+                  mac_address=formatMac(interface["mac_addresses"][0]["mac_address"]) if interface["mac_addresses"] else "",
+                  port_type=device["config_context"]["zabbix"]["port_type"] if device["config_context"] else "",
+                  addresses=[address_model(
+                    address=str(device["primary_ip4"]["address"]).split("/")[0] if device["primary_ip4"] else "",
+                    dns_name=device["primary_ip4"]["dns_name"] if device["primary_ip4"] else ""
+                  )]
+                ) for interface in device["interfaces"] if interface["ip_addresses"]]
+              ))
+      return device_list
+  except requests.exceptions.RequestException as e:
+      return (f"Request failed: {e}")
 
 def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
   ip = f"{ip}/api_jsonrpc.php"
