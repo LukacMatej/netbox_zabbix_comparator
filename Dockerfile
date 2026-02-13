@@ -11,7 +11,6 @@ RUN pip3 install -r requirements.txt
 
 WORKDIR /
 ADD server.py /
-ADD netbox-zabbix-sync-main /
 ADD app/ /app
 ADD templates/ /templates
 
