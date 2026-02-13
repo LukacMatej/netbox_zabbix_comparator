@@ -200,48 +200,86 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
       "Content-Type": "application/json",
       "Accept": "application/json" 
   }
-  query = """
-  {
-  device_list {
-    id
-    name
-    site {
-      name
-    }
-    device_type {
-      manufacturer {
+  data = {
+    "query": """
+    {
+      device_list {
+        id
         name
+        site {
+          name
+        }
+        device_type {
+          manufacturer {
+            name
+          }
+        }
+        role {
+          name
+        }
+        config_context
+        status
+        description
+        primary_ip4 {
+          address
+          dns_name
+        }
+        interfaces {
+          name
+          mac_addresses {
+            mac_address
+          }
+          ip_addresses {
+            address
+            dns_name
+          }
+        }
       }
     }
-    role {
-      name
-    }
-    config_context
-    status
-    description
-    primary_ip4 {
-      address
-      dns_name
-    }
-    interfaces {
-      name
-      mac_addresses {
-        mac_address
-      }
-      ip_addresses {
-        address
-        dns_name
-      }
-    }
+    """
   }
-}
-  """
+#   query = """
+#   {
+#   device_list {
+#     id
+#     name
+#     site {
+#       name
+#     }
+#     device_type {
+#       manufacturer {
+#         name
+#       }
+#     }
+#     role {
+#       name
+#     }
+#     config_context
+#     status
+#     description
+#     primary_ip4 {
+#       address
+#       dns_name
+#     }
+#     interfaces {
+#       name
+#       mac_addresses {
+#         mac_address
+#       }
+#       ip_addresses {
+#         address
+#         dns_name
+#       }
+#     }
+#   }
+# }
+#   """
   
   try:
       response: requests.Response = requests.get(
           ip,
           headers=headers,
-          data={"data": query}
+          data={"data": data["query"]}
       )
       log.logger.debug(f"Request to Netbox API: {response.request.method} {response.request.url} with headers {response.request.headers} and body {response.request.body}")
       device_list: list[device_model] = []
