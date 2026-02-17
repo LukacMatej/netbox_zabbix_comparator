@@ -188,7 +188,7 @@ def print_device(device: device_model) -> str:
   for interface in device.interfaces:
     txt_builder += f"  Interface Name: {interface.name}\n"
     txt_builder += f"  MAC Address: {interface.mac_address}\n"
-    txt_builder += f"  Port Type: {returnPortTypeName(interface.port_type)}\n"
+    txt_builder += f"  Port Type: {interface.port_type}\n"
     for address in interface.addresses:
       txt_builder += f"    IP Address: {address.address}\n"
       txt_builder += f"    DNS Name: {address.dns_name}\n"
@@ -351,14 +351,4 @@ def formatPortType(port_type: str) -> str:
         "4": "4"
     }
     return port_type_map.get(port_type, "1")
-  
-def returnPortTypeName(port_type: str) -> str:
-    """Returns the name of the port type based on its identifier."""
-    port_type_name_map: dict[str, str] = {
-        "1": "Agent",
-        "2": "SNMP",
-        "3": "IPMI",
-        "4": "JMX"
-    }
-    return port_type_name_map.get(port_type, "Agent")
   
