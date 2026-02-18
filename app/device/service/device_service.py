@@ -135,8 +135,8 @@ def format_address(address: str) -> str:
   return address
 
 def formatStatus(status: str)-> str:
-  enabled_statuses = {"ACTIVE",0}
-  disabled_statuses = {"OFFLINE","STAGED","PLANNED","FAILED","INVENTORY"}
+  enabled_statuses = {"active",0}
+  disabled_statuses = {"offline","staged","planned","failed","inventory","decommissioning"}
   if status in enabled_statuses:
     return "Active"
   elif status in disabled_statuses:
@@ -370,9 +370,26 @@ def uniformPortType(port_type: str) -> str:
     return port_type_map.get(port_type, port_type)
 
 def mapPortTypeDevices(nb_devices: list[device_model], zb_devices: list[device_model]) -> None:
+  """Maps the port type of interfaces in both Netbox and Zabbix device lists to a uniform format."""
   for device in nb_devices:
     for interface in device.interfaces:
       interface.port_type = uniformPortType(interface.port_type)
   for device in zb_devices:
     for interface in device.interfaces:
       interface.port_type = uniformPortType(interface.port_type)
+      
+def uniformOutputText(differences: list[device_difference_model], netbox_devices: list[device_model], zabbix_devices: list[device_model]) -> None:
+    """Uniforms the output text for differences, netbox devices and zabbix devices."""
+    try:
+      dif_nb_devices: list[device_model] = [difference.nb_device for difference in differences]
+      dif_zb_devices: list[device_model] = [difference.zb_device for difference in differences]
+      for device_list in [dif_nb_devices, dif_zb_devices, netbox_devices, zabbix_devices]:
+        for device in device_list:
+          if isinstance(device.hostgroup, list):
+            device.hostgroup = ", ".join(group["name"] for group in device.hostgroup) if device.hostgroup else ""
+          else:
+            device.hostgroup = device.hostgroup if device.hostgroup else ""
+          if isinstance(device.templates, list):
+            device.templates = ", ".join(str(template) for template in device.templates) if device.templates else ""
+    except Exception as e:
+      log.logger.error(f"Error uniforming output text: {e}")

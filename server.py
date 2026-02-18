@@ -64,6 +64,7 @@ def RunCompare() -> tuple[str, int]:
     log.logger.debug(ds.print_differences(differences))
     log.logger.debug(ds.print_devices(netbox_devices))
     log.logger.debug(ds.print_devices(zabbix_devices))
+    ds.uniformOutputText(differences, netbox_devices, zabbix_devices)
     return render_template(
         "compare_output.html",
         differences=compare_output[0],
@@ -96,6 +97,7 @@ def RunCompareSync() -> tuple[str, int]:
         differences=differences
     )
     log.logger.debug(f"Synchronization Output: {sync_output}")
+    ds.uniformOutputText(differences, netbox_devices, zabbix_devices)
     return render_template(
         "compare_output.html",
         sync_output=sync_output,
