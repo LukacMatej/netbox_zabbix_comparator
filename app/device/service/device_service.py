@@ -354,6 +354,8 @@ def formatPortType(port_type: str) -> str:
 
 def uniformPortType(port_type: str) -> str:
     """Uniforms the port type to a human readable format."""
+    if isinstance(port_type, list):
+        port_type = port_type[0] if port_type else ""
     port_type_map: dict[str, str] = {
         "1": "Agent",
         "2": "SNMP",
