@@ -369,12 +369,7 @@ def uniformPortType(port_type: str) -> str:
     }
     return port_type_map.get(port_type, port_type)
 
-def mapPortTypeDevices(different_devices: list[device_difference_model], nb_devices: list[device_model], zb_devices: list[device_model]) -> None:
-  for device in different_devices:
-    for interface in device.nb_device.interfaces:
-      interface.port_type = uniformPortType(interface.port_type)
-    for interface in device.zb_device.interfaces:
-      interface.port_type = uniformPortType(interface.port_type)
+def mapPortTypeDevices(nb_devices: list[device_model], zb_devices: list[device_model]) -> None:
   for device in nb_devices:
     for interface in device.interfaces:
       interface.port_type = uniformPortType(interface.port_type)

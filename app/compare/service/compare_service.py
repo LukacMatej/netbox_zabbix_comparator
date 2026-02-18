@@ -162,7 +162,7 @@ def compare(nb_ip, nb_key, zb_ip, zb_key) -> Exception | tuple[list[device_diffe
         return Exception(zb_device_list)
     log.logger.debug("Zabbix Devices:")
     log.logger.debug(device_service.print_devices(zb_device_list))
+    ds.mapPortTypeDevices(nb_device_list, zb_device_list)
     different_devices: tuple[list[device_difference_model],list[device_model],list[device_model]] = compare_devices(nb_device_list, zb_device_list)
-    ds.mapPortTypeDevices(different_devices[0], different_devices[1], different_devices[2])
     log.logger.info("Ending compare")
     return different_devices
