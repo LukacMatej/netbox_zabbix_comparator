@@ -1,13 +1,14 @@
 """_summary_
 """
-import requests
-import re
-import os
 from app.device.models.device_model import Device as device_model
 from app.device.models.interface_model import Interface as interface_model
 from app.device.models.address_model import Address as address_model
 from app.device.models.difference_model import DeviceDifference as difference_model
+from app.device.models.difference_model import DeviceDifference as device_difference_model
 from app.logger import logger_conf as log
+import requests
+import re
+import os
 
 def find_hostinterface_id(hostid: str) -> int:
   """
@@ -367,3 +368,16 @@ def uniformPortType(port_type: str) -> str:
         "JMX": "JMX"
     }
     return port_type_map.get(port_type, port_type)
+
+def mapPortTypeDevices(different_devices: list[device_difference_model], nb_devices: list[device_model], zb_devices: list[device_model]) -> None:
+  for device in different_devices:
+    for interface in device.nb_device.interfaces:
+      interface.port_type = uniformPortType(interface.port_type)
+    for interface in device.zb_device.interfaces:
+      interface.port_type = uniformPortType(interface.port_type)
+  for device in nb_devices:
+    for interface in device.interfaces:
+      interface.port_type = uniformPortType(interface.port_type)
+  for device in zb_devices:
+    for interface in device.interfaces:
+      interface.port_type = uniformPortType(interface.port_type)

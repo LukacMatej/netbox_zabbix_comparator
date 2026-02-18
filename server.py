@@ -37,14 +37,6 @@ from app.logger import logger_conf as log
 
 app = Flask(__name__)
 
-# @app.route('/webhook',methods=['POST'])
-# def webhook() -> tuple[str,int]:
-#     if request.method == 'POST':
-#         subprocess.run(["python",'netbox-zabbix-sync-main/netbox_zabbix_sync.py'])
-#         return 'success', 200
-#     else:
-#         return 'error',400
-
 @app.route("/")
 def test() -> tuple[str,int]:
     """
