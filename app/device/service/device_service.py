@@ -316,23 +316,27 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
       return f"Error in Zabbix API response: {result['error']}"
     log.logger.debug(result)
     for host in result["result"]:
-      zb_device_list.append(device_model(
-        name=host["name"],
-        hostgroup=host["groups"] if host["groups"] else "",
-        description=host["description"],
-        templates=[template["name"] for template in host["parentTemplates"]],
-        status=formatStatus(host["status"]),
-        interfaces=[interface_model(
-          name=interface["dns"],
-          mac_address="",
-          port_type=interface["type"],
-          addresses=[address_model(
-            address=interface["ip"],
-            dns_name=interface["dns"]
-          )
-          ]
-        ) for interface in host["interfaces"]]
-      ))
+      try:
+        zb_device_list.append(device_model(
+          name=host["name"],
+          hostgroup=host["groups"],
+          description=host["description"],
+          templates=[template["name"] for template in host["parentTemplates"]],
+          status=formatStatus(host["status"]),
+          interfaces=[interface_model(
+            name=interface["dns"],
+            mac_address="",
+            port_type=interface["type"],
+            addresses=[address_model(
+              address=interface["ip"],
+              dns_name=interface["dns"]
+            )
+            ]
+          ) for interface in host["interfaces"]]
+        ))
+      except KeyError as e:
+        log.logger.error(f"Missing expected key in Zabbix host data: {e}")
+        continue
   except requests.exceptions.RequestException as e:
     return (f"Request failed: {e}")
   return zb_device_list
