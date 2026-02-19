@@ -1,4 +1,5 @@
 """server.py
+Tested with Netbox version v4.5.2 and Zabbix version 7.0.2
 This script sets up a Flask web server with routes for handling webhooks and a test route. 
 It also includes an argument parser for configuring the server to run in development or production mode.
 Routes:
@@ -37,14 +38,6 @@ from app.logger import logger_conf as log
 
 app = Flask(__name__)
 
-# @app.route('/webhook',methods=['POST'])
-# def webhook() -> tuple[str,int]:
-#     if request.method == 'POST':
-#         subprocess.run(["python",'netbox-zabbix-sync-main/netbox_zabbix_sync.py'])
-#         return 'success', 200
-#     else:
-#         return 'error',400
-
 @app.route("/")
 def test() -> tuple[str,int]:
     """
@@ -72,6 +65,7 @@ def RunCompare() -> tuple[str, int]:
     log.logger.debug(ds.print_differences(differences))
     log.logger.debug(ds.print_devices(netbox_devices))
     log.logger.debug(ds.print_devices(zabbix_devices))
+    ds.uniformOutputText(differences, netbox_devices, zabbix_devices)
     return render_template(
         "compare_output.html",
         differences=compare_output[0],
@@ -104,6 +98,7 @@ def RunCompareSync() -> tuple[str, int]:
         differences=differences
     )
     log.logger.debug(f"Synchronization Output: {sync_output}")
+    ds.uniformOutputText(differences, netbox_devices, zabbix_devices)
     return render_template(
         "compare_output.html",
         sync_output=sync_output,

@@ -1,11 +1,12 @@
-FROM python:3.11-bookworm
+FROM python:alpine
 
-RUN apt-get update && apt-get upgrade -y && apt-get install -y \
-    python3-pip \
+RUN apk update && apk upgrade && apk add --no-cache \
+    python3 \
+    py3-pip \
     curl && \
-    apt-get clean && \
+    apk cache clean && \
     rm -rf /var/lib/apt/lists/*
-
+    
 COPY requirements.txt /
 RUN pip3 install -r requirements.txt 
 
