@@ -307,6 +307,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
   }
   try:
     zb_device_list: list[device_model] = []
+    log.logger.debug(f"Requesting Zabbix: {ip} devices with payload: {payload} and headers: {headers}")
     response: requests.Response = requests.post(ip, headers=headers, json=payload)
     log.logger.debug(response)
     response.raise_for_status()
