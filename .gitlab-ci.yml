@@ -1,7 +1,7 @@
 image: docker:latest
 
 stages:
-  # - lint
+  - lint
   - docker_rm
   - docker_build
   - publish
@@ -92,12 +92,12 @@ docker_run_devel:
   except:
     - tags
 
-# lint:
-#   stage: lint
-#   image: python:3.9
-#   before_script:
-#     - pip install pre-commit pylint
-#   script:
-#     - pre-commit run --all-files
-#   except:
-#     - tags
+lint:
+  stage: lint
+  image: python:3.9
+  before_script:
+    - pip install pre-commit pylint
+  script:
+    - pre-commit run --all-files
+  except:
+    - tags

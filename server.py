@@ -1,5 +1,5 @@
 """server.py
-Tested with Netbox version v4.5.2 and Zabbix version 7.0.2
+Tested with Netbox version v4.5.2 and Zabbix version 7.4.2
 This script sets up a Flask web server with routes for handling webhooks and a test route. 
 It also includes an argument parser for configuring the server to run in development or production mode.
 Routes:
