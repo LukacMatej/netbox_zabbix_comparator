@@ -318,7 +318,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
     for host in result["result"]:
       zb_device_list.append(device_model(
         name=host["name"],
-        hostgroup=host["groups"],
+        hostgroup=host["groups"] if host["groups"] else "",
         description=host["description"],
         templates=[template["name"] for template in host["parentTemplates"]],
         status=formatStatus(host["status"]),
