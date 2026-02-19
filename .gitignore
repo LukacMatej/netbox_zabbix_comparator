@@ -24,4 +24,3 @@ test.json
 compose.yaml
 netbox-zabbix-sync-main*
 docker_init.sh
-.pylintrc
