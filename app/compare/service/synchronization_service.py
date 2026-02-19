@@ -1,6 +1,32 @@
-import requests
+"""
+Synchronization service module for managing Netbox and Zabbix device synchronization.
+This module provides functionality to synchronize devices between Netbox and Zabbix systems,
+including finding hosts, templates, and hostgroups, applying differences between systems,
+and creating new devices in either system.
+Functions:
+    find_hostgroup_id(hostgroup_name: str) -> int:
+        Retrieves the Zabbix hostgroup ID for a given hostgroup name.
+    find_template_ids(template_name: str) -> int:
+        Retrieves the Zabbix template ID for a given template name.
+    apply_differences(differences: device_difference_model, sync_output: sync_output_model) -> None:
+        Applies field differences between Netbox and Zabbix device instances by updating
+        the Zabbix device with Netbox values.
+    create_netbox_device(device: device_model, sync_output: sync_output_model) -> None:
+        Creates a new device in the Netbox system.
+    create_zabbix_device(device: device_model, sync_output: sync_output_model) -> None:
+        Creates a new device in the Zabbix system with associated hostgroups and templates.
+    find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
+        Finds or creates Zabbix hostgroup IDs for the given hostgroup names.
+        Supports string, list of strings, or list of dictionaries as input.
+    sync_netbox_zabbix_devices(differences: list[device_difference_model], 
+                               netbox_devices: list[device_model],
+                               zabbix_devices: list[device_model]) -> sync_output_model:
+        Orchestrates the synchronization process between Netbox and Zabbix systems,
+        creating missing devices and applying detected differences.
+
+"""
 import os
-import re
+import requests
 from app.logger import logger_conf as log
 from app.device.models.device_model import Device as device_model
 from app.device.models.interface_model import Interface as interface_model
@@ -31,7 +57,6 @@ def find_hostgroup_id(hostgroup_name: str) -> int:
         },
         "id": 1
     })
-    
     if response.status_code == 200:
         data = response.json()
         if "error" in data:
@@ -41,7 +66,6 @@ def find_hostgroup_id(hostgroup_name: str) -> int:
             group_id = data["result"][0]["groupid"]
             log.logger.info(f"Found Zabbix hostgroup ID: {group_id} for {hostgroup_name}.")
             return int(group_id)
-    
     log.logger.error(f"Failed to find Zabbix hostgroup ID for {hostgroup_name}: {response.text}")
     return -1
 
@@ -67,7 +91,6 @@ def find_template_ids(template_name: str) -> int:
         },
         "id": 1
     })
-    
     if response.status_code == 200:
         data = response.json()
         if "error" in data:
@@ -77,7 +100,6 @@ def find_template_ids(template_name: str) -> int:
             template_id = data["result"][0]["templateid"]
             log.logger.info(f"Found Zabbix template ID: {template_id} for {template_name}.")
             return int(template_id)
-    
     log.logger.error(f"Failed to find Zabbix template ID for {template_name}: {response.text}")
     return -1
 
@@ -90,7 +112,6 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     nb_device: device_model = differences.nb_device
     zb_device: device_model = differences.zb_device
     different_fields: list[str] = differences.differences[0]  # tuple: (different_fields, same_fields)
-
     def extract_field_name(field: str):
         if '(' in field:
             return field.split('(')[0].strip()
@@ -102,7 +123,6 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
     }
-    
     hostid = None
     response = requests.post(zabbix_ip+"api_jsonrpc.php", headers=headers, json={
         "jsonrpc": "2.0",
@@ -166,13 +186,12 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
                                     log.logger.info(f"Address field {key} is different: Netbox value: {nb_value}, Zabbix value: {zb_value}")
     sync_output.add_difference_output(f"Updated fields for {zb_device.name}: {list(updated_fields.keys())}")
     log.logger.info("Zabbix Device after update "+device_service.print_device(zb_device))
-    
+
     # Use the find_zabbix_hostgroup_ids function to get proper hostgroup IDs
     hostgroupids = find_zabbix_hostgroup_ids(zb_device.hostgroup)
-    
+
     update_data_zabbix = zb_device.update_data_zabbix(
         name=nb_device.name,
-        
         hostid=hostid,
         interface_id=device_service.find_hostinterface_id(hostid),
         hostgroupIds=hostgroupids,
@@ -226,9 +245,7 @@ def create_zabbix_device(device: device_model,sync_output: sync_output_model):
         "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
     }
-    
     hostgroupids = find_zabbix_hostgroup_ids(device.hostgroup)
-    
     if not hostgroupids or -1 in hostgroupids:
         sync_output.add_zabbix_output(f"Hostgroup {device.hostgroup} not found in Zabbix, cannot create device {device.name}.")
         log.logger.error(f"Hostgroup {device.hostgroup} not found in Zabbix, cannot create device in Netbox.")
@@ -267,7 +284,6 @@ def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
     # If hostgroup_names is a string (not a list), convert to list
     if isinstance(hostgroup_names, str):
         hostgroup_names = [hostgroup_names]
-    
     # Extract names from the list, handling both strings and dictionaries
     names_to_check = []
     for item in hostgroup_names:
@@ -347,15 +363,15 @@ def sync_netbox_zabbix_devices(differences:list[device_difference_model], netbox
         if not any(zabbix_device.name == netbox_device.name for zabbix_device in zabbix_devices):
             log.logger.info(f"Device {netbox_device.name} found in Netbox but not in Zabbix, creating in Zabbix.")
             create_zabbix_device(netbox_device,sync_output)
-    
+
     # for zabbix_device in zabbix_devices:
     #     if not any(netbox_device.name == zabbix_device.name for netbox_device in netbox_devices):
     #         log.logger.info(f"Device {zabbix_device.name} found in Zabbix but not in Netbox, creating in Netbox.")
     #         create_netbox_device(zabbix_device,sync_output)
-    
+
     for difference in differences:
         log.logger.info(f"Applying differences for device {difference.nb_device.name} and {difference.zb_device.name}.")
         apply_differences(difference, sync_output)
-    
+
     log.logger.info("Synchronization of Netbox and Zabbix devices completed.")
     return sync_output

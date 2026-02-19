@@ -1,4 +1,23 @@
-"""_summary_
+"""
+Compare two lists of device models and identify devices with differences.
+    nb_device_list (list[device_model]): List of device models from NetBox.
+    zb_device_list (list[device_model]): List of device models from Zabbix.
+    tuple[list[device_difference_model], list[device_model], list[device_model]]:
+        - list[device_difference_model]: Devices found in both NetBox and Zabbix
+                                         with differences between them.
+        - list[device_model]: Devices found only in NetBox (no match in Zabbix).
+        - list[device_model]: Devices found only in Zabbix (no match in NetBox).
+Compare devices from NetBox and Zabbix sources using their connection parameters.
+    nb_ip (str): NetBox server IP address or hostname.
+    nb_key (str): NetBox API authentication key.
+    zb_ip (str): Zabbix server IP address or hostname.
+    zb_key (str): Zabbix API authentication key.
+    Exception | tuple[list[device_difference_model], list[device_model], list[device_model]]:
+        On success, returns a tuple containing:
+        - list[device_difference_model]: Devices with differences between NetBox and Zabbix.
+        - list[device_model]: Devices found only in NetBox.
+        - list[device_model]: Devices found only in Zabbix.
+        On error, returns an Exception object with error message details.
 """
 from app.logger import logger_conf as log
 import app.device.service.device_service as device_service
@@ -9,6 +28,23 @@ from app.device.models.interface_model import Interface as interface_model
 from app.device.service import device_service as ds
 
 def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[int, tuple[device_model, device_model], tuple[list[str], list[str]]]:
+    """
+    Compare two device models and identify differences between them.
+    Args:
+        nb_device (device_model): Device model from NetBox.
+        zb_device (device_model): Device model from Zabbix.
+    Returns:
+        tuple[int, tuple[device_model, device_model], tuple[list[str], list[str]]]:
+            A tuple containing:
+            - int: Status code (0 = differences found, 1 = no differences, 
+                    2 = all fields are identical)
+            - tuple of two device_model: (nb_device, zb_device)
+            - tuple of two lists: (differences, similarities)
+              - differences: List of field names/descriptions that differ between devices.
+                            Critical fields (name, address, dns_name) include detailed
+                            comparison info and note that NetBox value overwrites Zabbix.
+              - similarities: List of field names that are identical between devices.
+    """
     differences: tuple[bool, tuple[device_model, device_model], str] = (0, (nb_device, zb_device), "")
     found = 0
     fields: list[str] = []
@@ -90,8 +126,8 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
                 nb_value = getattr(nb_interface, field)
                 zb_value = getattr(zb_interface, field)
                 if field == "port_type":
-                    nb_value = ds.formatPortType(nb_value)
-                    zb_value = ds.formatPortType(zb_value)
+                    nb_value = ds.format_port_type(nb_value)
+                    zb_value = ds.format_port_type(zb_value)
                 if nb_value == "" and zb_value == "":
                     continue
                 if nb_value != zb_value:
@@ -104,6 +140,23 @@ def find_differences(nb_device: device_model, zb_device: device_model) -> tuple[
     return differences
 
 def compare_devices(nb_device_list: list[device_model], zb_device_list: list[device_model]) -> list[device_difference_model]:
+    """
+    Compare devices from two sources (NetBox and Zabbix) and identify differences.
+    This function compares devices from a NetBox device list against a Zabbix device list.
+    It identifies devices with differences, devices only in NetBox, and devices only in Zabbix.
+    Args:
+        nb_device_list (list[device_model]): List of devices from NetBox.
+        zb_device_list (list[device_model]): List of devices from Zabbix.
+    Returns:
+        tuple: A tuple containing three elements:
+            - list[device_difference_model]: List of devices with detected differences between sources.
+            - list[device_model]: List of devices found only in NetBox (not matched in Zabbix).
+            - list[device_model]: List of devices found only in Zabbix (not matched in NetBox).
+    Note:
+        The function uses find_differences() to detect differences between device pairs.
+        Return code 1 indicates differences found, code 2 indicates exact match or exclusion.
+    """
+    
     different_devices: list[device_difference_model] = []
     differences: tuple[bool, tuple[device_model, device_model], str]
     nb_devices: list[device_model] = []
@@ -119,7 +172,7 @@ def compare_devices(nb_device_list: list[device_model], zb_device_list: list[dev
                 different_devices.append(device_difference_model(nb_device, zb_device, differences[2]))
                 found = True
                 break
-            elif differences[0] == 2:
+            if differences[0] == 2:
                 found = True
                 break
             found = False
@@ -134,7 +187,7 @@ def compare_devices(nb_device_list: list[device_model], zb_device_list: list[dev
             if differences[0] == 1:
                 found = True
                 break
-            elif differences[0] == 2:
+            if differences[0] == 2:
                 found = True
                 break
             found = False
@@ -143,6 +196,25 @@ def compare_devices(nb_device_list: list[device_model], zb_device_list: list[dev
     return different_devices, nb_devices, zb_devices
 
 def compare(nb_ip, nb_key, zb_ip, zb_key) -> Exception | tuple[list[device_difference_model], list[device_model], list[device_model]]:
+    """
+    Compare devices between Netbox and Zabbix systems.
+    Retrieves device lists from both Netbox and Zabbix, maps port types,
+    and compares the devices to identify differences.
+    Args:
+        nb_ip (str): IP address or hostname of the Netbox server.
+        nb_key (str): API key for Netbox authentication.
+        zb_ip (str): IP address or hostname of the Zabbix server.
+        zb_key (str): API key for Zabbix authentication.
+    Returns:
+        Exception | tuple[list[device_difference_model], list[device_model], list[device_model]]:
+            On success, returns a tuple containing:
+                - List of device differences between Netbox and Zabbix
+                - List of devices in Netbox only
+                - List of devices in Zabbix only
+            On error, returns an Exception object with error message.
+    Raises:
+        Exception: If device retrieval from Netbox or Zabbix fails.
+    """
     log.logger.info("Starting compare")
     nb_graphql = nb_ip + "/graphql/"
     log.logger.debug(f"Netbox IP: {nb_ip}")
@@ -162,7 +234,7 @@ def compare(nb_ip, nb_key, zb_ip, zb_key) -> Exception | tuple[list[device_diffe
         return Exception(zb_device_list)
     log.logger.debug("Zabbix Devices:")
     log.logger.debug(device_service.print_devices(zb_device_list))
-    ds.mapPortTypeDevices(nb_device_list, zb_device_list)
+    ds.map_port_type_device(nb_device_list, zb_device_list)
     different_devices: tuple[list[device_difference_model],list[device_model],list[device_model]] = compare_devices(nb_device_list, zb_device_list)
     log.logger.info("Ending compare")
     return different_devices

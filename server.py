@@ -23,11 +23,10 @@ Dependencies:
     - argparse
     - os
 """
-from flask import Flask, render_template, request
-from waitress import serve
-import subprocess
 import argparse
 import os
+from flask import Flask, render_template
+from waitress import serve
 from app.compare.service import compare_service as ct
 from app.compare.service import synchronization_service as ss
 from app.device.models.synchonization_output_model import SyncOutput as sync_output_model
@@ -49,9 +48,27 @@ def test() -> tuple[str,int]:
     return render_template(
         "index.html"
         ),200
-    
+
 @app.route("/RunCompare")
-def RunCompare() -> tuple[str, int]:
+def run_compare() -> tuple[str, int]:
+    """
+    Compare devices between Netbox and Zabbix systems.
+    Retrieves API credentials and IP addresses from environment variables,
+    performs a comparison between Netbox and Zabbix devices, and returns
+    the comparison results rendered in an HTML template.
+    Environment Variables:
+        NETBOX_KEY: API key for Netbox authentication
+        NETBOX_IP: IP address or hostname of Netbox server
+        ZABBIX_IP: IP address or hostname of Zabbix server
+        ZABBIX_KEY: API key for Zabbix authentication
+    Returns:
+        tuple[str, int]: A tuple containing:
+            - str: HTML content of the comparison results or error message
+            - int: HTTP status code (200 on success, 500 on error)
+    Raises:
+        Implicitly handles exceptions from the compare operation and returns
+        them as error responses with status code 500.
+    """
     netbox_key: str = os.environ.get("NETBOX_KEY")
     netbox_ip: str = os.environ.get("NETBOX_IP")
     zabbix_ip: str = os.environ.get("ZABBIX_IP")
@@ -65,7 +82,7 @@ def RunCompare() -> tuple[str, int]:
     log.logger.debug(ds.print_differences(differences))
     log.logger.debug(ds.print_devices(netbox_devices))
     log.logger.debug(ds.print_devices(zabbix_devices))
-    ds.uniformOutputText(differences, netbox_devices, zabbix_devices)
+    ds.uniform_output_text(differences, netbox_devices, zabbix_devices)
     return render_template(
         "compare_output.html",
         differences=compare_output[0],
@@ -76,7 +93,26 @@ def RunCompare() -> tuple[str, int]:
     ), 200
 
 @app.route("/RunCompareSync")
-def RunCompareSync() -> tuple[str, int]:
+def run_compare_sync() -> tuple[str, int]:
+    """
+    Execute a comparison and synchronization between NetBox and Zabbix devices.
+    Retrieves NetBox and Zabbix credentials from environment variables, performs
+    a comparison of devices between the two systems, logs the differences and 
+    devices found, synchronizes the devices, and renders a comparison output 
+    template with the results.
+    Returns:
+        tuple[str, int]: A tuple containing:
+            - str: Rendered HTML template string with comparison results and 
+                   synchronization status, or error message
+            - int: HTTP status code (200 for success, 500 for error)
+    Raises:
+        (Implicitly) Returns error status if comparison fails.
+    Environment Variables Required:
+        - NETBOX_KEY: API key for NetBox authentication
+        - NETBOX_IP: NetBox server IP/URL
+        - ZABBIX_IP: Zabbix server IP/URL
+        - ZABBIX_KEY: API key for Zabbix authentication
+    """
     synchronization: bool = True
     sync_output: sync_output_model = None
     netbox_key: str = os.environ.get("NETBOX_KEY")
@@ -98,7 +134,7 @@ def RunCompareSync() -> tuple[str, int]:
         differences=differences
     )
     log.logger.debug(f"Synchronization Output: {sync_output}")
-    ds.uniformOutputText(differences, netbox_devices, zabbix_devices)
+    ds.uniform_output_text(differences, netbox_devices, zabbix_devices)
     return render_template(
         "compare_output.html",
         sync_output=sync_output,
