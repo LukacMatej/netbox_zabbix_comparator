@@ -286,7 +286,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
         "ip",
         "type"
       ],
-      "selectGroups": [
+      "selectHostGroups": [
         "groupid",
         "name"
       ],
@@ -320,7 +320,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
       try:
         zb_device_list.append(device_model(
           name=host["name"],
-          hostgroup=host["groups"],
+          hostgroup=host["hostgroups"],
           description=host["description"],
           templates=[template["name"] for template in host["parentTemplates"]],
           status=formatStatus(host["status"]),
