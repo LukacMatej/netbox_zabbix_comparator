@@ -1,3 +1,21 @@
+"""
+Device model module for managing network device information and Zabbix API operations.
+This module provides the Device class and utility functions for device status normalization,
+interface conversion, and port type mapping for Zabbix API integration.
+Classes:
+    Device: Represents a network device with properties and methods for Zabbix operations.
+Functions:
+    format_nb_status(status: str) -> str:
+        Convert NetBox device status to a standardized lowercase format.
+    map_port_type(port_type: str) -> str:
+        Map port type to Zabbix-compatible format (Agent, SNMP, IPMI, JMX).
+    normalize_status(status: str) -> str:
+        Normalize device status to standard "Active" or "Inactive" format.
+    dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
+        Convert InterfaceModel objects to Zabbix API interface dictionaries for host creation.
+    dict_interfaces_zb_id(interfaces: list[InterfaceModel], interface_id) -> list[dict]:
+        Convert InterfaceModel objects to Zabbix API interface dictionaries for host updates.
+"""
 from app.device.models.interface_model import Interface as InterfaceModel
 from app.device.service import device_service as ds
 
@@ -26,7 +44,7 @@ class Device:
             Generates a Zabbix API request dictionary for creating a new host.
             Processes hostgroup IDs and template IDs into the required Zabbix format.
     """
-    
+
     name: str = ""
     interfaces: list[InterfaceModel] = []
     hostgroup: list[str] = []
@@ -41,7 +59,7 @@ class Device:
         self.description = description
         self.templates = templates
         self.status = normalize_status(status)
-        
+
     def __str__(self) -> str:
         return f"{self.name} {self.interfaces} {self.hostgroup} {self.description} {self.templates} {self.status}"
 
@@ -119,6 +137,27 @@ class Device:
     #     }
 
 def format_nb_status(status: str) -> str:
+    """
+    Convert NetBox device status to a standardized status format.
+    Maps NetBox status values to their corresponding lowercase representations.
+    If the status is not found in the mapping, defaults to "offline".
+    Args:
+        status (str): The NetBox device status to be converted.
+                     Expected values: "Active", "Inactive", "Planned", "Staged",
+                     "Failed", "Inventory", or "Decommissioning".
+    Returns:
+        str: The standardized status string in lowercase.
+             Possible values: "active", "offline", "planned", "staged",
+             "failed", "inventory", or "decommissioning".
+    Examples:
+        >>> format_nb_status("Active")
+        'active'
+        >>> format_nb_status("Inactive")
+        'offline'
+        >>> format_nb_status("Unknown")
+        'offline'
+    """
+
     status_map = {
         "Active": "active",
         "Inactive": "offline",
@@ -167,7 +206,7 @@ def normalize_status(status: str) -> str:
         "Inactive"
     """
 
-    if status == 0 or status == "Active" or status == "0":
+    if status in (0, "0", "Active"):
         return "Active"
     return "Inactive"
 
@@ -180,7 +219,7 @@ def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
             "type": map_port_type(interface.port_type),
             "main": 1 if index == 0 else 0,
             "useip": 1,
-            "ip": str(interface.addresses[0].address).split("/")[0] if interface.addresses else "",
+            "ip": str(interface.addresses[0].address).split("/",maxsplit=1)[0] if interface.addresses else "",
             "dns": interface.addresses[0].dns_name if interface.addresses else "",
             "port": 161
         })
@@ -189,7 +228,7 @@ def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
             "type": map_port_type(interface.port_type),
             "main": 1 if index == 0 else 0,
             "useip": 1,
-            "ip": str(interface.addresses[0].address).split("/")[0] if interface.addresses else "",
+            "ip": str(interface.addresses[0].address).split("/",maxsplit=1)[0] if interface.addresses else "",
             "dns": interface.addresses[0].dns_name if interface.addresses else "",
             "port": 161,
             "details": {
@@ -219,7 +258,7 @@ def dict_interfaces_zb_id(interfaces: list[InterfaceModel],interface_id) -> list
             "interfaceid": interface_id,
             "main": 1 if index == 0 else 0,
             "useip": 1,
-            "ip": str(interface.addresses[0].address).split("/")[0] if interface.addresses else "",
+            "ip": str(interface.addresses[0].address).split("/",maxsplit=1)[0] if interface.addresses else "",
             "dns": interface.addresses[0].dns_name if interface.addresses else "",
             "port": 161,
             "details": {
