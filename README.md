@@ -24,7 +24,7 @@ V netboxu je možné nastavit dědičnej config context pro device role
 }
 ```
 
-Templates 
+Templates
 
 * Templaty, které se budou aplikovat na zařízení v Zabbixu, v zabbixu musí existovat předem.
 

@@ -1,0 +1,7 @@
+[MASTER]
+# Add the project root to the python path
+init-hook='import sys; sys.path.append(".")'
+
+[MESSAGES CONTROL]
+# If you still get errors on specific imports you know are fine
+# disable=import-error

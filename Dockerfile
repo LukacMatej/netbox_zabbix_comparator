@@ -6,9 +6,9 @@ RUN apk update && apk upgrade && apk add --no-cache \
     curl && \
     apk cache clean && \
     rm -rf /var/lib/apt/lists/*
-    
+
 COPY requirements.txt /
-RUN pip3 install -r requirements.txt 
+RUN pip3 install -r requirements.txt
 
 WORKDIR /
 ADD server.py /

@@ -13,5 +13,5 @@ repos:
       entry: pylint
       language: python
       types: [python]
-      args: [--fail-under=9]
+      args: [--rcfile=.pylintrc, --fail-under=9]
       additional_dependencies: [pylint, flask, waitress, requests]
