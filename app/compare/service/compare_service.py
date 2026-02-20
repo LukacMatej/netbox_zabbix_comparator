@@ -20,6 +20,8 @@ Compare devices from NetBox and Zabbix sources using their connection parameters
         On error, returns an Exception object with error message details.
 """
 
+from __future__ import annotations
+
 from app.logger import logger_conf as log
 import app.device.service.device_service as device_service
 from app.device.models.device_model import Device as device_model

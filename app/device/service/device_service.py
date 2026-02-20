@@ -41,6 +41,8 @@ Dependencies:
 
 """
 
+from __future__ import annotations
+
 import re
 import os
 import requests

@@ -26,6 +26,8 @@ Dependencies:
     - os
 """
 
+from __future__ import annotations
+
 import argparse
 import os
 from flask import Flask, render_template
