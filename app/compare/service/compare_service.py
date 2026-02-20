@@ -26,7 +26,6 @@ from app.device.models.device_model import Device as device_model
 from app.device.models.difference_model import DeviceDifference as device_difference_model
 from app.device.models.address_model import Address as address_model
 from app.device.models.interface_model import Interface as interface_model
-from app.device.service import device_service as ds
 
 
 def find_differences(
@@ -114,7 +113,7 @@ def find_differences(
                 fields_counter += 1
                 if nb_value != zb_value:
                     found = 1
-                    if field == "address" or field == "dns_name":
+                    if field in ("address", "dns_name"):
                         fields.append(
                             f"{field} ({nb_value} != {zb_value}), "
                             "Hodnota v netboxu přepíše hodnotu v zabbixu"
@@ -155,8 +154,8 @@ def find_differences(
                 nb_value = getattr(nb_interface, field)
                 zb_value = getattr(zb_interface, field)
                 if field == "port_type":
-                    nb_value = ds.format_port_type(nb_value)
-                    zb_value = ds.format_port_type(zb_value)
+                    nb_value = device_service.format_port_type(nb_value)
+                    zb_value = device_service.format_port_type(zb_value)
                 if nb_value == "" and zb_value == "":
                     continue
                 if nb_value != zb_value:
@@ -276,7 +275,7 @@ def compare(
         return Exception(zb_device_list)
     log.logger.debug("Zabbix Devices:")
     log.logger.debug(device_service.print_devices(zb_device_list))
-    ds.map_port_type_device(nb_device_list, zb_device_list)
+    device_service.map_port_type_device(nb_device_list, zb_device_list)
     different_devices: tuple[
         list[device_difference_model], list[device_model], list[device_model]
     ] = compare_devices(nb_device_list, zb_device_list)

@@ -36,6 +36,8 @@ from app.device.models.difference_model import DeviceDifference as device_differ
 from app.device.models.synchonization_output_model import SyncOutput as sync_output_model
 from app.device.service import device_service
 
+REQUEST_TIMEOUT = 10
+
 
 def find_hostgroup_id(hostgroup_name: str) -> int:
     """Finds the Zabbix hostgroup ID based on the provided hostgroup name.
@@ -54,6 +56,7 @@ def find_hostgroup_id(hostgroup_name: str) -> int:
     response = requests.post(
         zabbix_ip + "api_jsonrpc.php",
         headers=headers,
+        timeout=REQUEST_TIMEOUT,
         json={
             "jsonrpc": "2.0",
             "method": "hostgroup.get",
@@ -91,6 +94,7 @@ def find_template_ids(template_name: str) -> int:
     response = requests.post(
         zabbix_ip + "api_jsonrpc.php",
         headers=headers,
+        timeout=REQUEST_TIMEOUT,
         json={
             "jsonrpc": "2.0",
             "method": "template.get",
@@ -139,6 +143,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     response = requests.post(
         zabbix_ip + "api_jsonrpc.php",
         headers=headers,
+        timeout=REQUEST_TIMEOUT,
         json={
             "jsonrpc": "2.0",
             "method": "host.get",
@@ -246,7 +251,10 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     )
     log.logger.info(update_data_zabbix)
     response = requests.post(
-        zabbix_ip + "api_jsonrpc.php", headers=headers, json=update_data_zabbix
+        zabbix_ip + "api_jsonrpc.php",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
+        json=update_data_zabbix,
     )
     response_json = response.json()
     if "error" in response_json:
@@ -290,7 +298,12 @@ def create_netbox_device(device: device_model, sync_output: sync_output_model):
         "Accept": "application/json",
     }
     data_netbox = device.create_data_netbox()
-    response = requests.post(netbox_ip + "api/dcim/devices/", headers=headers, json=data_netbox)
+    response = requests.post(
+        netbox_ip + "api/dcim/devices/",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
+        json=data_netbox,
+    )
     if response.status_code == 201:
         sync_output.add_netbox_output(f"Device {device.name} created successfully in Netbox.")
         log.logger.info("Device %s created successfully in Netbox.", device.name)
@@ -339,7 +352,12 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
         return
     data_zabbix = device.create_data_zabbix(hostgroupIds=hostgroupids, templateids=templateids)
     log.logger.info("Data to be sent to Zabbix: %s", data_zabbix)
-    response = requests.post(zabbix_ip + "api_jsonrpc.php", headers=headers, json=data_zabbix)
+    response = requests.post(
+        zabbix_ip + "api_jsonrpc.php",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
+        json=data_zabbix,
+    )
     reponse_json = response.json()
     if "error" in reponse_json:
         sync_output.add_zabbix_output(
@@ -394,6 +412,7 @@ def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
         response = requests.post(
             zabbix_ip + "api_jsonrpc.php",
             headers=headers,
+            timeout=REQUEST_TIMEOUT,
             json={
                 "jsonrpc": "2.0",
                 "method": "hostgroup.get",
@@ -425,6 +444,7 @@ def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
             response = requests.post(
                 zabbix_ip + "api_jsonrpc.php",
                 headers=headers,
+                timeout=REQUEST_TIMEOUT,
                 json={
                     "jsonrpc": "2.0",
                     "method": "hostgroup.create",

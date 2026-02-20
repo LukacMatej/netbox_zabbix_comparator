@@ -18,7 +18,6 @@ Functions:
 """
 
 from app.device.models.interface_model import Interface as InterfaceModel
-from app.device.service import device_service as ds
 
 
 class Device:

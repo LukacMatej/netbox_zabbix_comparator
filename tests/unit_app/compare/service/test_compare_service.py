@@ -49,7 +49,7 @@ class CompareServiceTests(unittest.TestCase):
         self.assertIsInstance(zb_only, list)
 
     @patch("app.compare.service.compare_service.compare_devices", return_value=([], [], []))
-    @patch("app.compare.service.compare_service.ds.map_port_type_device")
+    @patch("app.compare.service.compare_service.device_service.map_port_type_device")
     @patch("app.compare.service.compare_service.device_service.get_zb_devices")
     @patch("app.compare.service.compare_service.device_service.get_nb_devices")
     def test_compare_success(self, get_nb_mock, get_zb_mock, map_mock, compare_devices_mock):
