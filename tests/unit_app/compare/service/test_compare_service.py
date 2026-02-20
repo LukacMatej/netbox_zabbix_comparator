@@ -1,3 +1,5 @@
+"""Unit tests for compare service diff and orchestration logic."""
+
 import unittest
 from unittest.mock import patch
 
@@ -19,7 +21,10 @@ def _device(name: str, address: str, dns: str, port_type: str = "1") -> Device:
 
 
 class CompareServiceTests(unittest.TestCase):
+    """Tests for difference detection and compare flow."""
+
     def test_find_differences_identical(self):
+        """Identical devices should return equal tag and no differences list."""
         nb = _device("r1", "10.0.0.1", "r1.local")
         zb = _device("r1", "10.0.0.1", "r1.local")
 
@@ -29,6 +34,7 @@ class CompareServiceTests(unittest.TestCase):
         self.assertGreater(len(same), 0)
 
     def test_find_differences_name_and_address(self):
+        """Different name/address should be listed in difference output."""
         nb = _device("r1", "10.0.0.1", "r1.local")
         zb = _device("r2", "10.0.0.2", "r2.local")
 
@@ -38,6 +44,7 @@ class CompareServiceTests(unittest.TestCase):
         self.assertTrue(any("address" in item for item in different))
 
     def test_compare_devices_lists(self):
+        """Unmatched devices should be reported in source-specific lists."""
         nb1 = _device("n1", "10.0.0.1", "n1.local")
         nb2 = _device("n2", "10.0.0.2", "n2.local")
         zb1 = _device("z1", "10.0.0.9", "z1.local")
@@ -53,6 +60,7 @@ class CompareServiceTests(unittest.TestCase):
     @patch("app.compare.service.compare_service.device_service.get_zb_devices")
     @patch("app.compare.service.compare_service.device_service.get_nb_devices")
     def test_compare_success(self, get_nb_mock, get_zb_mock, map_mock, compare_devices_mock):
+        """Compare orchestrator should map port types and delegate to compare_devices."""
         nb = [_device("n1", "10.0.0.1", "n1.local")]
         zb = [_device("z1", "10.0.0.2", "z1.local")]
         get_nb_mock.return_value = nb
@@ -65,6 +73,7 @@ class CompareServiceTests(unittest.TestCase):
 
     @patch("app.compare.service.compare_service.device_service.get_nb_devices", return_value="boom")
     def test_compare_nb_error(self, _get_nb):
+        """Compare should return Exception when NetBox retrieval returns an error string."""
         result = cs.compare("http://nb", "nk", "http://zb", "zk")
         self.assertIsInstance(result, Exception)
 

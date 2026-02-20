@@ -1,3 +1,5 @@
+"""Unit tests for device service API helpers and formatters."""
+
 import unittest
 from unittest.mock import Mock, patch
 import requests
@@ -10,6 +12,8 @@ from app.device.service import device_service as ds
 
 
 class DeviceServiceTests(unittest.TestCase):
+    """Tests for utility functions and external API handling in device service."""
+
     def _device(self, name: str, ip: str = "10.0.0.1", port_type: str = "1") -> Device:
         return Device(
             name=name,
@@ -21,6 +25,7 @@ class DeviceServiceTests(unittest.TestCase):
         )
 
     def test_format_helpers(self):
+        """Formatting helpers should map addresses, status, MAC and port types correctly."""
         self.assertEqual(ds.format_address("1.2.3.4/24"), "1.2.3.4")
         self.assertEqual(ds.format_status("active"), "Active")
         self.assertEqual(ds.format_status("offline"), "Disabled")
@@ -30,6 +35,7 @@ class DeviceServiceTests(unittest.TestCase):
         self.assertEqual(ds.uniform_port_type("2"), "SNMP")
 
     def test_map_port_type_device_and_uniform_output_text(self):
+        """Port type mapping and output text normalization should update list values."""
         nb = [self._device("nb", port_type="1")]
         zb = [self._device("zb", port_type="SNMP")]
         ds.map_port_type_device(nb, zb)
@@ -44,6 +50,7 @@ class DeviceServiceTests(unittest.TestCase):
     @patch("app.device.service.device_service.requests.post")
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb", "ZABBIX_KEY": "k"}, clear=False)
     def test_find_hostinterface_id_success(self, post_mock):
+        """Host interface lookup should return parsed interface ID on success."""
         response = Mock()
         response.json.return_value = {"result": [{"interfaceid": "55"}]}
         response.raise_for_status.return_value = None
@@ -54,12 +61,14 @@ class DeviceServiceTests(unittest.TestCase):
     @patch("app.device.service.device_service.requests.post")
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb", "ZABBIX_KEY": "k"}, clear=False)
     def test_find_hostinterface_id_request_error(self, post_mock):
+        """Host interface lookup should return -1 on request exception."""
         post_mock.side_effect = requests.exceptions.RequestException("network")
         self.assertEqual(ds.find_hostinterface_id("10"), -1)
 
     @patch("app.device.service.device_service.requests.get")
     @patch.dict("os.environ", {"NETBOX_IP": "http://nb", "NETBOX_KEY": "k"}, clear=False)
     def test_find_nb_identifiers(self, get_mock):
+        """NetBox site/type/role helper lookups should return resource IDs."""
         response = Mock(status_code=200)
         response.json.return_value = {"count": 1, "results": [{"id": 7}]}
         get_mock.return_value = response
@@ -70,6 +79,7 @@ class DeviceServiceTests(unittest.TestCase):
 
     @patch("app.device.service.device_service.requests.post")
     def test_get_nb_devices_success(self, post_mock):
+        """NetBox device retrieval should map API JSON into device models."""
         response = Mock(status_code=200)
         response.request = Mock(method="POST", url="http://nb/graphql", headers={}, body="{}")
         response.json.return_value = {
@@ -103,6 +113,7 @@ class DeviceServiceTests(unittest.TestCase):
 
     @patch("app.device.service.device_service.requests.post")
     def test_get_nb_devices_error_status(self, post_mock):
+        """NetBox device retrieval should return an error string on non-200 response."""
         response = Mock(status_code=500, text="boom")
         response.request = Mock(method="POST", url="u", headers={}, body="{}")
         post_mock.return_value = response
@@ -113,6 +124,7 @@ class DeviceServiceTests(unittest.TestCase):
 
     @patch("app.device.service.device_service.requests.post")
     def test_get_zb_devices_success(self, post_mock):
+        """Zabbix device retrieval should parse successful host payload."""
         response = Mock()
         response.raise_for_status.return_value = None
         response.json.return_value = {
@@ -135,6 +147,7 @@ class DeviceServiceTests(unittest.TestCase):
 
     @patch("app.device.service.device_service.requests.post")
     def test_get_zb_devices_api_error(self, post_mock):
+        """Zabbix device retrieval should return error string on API error field."""
         response = Mock()
         response.raise_for_status.return_value = None
         response.json.return_value = {"error": "bad"}

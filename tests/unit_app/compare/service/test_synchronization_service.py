@@ -1,3 +1,5 @@
+"""Unit tests for synchronization service helper and sync routines."""
+
 import unittest
 from unittest.mock import Mock, patch
 
@@ -21,9 +23,12 @@ def _device(name: str, address: str = "10.0.0.1", dns: str = "host.local") -> De
 
 
 class SynchronizationServiceTests(unittest.TestCase):
+    """Behavior tests for hostgroup/template lookup and sync operations."""
+
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
     @patch("app.compare.service.synchronization_service.requests.post")
     def test_find_hostgroup_id_success(self, post_mock):
+        """Hostgroup ID should be parsed from successful API response."""
         response = Mock(status_code=200)
         response.json.return_value = {"result": [{"groupid": "24"}]}
         post_mock.return_value = response
@@ -32,6 +37,7 @@ class SynchronizationServiceTests(unittest.TestCase):
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
     @patch("app.compare.service.synchronization_service.requests.post")
     def test_find_template_ids_success(self, post_mock):
+        """Template ID should be parsed from successful API response."""
         response = Mock(status_code=200)
         response.json.return_value = {"result": [{"templateid": "101"}]}
         post_mock.return_value = response
@@ -40,6 +46,7 @@ class SynchronizationServiceTests(unittest.TestCase):
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
     @patch("app.compare.service.synchronization_service.requests.post")
     def test_find_zabbix_hostgroup_ids_create_if_missing(self, post_mock):
+        """Missing hostgroup should trigger create call and return new ID."""
         first = Mock(status_code=200)
         first.text = "not found"
         first.json.return_value = {"result": []}
@@ -56,6 +63,7 @@ class SynchronizationServiceTests(unittest.TestCase):
         "app.compare.service.synchronization_service.find_zabbix_hostgroup_ids", return_value=[-1]
     )
     def test_create_zabbix_device_hostgroup_error(self, _hostgroup_mock):
+        """Hostgroup lookup failure should append zabbix output error."""
         out = SyncOutput()
         ss.create_zabbix_device(_device("r1"), out)
         self.assertTrue(any("not found" in item for item in out.synchronization_output_zabbix))
@@ -67,6 +75,7 @@ class SynchronizationServiceTests(unittest.TestCase):
         "app.compare.service.synchronization_service.find_zabbix_hostgroup_ids", return_value=[24]
     )
     def test_create_zabbix_device_success(self, _hg_mock, _tpl_mock, post_mock):
+        """Successful create should append success message to zabbix output."""
         response = Mock(status_code=200)
         response.json.return_value = {"result": {"hostids": ["1"]}}
         post_mock.return_value = response
@@ -80,6 +89,7 @@ class SynchronizationServiceTests(unittest.TestCase):
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
     @patch("app.compare.service.synchronization_service.requests.post")
     def test_apply_differences_missing_hostid(self, post_mock):
+        """Missing hostid should prevent update and append difference output error."""
         host_get = Mock(status_code=200)
         host_get.json.return_value = {"result": []}
         post_mock.return_value = host_get
@@ -97,6 +107,7 @@ class SynchronizationServiceTests(unittest.TestCase):
     @patch("app.compare.service.synchronization_service.apply_differences")
     @patch("app.compare.service.synchronization_service.create_zabbix_device")
     def test_sync_netbox_zabbix_devices(self, create_mock, apply_mock):
+        """Sync routine should call create and apply functions when appropriate."""
         nb = [_device("only-in-nb")]
         zb = [_device("different-name")]
         diff = [DeviceDifference(nb[0], zb[0], (["name"], []))]

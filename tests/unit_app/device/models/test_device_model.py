@@ -1,3 +1,5 @@
+"""Unit tests for device model helper and payload methods."""
+
 import unittest
 
 from app.device.models.address_model import Address
@@ -13,10 +15,13 @@ from app.device.models.interface_model import Interface
 
 
 class DeviceModelTests(unittest.TestCase):
+    """Tests for status helpers, interface mapping, and payload generation."""
+
     def _iface(self, port_type: str = "1") -> Interface:
         return Interface("eth0", [Address("10.10.10.1/24", "host.local")], "aa", port_type)
 
     def test_status_and_port_type_helpers(self):
+        """Status and port-type helper functions should map expected values."""
         self.assertEqual(format_nb_status("Active"), "active")
         self.assertEqual(format_nb_status("Unknown"), "offline")
         self.assertEqual(map_port_type("SNMP"), "2")
@@ -25,6 +30,7 @@ class DeviceModelTests(unittest.TestCase):
         self.assertEqual(normalize_status("other"), "Inactive")
 
     def test_dict_interfaces_helpers(self):
+        """Interface conversion helpers should include expected keys and values."""
         interfaces = [self._iface("1"), self._iface("2")]
         create_payload = dict_interfaces_zb(interfaces)
         update_payload = dict_interfaces_zb_id(interfaces, interface_id=99)
@@ -35,6 +41,7 @@ class DeviceModelTests(unittest.TestCase):
         self.assertEqual(update_payload[0]["interfaceid"], 99)
 
     def test_create_and_update_data_zabbix(self):
+        """Device should produce valid Zabbix create and update payloads."""
         device = Device(
             "r1",
             [self._iface("SNMP")],

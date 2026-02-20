@@ -1,3 +1,5 @@
+"""Unit tests for difference model container behavior."""
+
 import unittest
 
 from app.device.models.address_model import Address
@@ -7,7 +9,10 @@ from app.device.models.interface_model import Interface
 
 
 class DifferenceModelTests(unittest.TestCase):
+    """Tests for DeviceDifference initialization and string output."""
+
     def test_init_and_str(self):
+        """Difference model should preserve devices and difference tuples."""
         nb = Device(
             "nb", [Interface("eth0", [Address("1.1.1.1", "nb")], "", "1")], "g", "", [], "Active"
         )

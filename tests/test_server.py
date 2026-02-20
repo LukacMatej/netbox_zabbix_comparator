@@ -1,3 +1,5 @@
+"""Tests for Flask routes and parser initialization in `server.py`."""
+
 import unittest
 from unittest.mock import patch
 
@@ -20,17 +22,22 @@ def _device(name: str) -> Device:
 
 
 class ServerRoutesTests(unittest.TestCase):
+    """Route-level tests for compare and synchronization endpoints."""
+
     def setUp(self) -> None:
+        """Create Flask test client."""
         self.client = server.app.test_client()
 
     @patch("server.render_template", return_value="ok")
     def test_root_route(self, _render):
+        """Root route returns success and renders template."""
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data.decode(), "ok")
 
     @patch("server.ct.compare", return_value=Exception("boom"))
     def test_run_compare_error(self, _compare):
+        """Compare route returns 500 when compare service raises error output."""
         response = self.client.get("/RunCompare")
         self.assertEqual(response.status_code, 500)
         self.assertIn("boom", response.data.decode())
@@ -39,6 +46,7 @@ class ServerRoutesTests(unittest.TestCase):
     @patch("server.ds.uniform_output_text")
     @patch("server.ct.compare")
     def test_run_compare_success(self, compare_mock, uniform_mock, _render):
+        """Compare route returns rendered output for successful comparison."""
         nb = _device("nb")
         zb = _device("zb")
         diff = DeviceDifference(nb, zb, (["name"], ["status"]))
@@ -54,6 +62,7 @@ class ServerRoutesTests(unittest.TestCase):
     @patch("server.ss.sync_netbox_zabbix_devices")
     @patch("server.ct.compare")
     def test_run_compare_sync_success(self, compare_mock, sync_mock, uniform_mock, _render):
+        """Sync route renders result and triggers synchronization service."""
         nb = _device("nb")
         zb = _device("zb")
         diff = DeviceDifference(nb, zb, (["name"], ["status"]))
@@ -67,6 +76,7 @@ class ServerRoutesTests(unittest.TestCase):
         uniform_mock.assert_called_once()
 
     def test_parser_init_has_flags(self):
+        """Parser exposes development/debug flags."""
         parser = server.parser_init()
         args = parser.parse_args(["--development", "--debug"])
         self.assertTrue(args.development)
