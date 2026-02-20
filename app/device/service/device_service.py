@@ -69,15 +69,15 @@ def find_hostinterface_id(hostid: str) -> int:
     try:
         response = requests.post(f"{zb_url}/api_jsonrpc.php", headers=headers, json=payload, timeout=10)
         response.raise_for_status()
-        log.logger.debug(f"Response from Zabbix API: {response.json()}")
+        log.logger.debug("Response from Zabbix API: %s", response.json())
         result = response.json()
         if "error" in result:
-            log.logger.error(f"Error in Zabbix API response: {result['error']}")
+            log.logger.error("Error in Zabbix API response: %s", result['error'])
             return -1
         interface = result.get("result", [])
         return int(interface[0]["interfaceid"]) if interface else -1
-    except Exception as e:
-        log.logger.error(f"Failed to find Zabbix interface ID for hostid {hostid}: {e}")
+    except requests.exceptions.RequestException as e:
+        log.logger.error("Failed to find Zabbix interface ID for hostid %s: %s", hostid, e)
     return -1
 
 def find_nb_site_id(site_name: str) -> int:
@@ -87,7 +87,7 @@ def find_nb_site_id(site_name: str) -> int:
     Returns:
         int: The ID of the site if found, otherwise -1.
     """
-    log.logger.info(f"Finding Netbox site ID for {site_name}.")
+    log.logger.info("Finding Netbox site ID for %s", site_name)
     nb_ip = os.environ.get("NETBOX_IP")
     nb_key = os.environ.get("NETBOX_KEY")
     headers = {
@@ -100,9 +100,9 @@ def find_nb_site_id(site_name: str) -> int:
         data = response.json()
         if data["count"] > 0:
             site_id = data["results"][0]["id"]
-            log.logger.info(f"Found Netbox site ID: {site_id} for {site_name}.")
+            log.logger.info("Found Netbox site ID: %s for %s.", site_id, site_name)
             return int(site_id)
-    log.logger.error(f"Failed to find Netbox site ID for {site_name}: {response.text}")
+    log.logger.error("Failed to find Netbox site ID for %s: %s", site_name, response.text)
     return -1
 
 def find_nb_device_type_id(device_type: str) -> int:
@@ -112,7 +112,7 @@ def find_nb_device_type_id(device_type: str) -> int:
     Returns:
         int: The ID of the device type if found, otherwise -1.
     """
-    log.logger.info(f"Finding Netbox device type ID for {device_type}.")
+    log.logger.info("Finding Netbox device type ID for %s.", device_type)
     nb_ip = os.environ.get("NETBOX_IP")
     nb_key = os.environ.get("NETBOX_KEY")
     headers = {
@@ -125,9 +125,9 @@ def find_nb_device_type_id(device_type: str) -> int:
         data = response.json()
         if data["count"] > 0:
             device_type_id = data["results"][0]["id"]
-            log.logger.info(f"Found Netbox device type ID: {device_type_id} for {device_type}.")
+            log.logger.info("Found Netbox device type ID: %s for %s.", device_type_id, device_type)
             return int(device_type_id)
-    log.logger.error(f"Failed to find Netbox device type ID for {device_type}: {response.text}")
+    log.logger.error("Failed to find Netbox device type ID for %s: %s", device_type, response.text)
     return -1
 
 def find_nb_device_role_id(device_role: str) -> int:
@@ -137,7 +137,7 @@ def find_nb_device_role_id(device_role: str) -> int:
     Returns:
         int: The ID of the device role if found, otherwise -1.
     """
-    log.logger.info(f"Finding Netbox device role ID for {device_role}.")
+    log.logger.info("Finding Netbox device role ID for %s.", device_role)
     nb_ip = os.environ.get("NETBOX_IP")
     nb_key = os.environ.get("NETBOX_KEY")
     headers = {
@@ -150,9 +150,9 @@ def find_nb_device_role_id(device_role: str) -> int:
         data = response.json()
         if data["count"] > 0:
             device_role_id = data["results"][0]["id"]
-            log.logger.info(f"Found Netbox device role ID: {device_role_id} for {device_role}.")
+            log.logger.info("Found Netbox device role ID: %s for %s.", device_role_id, device_role)
             return int(device_role_id)
-    log.logger.error(f"Failed to find Netbox device role ID for {device_role}: {response.text}")
+    log.logger.error("Failed to find Netbox device role ID for %s: %s", device_role, response.text)
     return -1
 
 def format_address(address: str) -> str:
@@ -228,7 +228,7 @@ def format_mac(mac: str) -> str:
     mac_clean = re.sub(r'[^0-9A-Fa-f]', '', mac)
     return f"{mac_clean[0:4]}.{mac_clean[4:8]}.{mac_clean[8:12]}".lower()
 
-def print_differences(difference_model: list[difference_model]) -> str:
+def print_differences(difference_models: list[difference_model]) -> str:
     """
     Generate a formatted string report of device differences and similarities.
     Iterates through a list of difference models and creates a formatted text
@@ -242,7 +242,7 @@ def print_differences(difference_model: list[difference_model]) -> str:
       differences, and similarities for each device pair.
     """
     txt_builder: str = ""
-    for differ in difference_model:
+    for differ in difference_models:
         txt_builder += f"Netbox device: {print_device(differ.nb_device)}\n"
         txt_builder += f"Zabbix device: {print_device(differ.zb_device)}\n"
         txt_builder += "Differences:\n"
@@ -352,7 +352,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
       - MAC addresses are formatted using the format_mac() utility function.
       - Device status is formatted using the format_status() utility function.
     """
-    log.logger.info(f"Fetching Netbox devices from {ip}.")
+    log.logger.info("Fetching Netbox devices from %s.", ip)
     headers: dict[str, str] = {
         "Authorization": f"Token {key}",
         "Accept": "application/json" 
@@ -397,13 +397,14 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
         response: requests.Response = requests.post(
             ip,
             headers=headers,
-            json={"query": query}
+            json={"query": query},
+            timeout=10
         )
-        log.logger.debug(f"Request to Netbox API: {response.request.method} {response.request.url} with headers {response.request.headers} and body {response.request.body}")
+        log.logger.debug("Request to Netbox API: %s %s  with headers %s and body %s", response.request.method, response.request.url, response.request.headers, response.request.body)
         device_list: list[device_model] = []
         log.logger.debug(response)
         if response.status_code != 200:
-            log.logger.error(f"Failed to fetch devices from Netbox: {response.text}")
+            log.logger.error("Failed to fetch devices from Netbox: %s", response.text)
             return f"Failed to fetch devices from Netbox: {response.text}"
         if response.status_code == 200:
             data = response.json()
@@ -483,13 +484,13 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
     }
     try:
         zb_device_list: list[device_model] = []
-        log.logger.debug(f"Requesting Zabbix: {ip} devices with payload: {payload} and headers: {headers}")
-        response: requests.Response = requests.post(ip, headers=headers, json=payload)
+        log.logger.debug("Requesting Zabbix: %s devices with payload: %s and headers: %s", ip, payload, headers)
+        response: requests.Response = requests.post(ip, headers=headers, json=payload, timeout=10)
         log.logger.debug(response)
         response.raise_for_status()
         result = response.json()
         if "error" in result:
-            log.logger.error(f"Error in Zabbix API response: {result['error']}")
+            log.logger.error("Error in Zabbix API response: %s", result['error'])
             return f"Error in Zabbix API response: {result['error']}"
         log.logger.debug(result)
         for host in result["result"]:
@@ -512,10 +513,10 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
                 ) for interface in host["interfaces"]]
               ))
             except KeyError as e:
-                log.logger.error(f"Missing expected key in Zabbix host data: {e}")
+                log.logger.error("Missing expected key in Zabbix host data: %s", e)
                 continue
     except requests.exceptions.RequestException as e:
-        log.logger.error(f"Request failed: {e}")
+        log.logger.error("Request failed: %s", e)
         return f"Request failed: {e}"
     return zb_device_list
 
@@ -574,4 +575,4 @@ def uniform_output_text(differences: list[device_difference_model], netbox_devic
                 if isinstance(device.templates, list):
                     device.templates = ", ".join(str(template) for template in device.templates) if device.templates else ""
     except Exception as e:
-        log.logger.error(f"Error uniforming output text: {e}")
+        log.logger.error("Error uniforming output text: %s", e)

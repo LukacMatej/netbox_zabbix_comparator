@@ -2,6 +2,7 @@ image: docker:latest
 
 stages:
   - lint
+  - test
   - docker_rm
   - docker_build
   - publish
@@ -99,5 +100,15 @@ lint:
     - pip install pre-commit pylint
   script:
     - pre-commit run --all-files
+  except:
+    - tags
+
+tests_devel:
+  stage: test
+  image: python:3.11
+  before_script:
+    - pip install -r requirements.txt
+  script:
+    - python -m unittest discover -s tests -p 'test_*.py' -v
   except:
     - tags
