@@ -82,7 +82,13 @@ class DeviceServiceTests(unittest.TestCase):
                         "config_context": {"zabbix": {"templates": ["tpl"], "port_type": "SNMP"}},
                         "primary_ip4": {"address": "10.0.0.1/24", "dns_name": "sw1.local"},
                         "interfaces": [
-                            {"name": "eth0", "mac_addresses": [{"mac_address": "aa:bb:cc:dd:ee:ff"}], "ip_addresses": [{"address": "10.0.0.1/24", "dns_name": "sw1.local"}]}
+                            {
+                                "name": "eth0",
+                                "mac_addresses": [{"mac_address": "aa:bb:cc:dd:ee:ff"}],
+                                "ip_addresses": [
+                                    {"address": "10.0.0.1/24", "dns_name": "sw1.local"}
+                                ],
+                            }
                         ],
                     }
                 ]

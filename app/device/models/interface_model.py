@@ -12,7 +12,9 @@ Methods:
     __str__: Returns a string representation of the interface.
 
 """
+
 from app.device.models.address_model import Address as addr
+
 
 class Interface:
     """

@@ -16,8 +16,10 @@ Functions:
     dict_interfaces_zb_id(interfaces: list[InterfaceModel], interface_id) -> list[dict]:
         Convert InterfaceModel objects to Zabbix API interface dictionaries for host updates.
 """
+
 from app.device.models.interface_model import Interface as InterfaceModel
 from app.device.service import device_service as ds
+
 
 class Device:
     """
@@ -39,7 +41,8 @@ class Device:
             Returns a string representation of the device containing all its attributes.
         update_data_zabbix(hostid, interface_id, hostgroupIds, templateids, name) -> dict:
             Generates a Zabbix API request dictionary for updating an existing host.
-            Handles various hostgroup ID formats and constructs proper group and template configurations.
+            Handles various hostgroup ID formats
+            and constructs proper group and template configurations.
         create_data_zabbix(hostgroupIds, templateids) -> dict:
             Generates a Zabbix API request dictionary for creating a new host.
             Processes hostgroup IDs and template IDs into the required Zabbix format.
@@ -52,7 +55,9 @@ class Device:
     templates: list[str] = []
     status: str = ""
 
-    def __init__(self, name, interfaces, hostgroup, description, templates, status) -> None:
+    def __init__(
+        self, name, interfaces, hostgroup, description, templates, status
+    ) -> None:
         self.name = name
         self.interfaces = interfaces
         self.hostgroup = hostgroup
@@ -61,7 +66,10 @@ class Device:
         self.status = normalize_status(status)
 
     def __str__(self) -> str:
-        return f"{self.name} {self.interfaces} {self.hostgroup} {self.description} {self.templates} {self.status}"
+        return (
+            f"{self.name} {self.interfaces} {self.hostgroup} "
+            f"{self.description} {self.templates} {self.status}"
+        )
 
     def update_data_zabbix(self, hostid, interface_id, hostgroupIds, templateids, name) -> dict:
         """Creates a dictionary representation of the device for Zabbix API."""
@@ -73,8 +81,8 @@ class Device:
                         groups.append({"groupid": int(gid)})
                     elif isinstance(gid, list) and gid:
                         groups.append({"groupid": int(gid[0])})
-                    elif isinstance(gid, dict) and 'groupid' in gid:
-                        groups.append({"groupid": int(gid['groupid'])})
+                    elif isinstance(gid, dict) and "groupid" in gid:
+                        groups.append({"groupid": int(gid["groupid"])})
                 except (ValueError, TypeError):
                     continue
         return {
@@ -83,14 +91,19 @@ class Device:
             "params": {
                 "hostid": hostid,
                 "name": name,
-                "interfaces": dict_interfaces_zb_id(self.interfaces,interface_id=interface_id) if self.interfaces else [],
+                "interfaces": (
+                    dict_interfaces_zb_id(self.interfaces, interface_id=interface_id)
+                    if self.interfaces
+                    else []
+                ),
                 "groups": groups,
                 "description": self.description,
                 "templates": [{"templateid": tempId} for tempId in templateids if tempId],
-                "status": 0 if self.status == "Active" else 1
+                "status": 0 if self.status == "Active" else 1,
             },
-            "id": 1
+            "id": 1,
         }
+
     def create_data_zabbix(self, hostgroupIds, templateids) -> dict:
         """Creates a dictionary representation of the device for Zabbix API."""
         groups = []
@@ -101,8 +114,8 @@ class Device:
                         groups.append({"groupid": int(gid)})
                     elif isinstance(gid, list) and gid:
                         groups.append({"groupid": int(gid[0])})
-                    elif isinstance(gid, dict) and 'groupid' in gid:
-                        groups.append({"groupid": int(gid['groupid'])})
+                    elif isinstance(gid, dict) and "groupid" in gid:
+                        groups.append({"groupid": int(gid["groupid"])})
                 except (ValueError, TypeError):
                     continue
         return {
@@ -114,16 +127,17 @@ class Device:
                 "groups": groups,
                 "description": self.description,
                 "templates": [{"templateid": tempId} for tempId in templateids if tempId],
-                "status": 0 if self.status == "Active" else 1
+                "status": 0 if self.status == "Active" else 1,
             },
-            "id": 1
+            "id": 1,
         }
 
     # def create_data_netbox(self) -> dict:
     #     """Creates a dictionary representation of the device for Netbox API."""
     #     return {
     #         "name": self.name,
-    #         "device_type": ds.find_nb_device_type_id("Catalyst 2970 Series"), # Replace with actual device type
+    #         "device_type": ds.find_nb_device_type_id("Catalyst 2970 Series"),
+    #         # Replace with actual device type
     #         "role": ds.find_nb_device_role_id(str(self.hostgroup).split("/")[2]),
     #         "site": ds.find_nb_site_id(str(self.hostgroup).split("/",maxsplit=1)[0]),
     #         "status": format_nb_status(self.status),
@@ -135,6 +149,7 @@ class Device:
     #                 }
     #         }
     #     }
+
 
 def format_nb_status(status: str) -> str:
     """
@@ -165,9 +180,10 @@ def format_nb_status(status: str) -> str:
         "Staged": "staged",
         "Failed": "failed",
         "Inventory": "inventory",
-        "Decommissioning": "decommissioning"
+        "Decommissioning": "decommissioning",
     }
     return status_map.get(status, "offline")
+
 
 def map_port_type(port_type: str) -> str:
     """Maps the port type to a Netbox compatible format."""
@@ -181,9 +197,10 @@ def map_port_type(port_type: str) -> str:
         "1": "1",
         "2": "2",
         "3": "3",
-        "4": "4"
+        "4": "4",
     }
     return port_type_map.get(port_type, "1")
+
 
 def normalize_status(status: str) -> str:
     """
@@ -210,59 +227,79 @@ def normalize_status(status: str) -> str:
         return "Active"
     return "Inactive"
 
+
 def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
     """Converts a list of InterfaceModel objects to a list of dictionaries."""
     result = []
     for index, interface in enumerate(interfaces):
         if interface.port_type in ("1", "Agent"):
-            result.append({
-            "type": map_port_type(interface.port_type),
-            "main": 1 if index == 0 else 0,
-            "useip": 1,
-            "ip": str(interface.addresses[0].address).split("/",maxsplit=1)[0] if interface.addresses else "",
-            "dns": interface.addresses[0].dns_name if interface.addresses else "",
-            "port": 161
-        })
-        elif interface.port_type in ("2", "SNMP"):
-            result.append({
-            "type": map_port_type(interface.port_type),
-            "main": 1 if index == 0 else 0,
-            "useip": 1,
-            "ip": str(interface.addresses[0].address).split("/",maxsplit=1)[0] if interface.addresses else "",
-            "dns": interface.addresses[0].dns_name if interface.addresses else "",
-            "port": 161,
-            "details": {
-                "version": 3
-            }
-        })
-        else:
-            result.append({
-                "type": map_port_type(interface.port_type),
-                "main": 1 if index == 0 else 0,
-                "useip": 1,
-                "ip": str(interface.addresses[0].address).split("/",maxsplit=1)[0] if interface.addresses else "",
-                "dns": interface.addresses[0].dns_name if interface.addresses else "",
-                "port": 161,
-                "details": {
-                    "version": 3
+            result.append(
+                {
+                    "type": map_port_type(interface.port_type),
+                    "main": 1 if index == 0 else 0,
+                    "useip": 1,
+                    "ip": (
+                        str(interface.addresses[0].address).split("/", maxsplit=1)[0]
+                        if interface.addresses
+                        else ""
+                    ),
+                    "dns": interface.addresses[0].dns_name if interface.addresses else "",
+                    "port": 161,
                 }
-            })
+            )
+        elif interface.port_type in ("2", "SNMP"):
+            result.append(
+                {
+                    "type": map_port_type(interface.port_type),
+                    "main": 1 if index == 0 else 0,
+                    "useip": 1,
+                    "ip": (
+                        str(interface.addresses[0].address).split("/", maxsplit=1)[0]
+                        if interface.addresses
+                        else ""
+                    ),
+                    "dns": interface.addresses[0].dns_name if interface.addresses else "",
+                    "port": 161,
+                    "details": {"version": 3},
+                }
+            )
+        else:
+            result.append(
+                {
+                    "type": map_port_type(interface.port_type),
+                    "main": 1 if index == 0 else 0,
+                    "useip": 1,
+                    "ip": (
+                        str(interface.addresses[0].address).split("/", maxsplit=1)[0]
+                        if interface.addresses
+                        else ""
+                    ),
+                    "dns": interface.addresses[0].dns_name if interface.addresses else "",
+                    "port": 161,
+                    "details": {"version": 3},
+                }
+            )
     return result
 
-def dict_interfaces_zb_id(interfaces: list[InterfaceModel],interface_id) -> list[dict]:
+
+def dict_interfaces_zb_id(interfaces: list[InterfaceModel], interface_id) -> list[dict]:
     """Converts a list of InterfaceModel objects to a list of dictionaries."""
     result = []
     for index, interface in enumerate(interfaces):
-        result.append({
-            "type": map_port_type(interface.port_type),
-            "interfaceid": interface_id,
-            "main": 1 if index == 0 else 0,
-            "useip": 1,
-            "ip": str(interface.addresses[0].address).split("/",maxsplit=1)[0] if interface.addresses else "",
-            "dns": interface.addresses[0].dns_name if interface.addresses else "",
-            "port": 161,
-            "details": {
-                "version": 3
+        result.append(
+            {
+                "type": map_port_type(interface.port_type),
+                "interfaceid": interface_id,
+                "main": 1 if index == 0 else 0,
+                "useip": 1,
+                "ip": (
+                    str(interface.addresses[0].address).split("/", maxsplit=1)[0]
+                    if interface.addresses
+                    else ""
+                ),
+                "dns": interface.addresses[0].dns_name if interface.addresses else "",
+                "port": 161,
+                "details": {"version": 3},
             }
-        })
+        )
     return result

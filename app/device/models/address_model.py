@@ -7,6 +7,8 @@ Attributes:
     dns_name (str): The DNS name associated with the address.
 
 """
+
+
 class Address:
     """
     Represents a network address with its associated DNS name.
@@ -27,7 +29,4 @@ class Address:
 
     def to_dict(self) -> dict:
         """Creates a dictionary representation of the address."""
-        return {
-            "address": self.address,
-            "dns_name": self.dns_name
-        }
+        return {"address": self.address, "dns_name": self.dns_name}

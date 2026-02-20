@@ -52,7 +52,9 @@ class SynchronizationServiceTests(unittest.TestCase):
         self.assertEqual(result, [50])
 
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
-    @patch("app.compare.service.synchronization_service.find_zabbix_hostgroup_ids", return_value=[-1])
+    @patch(
+        "app.compare.service.synchronization_service.find_zabbix_hostgroup_ids", return_value=[-1]
+    )
     def test_create_zabbix_device_hostgroup_error(self, _hostgroup_mock):
         out = SyncOutput()
         ss.create_zabbix_device(_device("r1"), out)
@@ -61,7 +63,9 @@ class SynchronizationServiceTests(unittest.TestCase):
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
     @patch("app.compare.service.synchronization_service.requests.post")
     @patch("app.compare.service.synchronization_service.find_template_ids", return_value=200)
-    @patch("app.compare.service.synchronization_service.find_zabbix_hostgroup_ids", return_value=[24])
+    @patch(
+        "app.compare.service.synchronization_service.find_zabbix_hostgroup_ids", return_value=[24]
+    )
     def test_create_zabbix_device_success(self, _hg_mock, _tpl_mock, post_mock):
         response = Mock(status_code=200)
         response.json.return_value = {"result": {"hostids": ["1"]}}
@@ -69,7 +73,9 @@ class SynchronizationServiceTests(unittest.TestCase):
 
         out = SyncOutput()
         ss.create_zabbix_device(_device("r1"), out)
-        self.assertTrue(any("created successfully" in item for item in out.synchronization_output_zabbix))
+        self.assertTrue(
+            any("created successfully" in item for item in out.synchronization_output_zabbix)
+        )
 
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
     @patch("app.compare.service.synchronization_service.requests.post")
@@ -84,7 +90,9 @@ class SynchronizationServiceTests(unittest.TestCase):
         out = SyncOutput()
 
         ss.apply_differences(diff, out)
-        self.assertTrue(any("cannot update device" in item for item in out.synchronization_output_differences))
+        self.assertTrue(
+            any("cannot update device" in item for item in out.synchronization_output_differences)
+        )
 
     @patch("app.compare.service.synchronization_service.apply_differences")
     @patch("app.compare.service.synchronization_service.create_zabbix_device")

@@ -44,8 +44,12 @@ class DeviceModelTests(unittest.TestCase):
             "Active",
         )
 
-        create_data = device.create_data_zabbix(hostgroupIds=[1, "2", ["3"], {"groupid": "4"}, None, -1], templateids=[10, None])
-        update_data = device.update_data_zabbix(hostid="101", interface_id=77, hostgroupIds=[1], templateids=[10], name="r1-new")
+        create_data = device.create_data_zabbix(
+            hostgroupIds=[1, "2", ["3"], {"groupid": "4"}, None, -1], templateids=[10, None]
+        )
+        update_data = device.update_data_zabbix(
+            hostid="101", interface_id=77, hostgroupIds=[1], templateids=[10], name="r1-new"
+        )
 
         self.assertEqual(create_data["method"], "host.create")
         self.assertEqual(len(create_data["params"]["groups"]), 4)

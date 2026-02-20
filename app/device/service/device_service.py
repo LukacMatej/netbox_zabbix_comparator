@@ -7,22 +7,30 @@ This module provides utilities for:
 - Comparing and printing device differences
 - Mapping and uniforming device data structures
 Functions:
-  find_hostinterface_id(hostid: str) -> int: Finds the interface ID for a given Zabbix host ID.
+    find_hostinterface_id(hostid: str) -> int:
+        Finds the interface ID for a given Zabbix host ID.
   find_nb_site_id(site_name: str) -> int: Finds the Netbox site ID by site name.
-  find_nb_device_type_id(device_type: str) -> int: Finds the Netbox device type ID by device type name.
-  find_nb_device_role_id(device_role: str) -> int: Finds the Netbox device role ID by device role name.
+    find_nb_device_type_id(device_type: str) -> int:
+        Finds the Netbox device type ID by device type name.
+    find_nb_device_role_id(device_role: str) -> int:
+        Finds the Netbox device role ID by device role name.
   format_address(address: str) -> str: Extracts IP address from CIDR notation.
   formatStatus(status: str) -> str: Converts device status to standardized format.
   formatMac(mac: str) -> str: Formats MAC address to Cisco notation (XXXX.XXXX.XXXX).
   print_differences(difference_model: list) -> str: Formats device differences for display.
   print_devices(nb_device_list: list) -> str: Formats multiple devices for display.
   print_device(device: device_model) -> str: Formats a single device for display.
-  get_nb_devices(key: str, ip: str) -> list[device_model] | str: Retrieves devices from Netbox API.
-  get_zb_devices(key: str, ip: str) -> list[device_model] | str: Retrieves devices from Zabbix API.
+    get_nb_devices(key: str, ip: str) -> list[device_model] | str:
+        Retrieves devices from Netbox API.
+    get_zb_devices(key: str, ip: str) -> list[device_model] | str:
+        Retrieves devices from Zabbix API.
   formatPortType(port_type: str) -> str: Maps port type to Zabbix compatible format.
   uniformPortType(port_type: str) -> str: Converts port type to human-readable format.
-  mapPortTypeDevices(nb_devices: list, zb_devices: list) -> None: Uniforms port types across device lists.
-  uniformOutputText(differences: list, netbox_devices: list, zabbix_devices: list) -> None: 
+    mapPortTypeDevices(nb_devices: list, zb_devices: list) -> None:
+        Uniforms port types across device lists.
+    uniformOutputText(
+            differences: list, netbox_devices: list, zabbix_devices: list
+    ) -> None:
     Normalizes output formatting for differences and device lists.
 Dependencies:
   - requests: For HTTP communication with APIs
@@ -32,6 +40,7 @@ Dependencies:
   - app.logger: Logging module
 
 """
+
 import re
 import os
 import requests
@@ -39,8 +48,8 @@ from app.device.models.device_model import Device as device_model
 from app.device.models.interface_model import Interface as interface_model
 from app.device.models.address_model import Address as address_model
 from app.device.models.difference_model import DeviceDifference as difference_model
-from app.device.models.difference_model import DeviceDifference as device_difference_model
 from app.logger import logger_conf as log
+
 
 def find_hostinterface_id(hostid: str) -> int:
     """
@@ -54,31 +63,31 @@ def find_hostinterface_id(hostid: str) -> int:
     zb_url = os.environ.get("ZABBIX_IP")
     zb_key = os.environ.get("ZABBIX_KEY")
     headers = {
-      "Authorization": f"Bearer {zb_key}",
-      "Content-Type": "application/json-rpc",
+        "Authorization": f"Bearer {zb_key}",
+        "Content-Type": "application/json-rpc",
     }
     payload = {
-      "jsonrpc": "2.0",
-      "method": "hostinterface.get",
-      "params": {
-        "hostids": hostid,
-        "output": ["interfaceid"]
-      },
-      "id": 1
+        "jsonrpc": "2.0",
+        "method": "hostinterface.get",
+        "params": {"hostids": hostid, "output": ["interfaceid"]},
+        "id": 1,
     }
     try:
-        response = requests.post(f"{zb_url}/api_jsonrpc.php", headers=headers, json=payload, timeout=10)
+        response = requests.post(
+            f"{zb_url}/api_jsonrpc.php", headers=headers, json=payload, timeout=10
+        )
         response.raise_for_status()
         log.logger.debug("Response from Zabbix API: %s", response.json())
         result = response.json()
         if "error" in result:
-            log.logger.error("Error in Zabbix API response: %s", result['error'])
+            log.logger.error("Error in Zabbix API response: %s", result["error"])
             return -1
         interface = result.get("result", [])
         return int(interface[0]["interfaceid"]) if interface else -1
     except requests.exceptions.RequestException as e:
         log.logger.error("Failed to find Zabbix interface ID for hostid %s: %s", hostid, e)
     return -1
+
 
 def find_nb_site_id(site_name: str) -> int:
     """Finds the Netbox site ID based on the provided site name.
@@ -93,9 +102,11 @@ def find_nb_site_id(site_name: str) -> int:
     headers = {
         "Authorization": f"Token {nb_key}",
         "Content-Type": "application/json",
-        "Accept": "application/json"
+        "Accept": "application/json",
     }
-    response = requests.get(f"{nb_ip}/api/dcim/sites/?name={site_name}", headers=headers, timeout=10)
+    response = requests.get(
+        f"{nb_ip}/api/dcim/sites/?name={site_name}", headers=headers, timeout=10
+    )
     if response.status_code == 200:
         data = response.json()
         if data["count"] > 0:
@@ -104,6 +115,7 @@ def find_nb_site_id(site_name: str) -> int:
             return int(site_id)
     log.logger.error("Failed to find Netbox site ID for %s: %s", site_name, response.text)
     return -1
+
 
 def find_nb_device_type_id(device_type: str) -> int:
     """Finds the Netbox device type ID based on the provided device type.
@@ -118,9 +130,11 @@ def find_nb_device_type_id(device_type: str) -> int:
     headers = {
         "Authorization": f"Token {nb_key}",
         "Content-Type": "application/json",
-        "Accept": "application/json"
+        "Accept": "application/json",
     }
-    response = requests.get(f"{nb_ip}/api/dcim/device-types/?model={device_type}", headers=headers, timeout=10)
+    response = requests.get(
+        f"{nb_ip}/api/dcim/device-types/?model={device_type}", headers=headers, timeout=10
+    )
     if response.status_code == 200:
         data = response.json()
         if data["count"] > 0:
@@ -129,6 +143,7 @@ def find_nb_device_type_id(device_type: str) -> int:
             return int(device_type_id)
     log.logger.error("Failed to find Netbox device type ID for %s: %s", device_type, response.text)
     return -1
+
 
 def find_nb_device_role_id(device_role: str) -> int:
     """Finds the Netbox device role ID based on the provided device role.
@@ -143,9 +158,11 @@ def find_nb_device_role_id(device_role: str) -> int:
     headers = {
         "Authorization": f"Token {nb_key}",
         "Content-Type": "application/json",
-        "Accept": "application/json"
+        "Accept": "application/json",
     }
-    response = requests.get(f"{nb_ip}/api/dcim/device-roles/?name={device_role}", headers=headers, timeout=10)
+    response = requests.get(
+        f"{nb_ip}/api/dcim/device-roles/?name={device_role}", headers=headers, timeout=10
+    )
     if response.status_code == 200:
         data = response.json()
         if data["count"] > 0:
@@ -154,6 +171,7 @@ def find_nb_device_role_id(device_role: str) -> int:
             return int(device_role_id)
     log.logger.error("Failed to find Netbox device role ID for %s: %s", device_role, response.text)
     return -1
+
 
 def format_address(address: str) -> str:
     """
@@ -174,7 +192,8 @@ def format_address(address: str) -> str:
         return address.split("/")[0]
     return address
 
-def format_status(status: str)-> str:
+
+def format_status(status: str) -> str:
     """
     Convert a device status string to a standardized format.
     Maps various device status values to either "Active" or "Disabled".
@@ -196,13 +215,14 @@ def format_status(status: str)-> str:
       >>> formatStatus("custom_status")
       "custom_status"
     """
-    enabled_statuses = {"active",0}
-    disabled_statuses = {"offline","staged","planned","failed","inventory","decommissioning"}
+    enabled_statuses = {"active", 0}
+    disabled_statuses = {"offline", "staged", "planned", "failed", "inventory", "decommissioning"}
     if status in enabled_statuses:
         return "Active"
     if status in disabled_statuses:
         return "Disabled"
     return status
+
 
 def format_mac(mac: str) -> str:
     """
@@ -225,8 +245,9 @@ def format_mac(mac: str) -> str:
     """
     if not mac:
         return ""
-    mac_clean = re.sub(r'[^0-9A-Fa-f]', '', mac)
+    mac_clean = re.sub(r"[^0-9A-Fa-f]", "", mac)
     return f"{mac_clean[0:4]}.{mac_clean[4:8]}.{mac_clean[8:12]}".lower()
+
 
 def print_differences(difference_models: list[difference_model]) -> str:
     """
@@ -252,6 +273,7 @@ def print_differences(difference_models: list[difference_model]) -> str:
         for similarity in differ.differences[1]:
             txt_builder += f"  {similarity}\n"
     return txt_builder
+
 
 def print_devices(nb_device_list: list[device_model]) -> str:
     """
@@ -289,14 +311,15 @@ def print_devices(nb_device_list: list[device_model]) -> str:
                 txt_builder += f"    DNS Name: {address.dns_name}\n"
     return txt_builder
 
+
 def print_device(device: device_model) -> str:
     """
     Format device information into a human-readable string representation.
     Converts a device object and its nested interface and address information
     into a formatted text string suitable for display or logging.
     Args:
-      device (device_model): The device object containing name, description, 
-        status, hostgroup, templates, and a list of interfaces with their 
+      device (device_model): The device object containing name, description,
+        status, hostgroup, templates, and a list of interfaces with their
         addresses.
     Returns:
       str: A formatted string containing:
@@ -326,6 +349,7 @@ def print_device(device: device_model) -> str:
             txt_builder += f"    DNS Name: {address.dns_name}\n"
     return txt_builder
 
+
 def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
     """
     Fetch devices from Netbox API and return a list of device models.
@@ -353,10 +377,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
       - Device status is formatted using the format_status() utility function.
     """
     log.logger.info("Fetching Netbox devices from %s.", ip)
-    headers: dict[str, str] = {
-        "Authorization": f"Token {key}",
-        "Accept": "application/json" 
-    }
+    headers: dict[str, str] = {"Authorization": f"Token {key}", "Accept": "application/json"}
     query = """
     {
     device_list {
@@ -395,12 +416,15 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
     """
     try:
         response: requests.Response = requests.post(
-            ip,
-            headers=headers,
-            json={"query": query},
-            timeout=10
+            ip, headers=headers, json={"query": query}, timeout=10
         )
-        log.logger.debug("Request to Netbox API: %s %s  with headers %s and body %s", response.request.method, response.request.url, response.request.headers, response.request.body)
+        log.logger.debug(
+            "Request to Netbox API: %s %s  with headers %s and body %s",
+            response.request.method,
+            response.request.url,
+            response.request.headers,
+            response.request.body,
+        )
         device_list: list[device_model] = []
         log.logger.debug(response)
         if response.status_code != 200:
@@ -409,26 +433,62 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
         if response.status_code == 200:
             data = response.json()
             for device in data["data"]["device_list"]:
-                if device["config_context"] and "zabbix" in device["config_context"] and "templates" in device["config_context"]["zabbix"] and "port_type" in device["config_context"]["zabbix"]:
-                    device_list.append(device_model(
-                    name=device["name"],
-                    hostgroup="Netbox synchronized devices",
-                    description=device["description"],
-                    templates=device["config_context"]["zabbix"]["templates"] if device["config_context"] else "",
-                    status=format_status(device["status"]),
-                    interfaces=[interface_model(
-                      name=interface["name"],
-                      mac_address=format_mac(interface["mac_addresses"][0]["mac_address"]) if interface["mac_addresses"] else "",
-                      port_type=device["config_context"]["zabbix"]["port_type"] if device["config_context"] else "",
-                      addresses=[address_model(
-                        address=str(device["primary_ip4"]["address"]).split("/",maxsplit=1)[0] if device["primary_ip4"] else "",
-                        dns_name=device["primary_ip4"]["dns_name"] if device["primary_ip4"] else ""
-                      )]
-                    ) for interface in device["interfaces"] if interface["ip_addresses"]]
-                    ))
+                if (
+                    device["config_context"]
+                    and "zabbix" in device["config_context"]
+                    and "templates" in device["config_context"]["zabbix"]
+                    and "port_type" in device["config_context"]["zabbix"]
+                ):
+                    device_list.append(
+                        device_model(
+                            name=device["name"],
+                            hostgroup="Netbox synchronized devices",
+                            description=device["description"],
+                            templates=(
+                                device["config_context"]["zabbix"]["templates"]
+                                if device["config_context"]
+                                else ""
+                            ),
+                            status=format_status(device["status"]),
+                            interfaces=[
+                                interface_model(
+                                    name=interface["name"],
+                                    mac_address=(
+                                        format_mac(interface["mac_addresses"][0]["mac_address"])
+                                        if interface["mac_addresses"]
+                                        else ""
+                                    ),
+                                    port_type=(
+                                        device["config_context"]["zabbix"]["port_type"]
+                                        if device["config_context"]
+                                        else ""
+                                    ),
+                                    addresses=[
+                                        address_model(
+                                            address=(
+                                                str(device["primary_ip4"]["address"]).split(
+                                                    "/", maxsplit=1
+                                                )[0]
+                                                if device["primary_ip4"]
+                                                else ""
+                                            ),
+                                            dns_name=(
+                                                device["primary_ip4"]["dns_name"]
+                                                if device["primary_ip4"]
+                                                else ""
+                                            ),
+                                        )
+                                    ],
+                                )
+                                for interface in device["interfaces"]
+                                if interface["ip_addresses"]
+                            ],
+                        )
+                    )
         return device_list
     except requests.exceptions.RequestException as e:
-        return (f"Request failed: {e}")
+        return f"Request failed: {e}"
+
 
 def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
     """
@@ -453,65 +513,59 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
     """
     ip = f"{ip}/api_jsonrpc.php"
     payload = {
-      "jsonrpc": "2.0",
-      "method": "host.get",
-      "params": {
-        "output": ["hostid","host","name","status","description"],
-        "selectInterfaces": [
-          "interfaceid",
-          "dns",
-          "ip",
-          "type"
-        ],
-        "selectHostGroups": [
-          "groupid",
-          "name"
-        ],
-        "selectParentTemplates": [
-          "templateid",
-          "name"
-        ],
-        "filter": {
-          "status": [0]
-        }
-      },
-      "id": 1
+        "jsonrpc": "2.0",
+        "method": "host.get",
+        "params": {
+            "output": ["hostid", "host", "name", "status", "description"],
+            "selectInterfaces": ["interfaceid", "dns", "ip", "type"],
+            "selectHostGroups": ["groupid", "name"],
+            "selectParentTemplates": ["templateid", "name"],
+            "filter": {"status": [0]},
+        },
+        "id": 1,
     }
     headers: dict[str, str] = {
-      "Authorization": f"Bearer {key}",
-      'Content-Type': 'application/json-rpc',
-      'Accept': 'application/json',
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json-rpc",
+        "Accept": "application/json",
     }
     try:
         zb_device_list: list[device_model] = []
-        log.logger.debug("Requesting Zabbix: %s devices with payload: %s and headers: %s", ip, payload, headers)
+        log.logger.debug(
+            "Requesting Zabbix: %s devices with payload: %s and headers: %s", ip, payload, headers
+        )
         response: requests.Response = requests.post(ip, headers=headers, json=payload, timeout=10)
         log.logger.debug(response)
         response.raise_for_status()
         result = response.json()
         if "error" in result:
-            log.logger.error("Error in Zabbix API response: %s", result['error'])
+            log.logger.error("Error in Zabbix API response: %s", result["error"])
             return f"Error in Zabbix API response: {result['error']}"
         log.logger.debug(result)
         for host in result["result"]:
             try:
-                zb_device_list.append(device_model(
-                name=host["name"],
-                hostgroup=host["hostgroups"],
-                description=host["description"],
-                templates=[template["name"] for template in host["parentTemplates"]],
-                status=format_status(host["status"]),
-                interfaces=[interface_model(
-                  name=interface["dns"],
-                  mac_address="",
-                  port_type=interface["type"],
-                  addresses=[address_model(
-                    address=interface["ip"],
-                    dns_name=interface["dns"]
-                  )
-                  ]
-                ) for interface in host["interfaces"]]
-              ))
+                zb_device_list.append(
+                    device_model(
+                        name=host["name"],
+                        hostgroup=host["hostgroups"],
+                        description=host["description"],
+                        templates=[template["name"] for template in host["parentTemplates"]],
+                        status=format_status(host["status"]),
+                        interfaces=[
+                            interface_model(
+                                name=interface["dns"],
+                                mac_address="",
+                                port_type=interface["type"],
+                                addresses=[
+                                    address_model(
+                                        address=interface["ip"], dns_name=interface["dns"]
+                                    )
+                                ],
+                            )
+                            for interface in host["interfaces"]
+                        ],
+                    )
+                )
             except KeyError as e:
                 log.logger.error("Missing expected key in Zabbix host data: %s", e)
                 continue
@@ -519,6 +573,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
         log.logger.error("Request failed: %s", e)
         return f"Request failed: {e}"
     return zb_device_list
+
 
 def format_port_type(port_type: str) -> str:
     """Maps the port type to a Netbox compatible format."""
@@ -532,9 +587,10 @@ def format_port_type(port_type: str) -> str:
         "1": "1",
         "2": "2",
         "3": "3",
-        "4": "4"
+        "4": "4",
     }
     return port_type_map.get(port_type, "1")
+
 
 def uniform_port_type(port_type: str) -> str:
     """Uniforms the port type to a human readable format."""
@@ -548,12 +604,13 @@ def uniform_port_type(port_type: str) -> str:
         "Agent": "Agent",
         "SNMP": "SNMP",
         "IPMI": "IPMI",
-        "JMX": "JMX"
+        "JMX": "JMX",
     }
     return port_type_map.get(port_type, port_type)
 
+
 def map_port_type_device(nb_devices: list[device_model], zb_devices: list[device_model]) -> None:
-    """Maps the port type of interfaces in both Netbox and Zabbix device lists to a uniform format."""
+    """Map interface port types in NetBox/Zabbix lists to a uniform format."""
     for device in nb_devices:
         for interface in device.interfaces:
             interface.port_type = uniform_port_type(interface.port_type)
@@ -561,7 +618,12 @@ def map_port_type_device(nb_devices: list[device_model], zb_devices: list[device
         for interface in device.interfaces:
             interface.port_type = uniform_port_type(interface.port_type)
 
-def uniform_output_text(differences: list[device_difference_model], netbox_devices: list[device_model], zabbix_devices: list[device_model]) -> None:
+
+def uniform_output_text(
+    differences: list[difference_model],
+    netbox_devices: list[device_model],
+    zabbix_devices: list[device_model],
+) -> None:
     """Uniforms the output text for differences, netbox devices and zabbix devices."""
     try:
         dif_nb_devices: list[device_model] = [difference.nb_device for difference in differences]
@@ -569,10 +631,18 @@ def uniform_output_text(differences: list[device_difference_model], netbox_devic
         for device_list in [dif_nb_devices, dif_zb_devices, netbox_devices, zabbix_devices]:
             for device in device_list:
                 if isinstance(device.hostgroup, list):
-                    device.hostgroup = ", ".join(group["name"] for group in device.hostgroup) if device.hostgroup else ""
+                    device.hostgroup = (
+                        ", ".join(group["name"] for group in device.hostgroup)
+                        if device.hostgroup
+                        else ""
+                    )
                 else:
                     device.hostgroup = device.hostgroup if device.hostgroup else ""
                 if isinstance(device.templates, list):
-                    device.templates = ", ".join(str(template) for template in device.templates) if device.templates else ""
-    except Exception as e:
+                    device.templates = (
+                        ", ".join(str(template) for template in device.templates)
+                        if device.templates
+                        else ""
+                    )
+    except (TypeError, AttributeError, KeyError) as e:
         log.logger.error("Error uniforming output text: %s", e)

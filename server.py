@@ -1,7 +1,9 @@
 """server.py
 Tested with Netbox version v4.5.2 and Zabbix version 7.4.2
-This script sets up a Flask web server with routes for handling webhooks and a test route. 
-It also includes an argument parser for configuring the server to run in development or production mode.
+This script sets up a Flask web server
+with routes for handling webhooks and a test route.
+It also includes an argument parser
+for configuring the server to run in development or production mode.
 Routes:
     /webhook (POST): Executes a subprocess to run a Python script for syncing NetBox and Zabbix.
     / (GET): Renders an index.html template to check if the server is up and running.
@@ -23,6 +25,7 @@ Dependencies:
     - argparse
     - os
 """
+
 import argparse
 import os
 from flask import Flask, render_template
@@ -37,17 +40,17 @@ from app.logger import logger_conf as log
 
 app = Flask(__name__)
 
+
 @app.route("/")
-def test() -> tuple[str,int]:
+def test() -> tuple[str, int]:
     """
     A test route to check if the server is up and running.
 
     Returns:
         str: A message indicating that the server is up and running.
     """
-    return render_template(
-        "index.html"
-        ),200
+    return render_template("index.html"), 200
+
 
 @app.route("/RunCompare")
 def run_compare() -> tuple[str, int]:
@@ -73,7 +76,9 @@ def run_compare() -> tuple[str, int]:
     netbox_ip: str = os.environ.get("NETBOX_IP")
     zabbix_ip: str = os.environ.get("ZABBIX_IP")
     zabbix_key: str = os.environ.get("ZABBIX_KEY")
-    compare_output: Exception | tuple[list[DeviceDifference], list[Device], list[Device]] = ct.compare(nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key)
+    compare_output: Exception | tuple[list[DeviceDifference], list[Device], list[Device]] = (
+        ct.compare(nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key)
+    )
     if isinstance(compare_output, Exception):
         return str(compare_output), 500
     differences: list[DeviceDifference] = compare_output[0]
@@ -83,26 +88,30 @@ def run_compare() -> tuple[str, int]:
     log.logger.debug(ds.print_devices(netbox_devices))
     log.logger.debug(ds.print_devices(zabbix_devices))
     ds.uniform_output_text(differences, netbox_devices, zabbix_devices)
-    return render_template(
-        "compare_output.html",
-        differences=compare_output[0],
-        netbox_devices=compare_output[1],
-        zabbix_devices=compare_output[2],
-        netbox_url=netbox_ip,
-        zabbix_url=zabbix_ip
-    ), 200
+    return (
+        render_template(
+            "compare_output.html",
+            differences=compare_output[0],
+            netbox_devices=compare_output[1],
+            zabbix_devices=compare_output[2],
+            netbox_url=netbox_ip,
+            zabbix_url=zabbix_ip,
+        ),
+        200,
+    )
+
 
 @app.route("/RunCompareSync")
 def run_compare_sync() -> tuple[str, int]:
     """
     Execute a comparison and synchronization between NetBox and Zabbix devices.
     Retrieves NetBox and Zabbix credentials from environment variables, performs
-    a comparison of devices between the two systems, logs the differences and 
-    devices found, synchronizes the devices, and renders a comparison output 
+    a comparison of devices between the two systems, logs the differences and
+    devices found, synchronizes the devices, and renders a comparison output
     template with the results.
     Returns:
         tuple[str, int]: A tuple containing:
-            - str: Rendered HTML template string with comparison results and 
+            - str: Rendered HTML template string with comparison results and
                    synchronization status, or error message
             - int: HTTP status code (200 for success, 500 for error)
     Raises:
@@ -119,7 +128,9 @@ def run_compare_sync() -> tuple[str, int]:
     netbox_ip: str = os.environ.get("NETBOX_IP")
     zabbix_ip: str = os.environ.get("ZABBIX_IP")
     zabbix_key: str = os.environ.get("ZABBIX_KEY")
-    compare_output: Exception | tuple[list[DeviceDifference], list[Device], list[Device]] = ct.compare(nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key)
+    compare_output: Exception | tuple[list[DeviceDifference], list[Device], list[Device]] = (
+        ct.compare(nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key)
+    )
     if isinstance(compare_output, Exception):
         return str(compare_output), 500
     differences: list[DeviceDifference] = compare_output[0]
@@ -129,22 +140,24 @@ def run_compare_sync() -> tuple[str, int]:
     log.logger.debug(ds.print_devices(netbox_devices))
     log.logger.debug(ds.print_devices(zabbix_devices))
     sync_output: sync_output_model = ss.sync_netbox_zabbix_devices(
-        netbox_devices=netbox_devices,
-        zabbix_devices=zabbix_devices,
-        differences=differences
+        netbox_devices=netbox_devices, zabbix_devices=zabbix_devices, differences=differences
     )
-    log.logger.debug(f"Synchronization Output: {sync_output}")
+    log.logger.debug("Synchronization Output: %s", sync_output)
     ds.uniform_output_text(differences, netbox_devices, zabbix_devices)
-    return render_template(
-        "compare_output.html",
-        sync_output=sync_output,
-        synchronization=synchronization,
-        differences=compare_output[0],
-        netbox_devices=compare_output[1],
-        zabbix_devices=compare_output[2],
-        netbox_url=netbox_ip,
-        zabbix_url=zabbix_ip
-    ), 200
+    return (
+        render_template(
+            "compare_output.html",
+            sync_output=sync_output,
+            synchronization=synchronization,
+            differences=compare_output[0],
+            netbox_devices=compare_output[1],
+            zabbix_devices=compare_output[2],
+            netbox_url=netbox_ip,
+            zabbix_url=zabbix_ip,
+        ),
+        200,
+    )
+
 
 def parser_init() -> argparse.ArgumentParser:
     """
@@ -157,17 +170,15 @@ def parser_init() -> argparse.ArgumentParser:
     argparser.add_argument(
         "-d", "--development", help="Turn on development server", action="store_true"
     )
-    argparser.add_argument(
-        "-debug", "--debug", help="Turn on debug mode", action="store_true"
-    )
+    argparser.add_argument("-debug", "--debug", help="Turn on debug mode", action="store_true")
     return argparser
 
 
 if __name__ == "__main__":
     parser: argparse.ArgumentParser = parser_init()
     args: argparse.Namespace = parser.parse_args()
-    docker_ip: str = os.environ.get("LISTEN_ADDRESS","0.0.0.0")
-    docker_port: str = os.environ.get("HTTP_PORT",7000)
+    docker_ip: str = os.environ.get("LISTEN_ADDRESS", "0.0.0.0")
+    docker_port: str = os.environ.get("HTTP_PORT", 7000)
     if not args.development:
         # production
         serve(app, host=docker_ip, port=docker_port)
