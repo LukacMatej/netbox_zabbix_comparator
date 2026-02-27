@@ -397,6 +397,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
             name
         }
         config_context
+        custom_fields
         status
         description
         primary_ip4 {
@@ -444,7 +445,11 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                     device_list.append(
                         device_model(
                             name=device["name"],
-                            hostgroup="Netbox synchronized devices",
+                            hostgroup=(
+                                device["custom_fields"]["zabbix_hostgroups"]
+                                if device["custom_fields"]
+                                else ""
+                                ),
                             description=device["description"],
                             templates=(
                                 device["config_context"]["zabbix"]["templates"]

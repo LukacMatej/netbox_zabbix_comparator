@@ -440,37 +440,6 @@ def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
             log.logger.info(
                 "Failed to find Zabbix hostgroup ID for %s: %s", hostgroup_name, response.text
             )
-            log.logger.info("Creating hostgroup %s in Zabbix.", hostgroup_name)
-            response = requests.post(
-                zabbix_ip + "api_jsonrpc.php",
-                headers=headers,
-                timeout=REQUEST_TIMEOUT,
-                json={
-                    "jsonrpc": "2.0",
-                    "method": "hostgroup.create",
-                    "params": {"name": hostgroup_name},
-                    "id": 1,
-                },
-            )
-            log.logger.info(
-                "Response from Zabbix for creating hostgroup: %s, status code: %s",
-                response.text,
-                response.status_code,
-            )
-            response_json = response.json()
-            if "error" in response_json:
-                log.logger.error("Error in Zabbix API response: %s", response_json["error"])
-                group_ids.append(-1)
-                continue
-            if response.status_code == 200:
-                data = response.json()
-                if "result" in data and "groupids" in data["result"]:
-                    group_id = int(data["result"]["groupids"][0])
-                    log.logger.info(
-                        "Hostgroup %s created successfully with ID: %s.", hostgroup_name, group_id
-                    )
-                else:
-                    log.logger.error("Failed to create hostgroup %s: %s", hostgroup_name, data)
         group_ids.append(group_id)
     return group_ids
 

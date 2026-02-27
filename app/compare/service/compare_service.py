@@ -23,7 +23,7 @@ Compare devices from NetBox and Zabbix sources using their connection parameters
 from __future__ import annotations
 
 from app.logger import logger_conf as log
-import app.device.service.device_service as device_service
+from app.device.service.device_service import device_service as ds
 from app.device.models.device_model import Device as device_model
 from app.device.models.difference_model import DeviceDifference as device_difference_model
 from app.device.models.address_model import Address as address_model
@@ -156,8 +156,8 @@ def find_differences(
                 nb_value = getattr(nb_interface, field)
                 zb_value = getattr(zb_interface, field)
                 if field == "port_type":
-                    nb_value = device_service.format_port_type(nb_value)
-                    zb_value = device_service.format_port_type(zb_value)
+                    nb_value = ds.format_port_type(nb_value)
+                    zb_value = ds.format_port_type(zb_value)
                 if nb_value == "" and zb_value == "":
                     continue
                 if nb_value != zb_value:
@@ -265,19 +265,19 @@ def compare(
     log.logger.debug("Zabbix IP: %s", zb_ip)
     log.logger.debug("Zabbix Key: %s", zb_key)
     log.logger.debug("Netbox GraphQL: %s", nb_graphql)
-    nb_device_list: list[device_model] | str = device_service.get_nb_devices(nb_key, nb_graphql)
+    nb_device_list: list[device_model] | str = ds.get_nb_devices(nb_key, nb_graphql)
     if isinstance(nb_device_list, str):
         log.logger.error("Error: %s", nb_device_list)
         return Exception(nb_device_list)
     log.logger.debug("Netbox Devices:")
-    log.logger.debug(device_service.print_devices(nb_device_list))
-    zb_device_list: list[device_model] | str = device_service.get_zb_devices(zb_key, zb_ip)
+    log.logger.debug(ds.print_devices(nb_device_list))
+    zb_device_list: list[device_model] | str = ds.get_zb_devices(zb_key, zb_ip)
     if isinstance(zb_device_list, str):
         log.logger.error("Error: %s", zb_device_list)
         return Exception(zb_device_list)
     log.logger.debug("Zabbix Devices:")
-    log.logger.debug(device_service.print_devices(zb_device_list))
-    device_service.map_port_type_device(nb_device_list, zb_device_list)
+    log.logger.debug(ds.print_devices(zb_device_list))
+    ds.map_port_type_device(nb_device_list, zb_device_list)
     different_devices: tuple[
         list[device_difference_model], list[device_model], list[device_model]
     ] = compare_devices(nb_device_list, zb_device_list)
