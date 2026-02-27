@@ -23,7 +23,7 @@ Compare devices from NetBox and Zabbix sources using their connection parameters
 from __future__ import annotations
 
 from app.logger import logger_conf as log
-from app.device.service.device_service import device_service as ds
+from app.device.service import device_service as ds
 from app.device.models.device_model import Device as device_model
 from app.device.models.difference_model import DeviceDifference as device_difference_model
 from app.device.models.address_model import Address as address_model
