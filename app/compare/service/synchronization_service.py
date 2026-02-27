@@ -246,7 +246,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         name=nb_device.name,
         hostid=hostid,
         interface_id=device_service.find_hostinterface_id(hostid),
-        hostgroupIds=hostgroupids,
+        hostgroupids=hostgroupids,
         templateids=[find_template_ids(template) for template in zb_device.templates if template],
     )
     log.logger.info(update_data_zabbix)
@@ -350,7 +350,7 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
             "No valid templates found for device %s, cannot create in Netbox.", device.name
         )
         return
-    data_zabbix = device.create_data_zabbix(hostgroupIds=hostgroupids, templateids=templateids)
+    data_zabbix = device.create_data_zabbix(hostgroupids=hostgroupids, templateids=templateids)
     log.logger.info("Data to be sent to Zabbix: %s", data_zabbix)
     response = requests.post(
         zabbix_ip + "api_jsonrpc.php",
@@ -436,6 +436,26 @@ def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
             if data["result"]:
                 group_id = int(data["result"][0]["groupid"])
                 log.logger.info("Found Zabbix hostgroup ID: %s for %s.", group_id, hostgroup_name)
+            else:
+                create_response = requests.post(
+                    zabbix_ip + "api_jsonrpc.php",
+                    headers=headers,
+                    timeout=REQUEST_TIMEOUT,
+                    json={
+                        "jsonrpc": "2.0",
+                        "method": "hostgroup.create",
+                        "params": {"name": hostgroup_name},
+                        "id": 1,
+                    },
+                )
+                create_json = create_response.json()
+                if create_response.status_code == 200 and "error" not in create_json:
+                    group_id = int(create_json["result"]["groupids"][0])
+                    log.logger.info(
+                        "Created Zabbix hostgroup ID: %s for %s.",
+                        group_id,
+                        hostgroup_name,
+                    )
         if group_id == -1:
             log.logger.info(
                 "Failed to find Zabbix hostgroup ID for %s: %s", hostgroup_name, response.text

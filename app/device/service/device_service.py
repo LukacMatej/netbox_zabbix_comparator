@@ -442,14 +442,11 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                     and "templates" in device["config_context"]["zabbix"]
                     and "port_type" in device["config_context"]["zabbix"]
                 ):
+                    custom_fields = device.get("custom_fields") or {}
                     device_list.append(
                         device_model(
                             name=device["name"],
-                            hostgroup=(
-                                device["custom_fields"]["zabbix_hostgroups"]
-                                if device["custom_fields"]
-                                else ""
-                                ),
+                            hostgroup=custom_fields.get("zabbix_hostgroups", ""),
                             description=device["description"],
                             templates=(
                                 device["config_context"]["zabbix"]["templates"]
