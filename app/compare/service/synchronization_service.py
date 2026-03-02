@@ -332,6 +332,8 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
         "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
     }
+    default_hostgroup = os.environ.get("ZABBIX_DEFAULT_HOSTGROUP", "Netbox")
+    device.hostgroup.append(default_hostgroup)
     hostgroupids = find_zabbix_hostgroup_ids(device.hostgroup)
     if not hostgroupids or -1 in hostgroupids:
         sync_output.add_zabbix_output(
