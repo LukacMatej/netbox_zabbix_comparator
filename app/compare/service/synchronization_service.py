@@ -147,7 +147,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         json={
             "jsonrpc": "2.0",
             "method": "host.get",
-            "params": {"filter": {"host": [zb_device.name]}},
+            "params": {"filter": {"host": {zb_device.name}}},
             "id": 1,
         },
     )
@@ -333,7 +333,8 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
         "Content-Type": "application/json-rpc",
     }
     default_hostgroup = os.environ.get("ZABBIX_DEFAULT_HOSTGROUP", "Netbox")
-    device.hostgroup.append(default_hostgroup)
+    if not "Netbox" in device.hostgroup:
+        device.hostgroup.append(default_hostgroup)
     hostgroupids = find_zabbix_hostgroup_ids(device.hostgroup)
     if not hostgroupids or -1 in hostgroupids:
         sync_output.add_zabbix_output(
