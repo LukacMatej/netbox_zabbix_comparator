@@ -70,10 +70,10 @@ class Device:
             f"{self.description} {self.templates} {self.status}"
         )
 
-    def update_data_zabbix(self, hostid, interface_id, hostgroupIds, templateids, name) -> dict:
+    def update_data_zabbix(self, hostid, interface_id, hostgroupids, templateids, name) -> dict:
         """Creates a dictionary representation of the device for Zabbix API."""
         groups = []
-        for gid in hostgroupIds:
+        for gid in hostgroupids:
             if gid and gid != -1:  # Skip invalid IDs
                 try:
                     if isinstance(gid, (int, str)):
@@ -103,10 +103,10 @@ class Device:
             "id": 1,
         }
 
-    def create_data_zabbix(self, hostgroupIds, templateids) -> dict:
+    def create_data_zabbix(self, hostgroupids, templateids) -> dict:
         """Creates a dictionary representation of the device for Zabbix API."""
         groups = []
-        for gid in hostgroupIds:
+        for gid in hostgroupids:
             if gid and gid != -1:  # Skip invalid IDs
                 try:
                     if isinstance(gid, (int, str)):

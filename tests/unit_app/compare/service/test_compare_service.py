@@ -56,9 +56,9 @@ class CompareServiceTests(unittest.TestCase):
         self.assertIsInstance(zb_only, list)
 
     @patch("app.compare.service.compare_service.compare_devices", return_value=([], [], []))
-    @patch("app.compare.service.compare_service.device_service.map_port_type_device")
-    @patch("app.compare.service.compare_service.device_service.get_zb_devices")
-    @patch("app.compare.service.compare_service.device_service.get_nb_devices")
+    @patch("app.compare.service.compare_service.ds.map_port_type_device")
+    @patch("app.compare.service.compare_service.ds.get_zb_devices")
+    @patch("app.compare.service.compare_service.ds.get_nb_devices")
     def test_compare_success(self, get_nb_mock, get_zb_mock, map_mock, compare_devices_mock):
         """Compare orchestrator should map port types and delegate to compare_devices."""
         nb = [_device("n1", "10.0.0.1", "n1.local")]
@@ -71,7 +71,7 @@ class CompareServiceTests(unittest.TestCase):
         map_mock.assert_called_once_with(nb, zb)
         compare_devices_mock.assert_called_once_with(nb, zb)
 
-    @patch("app.compare.service.compare_service.device_service.get_nb_devices", return_value="boom")
+    @patch("app.compare.service.compare_service.ds.get_nb_devices", return_value="boom")
     def test_compare_nb_error(self, _get_nb):
         """Compare should return Exception when NetBox retrieval returns an error string."""
         result = cs.compare("http://nb", "nk", "http://zb", "zk")

@@ -2,7 +2,7 @@
 
 ### Spuštění dockeru
 
-docker run -d -p `<port:port>` -e LISTEN_ADDRESS=`<IP adresa>` -e HTTP_PORT=`<port>` -e NETBOX_IP=`<IP Adresa Netboxu s />` -e NETBOX_KEY=`<Netbox API klíč>` -e ZABBIX_IP=`<IP Adresa Zabbixu s />` -e ZABBIX_KEY=`<Zabbix API klíč>`netbox-zabbix
+docker run -d -p `<port:port>` -e LISTEN_ADDRESS=`<IP adresa>` -e HTTP_PORT=`<port>` -e ZABBIX_DEFAULT_HOSTGROUP=`<název defaultní hostgroupy>` -e NETBOX_IP=`<IP Adresa Netboxu s />` -e NETBOX_KEY=`<Netbox API klíč>` -e ZABBIX_IP=`<IP Adresa Zabbixu s />` -e ZABBIX_KEY=`<Zabbix API klíč>`netbox-zabbix
 
 ### Důležité věci na nastavení před startem
 
@@ -34,6 +34,10 @@ Port Type
 * Agent, SNMP, JMX, IPMI
 
 Potřeba nastavit primární IP adresu v Netboxu, podle které bude fungovat v Zabbixu
+
+Pro přidávání netbox zařízení do hostgroups v zabbixu je připraven netbox script, který synchronizuje Custom Field Choices s jménem zabbix_hostgroups s hostgroups v zabbixu, včetně defaultní hostgroup v zabbixu "Netbox" pro kontrolu všech zařízení vytvořených synchronizací.
+
+Custom Field Choices napojit na Custom Field s jménem zabbix_hostgroups s multi-select na DCIM > DEVICE
 
 
 ### REST API

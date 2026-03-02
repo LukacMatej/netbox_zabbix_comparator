@@ -147,7 +147,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         json={
             "jsonrpc": "2.0",
             "method": "host.get",
-            "params": {"filter": {"host": [zb_device.name]}},
+            "params": {"filter": {"host": {zb_device.name}}},
             "id": 1,
         },
     )
@@ -246,7 +246,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         name=nb_device.name,
         hostid=hostid,
         interface_id=device_service.find_hostinterface_id(hostid),
-        hostgroupIds=hostgroupids,
+        hostgroupids=hostgroupids,
         templateids=[find_template_ids(template) for template in zb_device.templates if template],
     )
     log.logger.info(update_data_zabbix)
@@ -332,6 +332,9 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
         "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
     }
+    default_hostgroup = os.environ.get("ZABBIX_DEFAULT_HOSTGROUP", "Netbox")
+    if not "Netbox" in device.hostgroup:
+        device.hostgroup.append(default_hostgroup)
     hostgroupids = find_zabbix_hostgroup_ids(device.hostgroup)
     if not hostgroupids or -1 in hostgroupids:
         sync_output.add_zabbix_output(
@@ -350,7 +353,7 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
             "No valid templates found for device %s, cannot create in Netbox.", device.name
         )
         return
-    data_zabbix = device.create_data_zabbix(hostgroupIds=hostgroupids, templateids=templateids)
+    data_zabbix = device.create_data_zabbix(hostgroupids=hostgroupids, templateids=templateids)
     log.logger.info("Data to be sent to Zabbix: %s", data_zabbix)
     response = requests.post(
         zabbix_ip + "api_jsonrpc.php",
@@ -436,41 +439,30 @@ def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
             if data["result"]:
                 group_id = int(data["result"][0]["groupid"])
                 log.logger.info("Found Zabbix hostgroup ID: %s for %s.", group_id, hostgroup_name)
+            else:
+                create_response = requests.post(
+                    zabbix_ip + "api_jsonrpc.php",
+                    headers=headers,
+                    timeout=REQUEST_TIMEOUT,
+                    json={
+                        "jsonrpc": "2.0",
+                        "method": "hostgroup.create",
+                        "params": {"name": hostgroup_name},
+                        "id": 1,
+                    },
+                )
+                create_json = create_response.json()
+                if create_response.status_code == 200 and "error" not in create_json:
+                    group_id = int(create_json["result"]["groupids"][0])
+                    log.logger.info(
+                        "Created Zabbix hostgroup ID: %s for %s.",
+                        group_id,
+                        hostgroup_name,
+                    )
         if group_id == -1:
             log.logger.info(
                 "Failed to find Zabbix hostgroup ID for %s: %s", hostgroup_name, response.text
             )
-            log.logger.info("Creating hostgroup %s in Zabbix.", hostgroup_name)
-            response = requests.post(
-                zabbix_ip + "api_jsonrpc.php",
-                headers=headers,
-                timeout=REQUEST_TIMEOUT,
-                json={
-                    "jsonrpc": "2.0",
-                    "method": "hostgroup.create",
-                    "params": {"name": hostgroup_name},
-                    "id": 1,
-                },
-            )
-            log.logger.info(
-                "Response from Zabbix for creating hostgroup: %s, status code: %s",
-                response.text,
-                response.status_code,
-            )
-            response_json = response.json()
-            if "error" in response_json:
-                log.logger.error("Error in Zabbix API response: %s", response_json["error"])
-                group_ids.append(-1)
-                continue
-            if response.status_code == 200:
-                data = response.json()
-                if "result" in data and "groupids" in data["result"]:
-                    group_id = int(data["result"]["groupids"][0])
-                    log.logger.info(
-                        "Hostgroup %s created successfully with ID: %s.", hostgroup_name, group_id
-                    )
-                else:
-                    log.logger.error("Failed to create hostgroup %s: %s", hostgroup_name, data)
         group_ids.append(group_id)
     return group_ids
 
