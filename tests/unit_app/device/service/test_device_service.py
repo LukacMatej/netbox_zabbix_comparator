@@ -130,7 +130,7 @@ class DeviceServiceTests(unittest.TestCase):
         response.json.return_value = {
             "result": [
                 {
-                    "name": "zb1",
+                    "host": "zb1",
                     "description": "d",
                     "parentTemplates": [{"name": "tpl"}],
                     "status": "0",
