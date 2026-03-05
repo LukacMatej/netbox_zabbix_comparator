@@ -24,5 +24,4 @@ test.json
 compose.yaml
 netbox-zabbix-sync-main*
 docker_init.sh
-sync_zabbix_groups.py
 init.sh
