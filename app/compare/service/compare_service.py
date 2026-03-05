@@ -134,7 +134,7 @@ def find_differences(
         device_fields = [
             key
             for key in device_model.__annotations__.keys()
-            if key not in ["hostgroup", "description", "name", "status", "interfaces"]
+            if key not in ["description", "name", "interfaces"]
         ]
         for field in device_fields:
             nb_value = getattr(nb_device, field)
