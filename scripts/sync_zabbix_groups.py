@@ -1,6 +1,6 @@
 import requests
-from extras.scripts import Script, StringVar
-from extras.models import CustomFieldChoiceSet
+from extras.scripts import Script, StringVar  # pylint: disable=import-error
+from extras.models import CustomFieldChoiceSet  # pylint: disable=import-error
 
 class SyncZabbixHostgroups(Script):
     class Meta:
