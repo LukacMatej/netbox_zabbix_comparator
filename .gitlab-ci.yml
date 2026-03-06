@@ -81,16 +81,16 @@ docker_build_devel:
 docker_stop_remote_devel:
   stage: docker_stop
   image: docker:latest
-  before_script:
-    - apk add --update --no-cache openssh-client
-    - eval $(ssh-agent -s)
-    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
-    - mkdir -p ~/.ssh
-    - chmod 700 ~/.ssh
-    - ssh-keyscan $VM_HOST_IP >> ~/.ssh/known_hosts
-    - chmod 644 ~/.ssh/known_hosts | tr -d '\r' | ssh-add -
-    - ssh-keyscan -p $DEPLOY_PORT $DEPLOY_HOST >> ~/.ssh/known_hosts
-    - chmod 644 ~/.ssh/known_hosts
+  # before_script:
+  #   - apk add --update --no-cache openssh-client
+  #   - eval $(ssh-agent -s)
+  #   - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+  #   - mkdir -p ~/.ssh
+  #   - chmod 700 ~/.ssh
+  #   - ssh-keyscan $VM_HOST_IP >> ~/.ssh/known_hosts
+  #   - chmod 644 ~/.ssh/known_hosts | tr -d '\r' | ssh-add -
+  #   - ssh-keyscan -p $DEPLOY_PORT $DEPLOY_HOST >> ~/.ssh/known_hosts
+  #   - chmod 644 ~/.ssh/known_hosts
   script:
     - echo "Using docker ${DOCKER_HOST_SSH}"
     - ssh ${DOCKER_HOST_SSH} "docker stop ${CI_PROJECT_NAME}-dev || true"
