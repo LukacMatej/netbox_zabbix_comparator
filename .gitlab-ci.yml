@@ -82,14 +82,14 @@ docker_stop_remote_devel:
   stage: docker_stop
   image: docker:latest
   before_script:
-    # - apk add --no-cache openssh-client
-    - eval $(ssh-agent -s)
-    - echo "$SSH_PRIVATE_KEY"
-    - ls -la ~/.ssh
-    - cat ~/.ssh/id_rsa
+    - useradd -m gitlab-runner
+    - mkdir /home/gitlab-runner/.ssh/
+    - echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCy2rgqh7E00mCDf5ZgBfWsVIAcGZrcPn2EVuwq+XHMDZYDvmIqFhfYSbl9vQ43muS2BX44XCQILTmhzzjOV0Iv6ouCbp5fKGmDDztqHMSl4g9oTt0Z7jfsut/q1cYY5gnfWUi70VYDrQk+/l66KpHI7lckbWnUB1XBGZ5nglH0FlPd8A1EVVLvmDRY6snaKe5HG5KqJtLSuoTByC9eeK4qN35Qr83DEDcYyNVnKnh7CPV4lFl6nLTELCq4FsjnVwZd69Q1bBv9CwRaifqKYxIo0Ei/P12VxoHyEC1aGVn1eZNDGUSRkHjCIKniF3znIStjVrI1VysvHJEKli0DaDmV gitlab-runner@martins-micu-test.netsystem.local" >> /home/gitlab-runner/.ssh/authorized_keys
+    - chmod 0700 /home/gitlab-runner/.ssh/
+    - chown -R gitlab-runner:gitlab-runner /home/gitlab-runner/.ssh/
+    - chmod 600 /home/gitlab-runner/.ssh/authorized_keys
+
     # | tr -d '\r' | ssh-add -
-    # - mkdir -p ~/.ssh
-    # - chmod 700 ~/.ssh
     # - ssh-keyscan -p $DEPLOY_PORT $DEPLOY_HOST >> ~/.ssh/known_hosts
     # - chmod 644 ~/.ssh/known_hosts
   script:
