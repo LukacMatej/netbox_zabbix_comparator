@@ -19,5 +19,7 @@ docker_stop_remote_devel:
     # | tr -d '\r' | ssh-add -
     # - ssh-keyscan -p $DEPLOY_PORT $DEPLOY_HOST >> ~/.ssh/known_hosts
     # - chmod 644 ~/.ssh/known_hosts
+  script:
+    - echo "Using docker ${DOCKER_HOST_SSH}"
   except:
     - tags
