@@ -81,21 +81,23 @@ docker_build_devel:
 docker_stop_remote_devel:
   stage: docker_stop
   image: docker:latest
-  # before_script:
-  #   - apk add --update --no-cache openssh-client
-  #   - eval $(ssh-agent -s)
-  #   - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
-  #   - mkdir -p ~/.ssh
-  #   - chmod 700 ~/.ssh
-  #   - ssh-keyscan $VM_HOST_IP >> ~/.ssh/known_hosts
-  #   - chmod 644 ~/.ssh/known_hosts | tr -d '\r' | ssh-add -
-  #   - ssh-keyscan -p $DEPLOY_PORT $DEPLOY_HOST >> ~/.ssh/known_hosts
-  #   - chmod 644 ~/.ssh/known_hosts
+  before_script:
+    # 1. Install SSH client
+    - apk add --update --no-cache openssh-client
+    
+    # 2. Setup the Private Key (The key that allows the Runner to LEAVE the container)
+    - eval $(ssh-agent -s)
+    - (echo "$SSH_PRIVATE_KEY"; echo "") | tr -d '\r' | ssh-add -
+    
+    # 3. Trust the Remote Host
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    # Note: DOCKER_HOST_SSH should be just the IP or Domain (e.g., 192.168.1.50)
+    - ssh-keyscan 192.168.201.48 >> ~/.ssh/known_hosts
   script:
     - echo "Using docker ${DOCKER_HOST_SSH}"
     - ssh ${DOCKER_HOST_SSH} "docker stop ${CI_PROJECT_NAME}-dev || true"
     - ssh ${DOCKER_HOST_SSH} "docker rm ${CI_PROJECT_NAME}-dev || true"
-    - ssh ${DOCKER_HOST_SSH} "docker image rm -f netsystemcz/${CI_PROJECT_NAME}:dev || true"
   except:
     - tags
 
