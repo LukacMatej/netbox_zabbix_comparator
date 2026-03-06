@@ -84,11 +84,9 @@ docker_stop_remote_devel:
   before_script:
     # 1. Install SSH client
     - apk add --update --no-cache openssh-client
-    
     # 2. Setup the Private Key (The key that allows the Runner to LEAVE the container)
     - eval $(ssh-agent -s)
     - (echo "$SSH_PRIVATE_KEY"; echo "") | tr -d '\r' | ssh-add -
-    
     # 3. Trust the Remote Host
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
