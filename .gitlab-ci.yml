@@ -84,6 +84,7 @@ docker_stop_remote_devel:
   before_script:
     - whoami
     - echo "$PWD"
+    - uname -a
     # - useradd -m gitlab-runner
     # - mkdir /home/gitlab-runner/.ssh/
     # - echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCy2rgqh7E00mCDf5ZgBfWsVIAcGZrcPn2EVuwq+XHMDZYDvmIqFhfYSbl9vQ43muS2BX44XCQILTmhzzjOV0Iv6ouCbp5fKGmDDztqHMSl4g9oTt0Z7jfsut/q1cYY5gnfWUi70VYDrQk+/l66KpHI7lckbWnUB1XBGZ5nglH0FlPd8A1EVVLvmDRY6snaKe5HG5KqJtLSuoTByC9eeK4qN35Qr83DEDcYyNVnKnh7CPV4lFl6nLTELCq4FsjnVwZd69Q1bBv9CwRaifqKYxIo0Ei/P12VxoHyEC1aGVn1eZNDGUSRkHjCIKniF3znIStjVrI1VysvHJEKli0DaDmV gitlab-runner@martins-micu-test.netsystem.local" >> /home/gitlab-runner/.ssh/authorized_keys
