@@ -1,25 +1,125 @@
-image: ubuntu:latest
+image: docker:latest
 
 stages:
+  - lint
+  - test
+  - docker_rm
+  - docker_build
+  - publish
   - docker_stop
+  - docker_copy
+  - docker_run
+
+lint:
+  stage: lint
+  image: python:3.9
+  before_script:
+    - pip install pre-commit pylint
+  script:
+    - pre-commit run --all-files
+  except:
+    - tags
+
+tests_devel:
+  stage: test
+  image: python:3.11
+  before_script:
+    - pip install -r requirements.txt
+  script:
+    - python -m unittest discover -s tests -p 'test_*.py' -v
+  except:
+    - tags
+
+
+docker_build_prod:
+  stage: docker_build
+  image: docker:latest
+  variables:
+    tag_name: ${CI_COMMIT_TAG}
+  script:
+    - docker build -t netsystemcz/${CI_PROJECT_NAME}:${tag_name} -f Dockerfile .
+  only:
+    - tags
+
+docker_publish_prod:
+  stage: publish
+  variables:
+    tag_name: ${CI_COMMIT_TAG}
+  script:
+    - docker login -u netsystemcz -p ${DOCKER_HUB_TOKEN}
+    - docker push netsystemcz/${CI_PROJECT_NAME}:$tag_name
+    - JOB_CONTAINER_ID=`docker ps -q -f "label=com.gitlab.gitlab-runner.job.id=${CI_JOB_ID}"`
+    - docker run --rm -t
+        --volumes-from ${JOB_CONTAINER_ID}
+        -e DOCKER_USER=netsystemcz
+        -e DOCKER_PASS=${DOCKER_HUB_TOKEN}
+        -e PUSHRM_PROVIDER=dockerhub
+        -e PUSHRM_FILE=${CI_PROJECT_DIR}/README.md
+        -e PUSHRM_TARGET=docker.io/netsystemcz/${CI_PROJECT_NAME}
+        -e PUSHRM_DEBUG=1
+        chko/docker-pushrm:1
+  only:
+    - tags
+
+docker_rm_local_devel:
+  stage: docker_rm
+  image: docker:latest
+  script:
+    - echo "Using docker ${DOCKER_HOST_2}"
+    - docker image rm -f netsystemcz/${CI_PROJECT_NAME}:dev || true
+  except:
+    - tags
+
+docker_build_devel:
+  stage: docker_build
+  image: docker:latest
+  script:
+    - docker build -t netsystemcz/${CI_PROJECT_NAME}:dev -f Dockerfile .
+  except:
+    - tags
 
 docker_stop_remote_devel:
   stage: docker_stop
-  image: ubuntu:latest
+  image: docker:latest
   before_script:
-    - apt-get update && apt-get install -y openssh-client
+    - apk add --update --no-cache openssh-client
     - eval $(ssh-agent -s)
-    - useradd -m gitlab-runner
-    - mkdir /home/gitlab-runner/.ssh/
-    - echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCy2rgqh7E00mCDf5ZgBfWsVIAcGZrcPn2EVuwq+XHMDZYDvmIqFhfYSbl9vQ43muS2BX44XCQILTmhzzjOV0Iv6ouCbp5fKGmDDztqHMSl4g9oTt0Z7jfsut/q1cYY5gnfWUi70VYDrQk+/l66KpHI7lckbWnUB1XBGZ5nglH0FlPd8A1EVVLvmDRY6snaKe5HG5KqJtLSuoTByC9eeK4qN35Qr83DEDcYyNVnKnh7CPV4lFl6nLTELCq4FsjnVwZd69Q1bBv9CwRaifqKYxIo0Ei/P12VxoHyEC1aGVn1eZNDGUSRkHjCIKniF3znIStjVrI1VysvHJEKli0DaDmV gitlab-runner@martins-micu-test.netsystem.local" >> /home/gitlab-runner/.ssh/authorized_keys
-    - chmod 0700 /home/gitlab-runner/.ssh/
-    - chown -R gitlab-runner:gitlab-runner /home/gitlab-runner/.ssh/
-    - chmod 600 /home/gitlab-runner/.ssh/authorized_keys
-
-    # | tr -d '\r' | ssh-add -
-    # - ssh-keyscan -p $DEPLOY_PORT $DEPLOY_HOST >> ~/.ssh/known_hosts
-    # - chmod 644 ~/.ssh/known_hosts
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan $VM_HOST_IP >> ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts | tr -d '\r' | ssh-add -
+    - ssh-keyscan -p $DEPLOY_PORT $DEPLOY_HOST >> ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts
   script:
     - echo "Using docker ${DOCKER_HOST_SSH}"
+    - ssh ${DOCKER_HOST_SSH} "docker stop ${CI_PROJECT_NAME}-dev || true"
+    - ssh ${DOCKER_HOST_SSH} "docker rm ${CI_PROJECT_NAME}-dev || true"
+    - ssh ${DOCKER_HOST_SSH} "docker image rm -f netsystemcz/${CI_PROJECT_NAME}:dev || true"
+  except:
+    - tags
+
+docker_copy_devel:
+  stage: docker_copy
+  image: docker:latest
+  script:
+    - echo "Using docker ${DOCKER_HOST_SSH}"
+    - ssh ${DOCKER_HOST_SSH} "docker login -u ${REPO_USERNAME} -p ${REPO_PASSWORD} ${REPO_HOST}"
+    - ssh ${DOCKER_HOST_SSH} "docker tag netsystemcz/${CI_PROJECT_NAME}:dev ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
+    - ssh ${DOCKER_HOST_SSH} "docker push ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
+    - ssh ${DOCKER_HOST_SSH} "docker login -u ${REPO_USERNAME} -p ${REPO_PASSWORD} ${REPO_HOST}"
+    - ssh ${DOCKER_HOST_SSH} "docker pull ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
+  except:
+    - tags
+
+docker_run_devel:
+  stage: docker_run
+  image: docker:latest
+  dependencies:
+    - docker_build_devel
+  script:
+    - echo "Using docker ${DOCKER_HOST_SSH}"
+    - echo "${PWD}"
+    - ssh ${DOCKER_HOST_SSH} "docker run --detach --restart unless-stopped -p 7000:7000 --name ${CI_PROJECT_NAME}-dev -v /srv/netbox_zabbix/certs/nblab-root-ca.crt:/usr/local/share/ca-certificates/nblab-root-ca.crt:ro,z -v /srv/netbox_zabbix/certs/netsys-ca.pem:/usr/local/share/ca-certificates/netsys-ca.pem:ro,z -e LISTEN_ADDRESS=0.0.0.0 -e HTTP_PORT=7000 -e ZABBIX_DEFAULT_HOSTGROUP=${ZABBIX_DEFAULT_HOSTGROUP} -e ZABBIX_IP=${ZABBIX_URL} -e ZABBIX_KEY=${ZABBIX_KEY} -e NETBOX_IP=${NETBOX_URL} -e NETBOX_KEY=${NETBOX_KEY} --network bridge_network ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
   except:
     - tags
