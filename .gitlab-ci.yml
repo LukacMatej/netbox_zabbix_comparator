@@ -10,6 +10,18 @@ stages:
   - docker_copy
   - docker_run
 
+.ssh_setup: &ssh_setup
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval "$(ssh-agent -s)"
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-add ~/.ssh/id_rsa
+    - export DEPLOY_HOST="$(printf '%s' "$DOCKER_HOST_SSH" | sed -E 's|^([^@]+@)?([^:]+).*$|\2|')"
+    - ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts
+
 lint:
   stage: lint
   image: python:3.9
@@ -79,6 +91,7 @@ docker_build_devel:
     - tags
 
 docker_stop_remote_devel:
+  <<: *ssh_setup
   stage: docker_stop
   image: docker:latest
   script:
@@ -89,6 +102,7 @@ docker_stop_remote_devel:
     - tags
 
 docker_copy_devel:
+  <<: *ssh_setup
   stage: docker_copy
   image: docker:latest
   script:
@@ -102,6 +116,7 @@ docker_copy_devel:
     - tags
 
 docker_run_devel:
+  <<: *ssh_setup
   stage: docker_run
   image: docker:latest
   dependencies:
