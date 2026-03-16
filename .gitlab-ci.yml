@@ -1,5 +1,8 @@
 image: docker:latest
 
+variables:
+  DEPLOY_SSH_TARGET: "netsys@192.168.201.48"
+
 stages:
   - lint
   - test
@@ -18,9 +21,10 @@ stages:
     - printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
     - chmod 600 ~/.ssh/id_rsa
     - ssh-add ~/.ssh/id_rsa
-    - export DEPLOY_USER="$(printf '%s' "$DOCKER_HOST_SSH" | sed -E 's|^([^@]+)@.*$|\1|')"
-    - export DEPLOY_HOST="$(printf '%s' "$DOCKER_HOST_SSH" | sed -E 's|^([^@]+@)?([^:]+).*$|\2|')"
-    - if [ "$DEPLOY_USER" = "$DOCKER_HOST_SSH" ]; then echo "DOCKER_HOST_SSH must be in user@host format"; exit 1; fi
+    - export DEPLOY_TARGET="${DEPLOY_SSH_TARGET:-$DOCKER_HOST_SSH}"
+    - export DEPLOY_USER="$(printf '%s' "$DEPLOY_TARGET" | sed -E 's|^([^@]+)@.*$|\1|')"
+    - export DEPLOY_HOST="$(printf '%s' "$DEPLOY_TARGET" | sed -E 's|^([^@]+@)?([^:]+).*$|\2|')"
+    - if [ "$DEPLOY_USER" = "$DEPLOY_TARGET" ]; then echo "Deploy target must be in user@host format. Got: $DEPLOY_TARGET"; exit 1; fi
     - export SSH_TARGET="${DEPLOY_USER}@${DEPLOY_HOST}"
     - ssh-keyscan -t rsa,ecdsa,ed25519 -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
     - chmod 644 ~/.ssh/known_hosts
