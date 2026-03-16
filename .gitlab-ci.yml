@@ -1,5 +1,8 @@
 image: docker:latest
 
+variables:
+  DEPLOY_SSH_TARGET: "netsys@192.168.201.48"
+
 stages:
   - lint
   - test
@@ -9,6 +12,46 @@ stages:
   - docker_stop
   - docker_copy
   - docker_run
+
+.ssh_setup: &ssh_setup
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval "$(ssh-agent -s)"
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-add ~/.ssh/id_rsa
+    - export DEPLOY_TARGET="${DEPLOY_SSH_TARGET:-$DOCKER_HOST_SSH}"
+    - export DEPLOY_USER="$(printf '%s' "$DEPLOY_TARGET" | sed -E 's|^([^@]+)@.*$|\1|')"
+    - export DEPLOY_HOST="$(printf '%s' "$DEPLOY_TARGET" | sed -E 's|^([^@]+@)?([^:]+).*$|\2|')"
+    - export SSH_TARGET="${DEPLOY_USER}@${DEPLOY_HOST}"
+    - ssh-keyscan -t rsa,ecdsa,ed25519 -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts
+    - export SSH_OPTS="-o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o HostKeyAlgorithms=ssh-ed25519,ecdsa-sha2-nistp256,rsa-sha2-512,rsa-sha2-256,ssh-rsa -i $HOME/.ssh/id_rsa"
+    - echo "Using SSH target ${SSH_TARGET}"
+    - ssh $SSH_OPTS ${SSH_TARGET} "echo ssh-auth-ok"
+    - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker ps >/dev/null"
+
+lint:
+  stage: lint
+  image: python:3.9
+  before_script:
+    - pip install pre-commit pylint
+  script:
+    - pre-commit run --all-files
+  except:
+    - tags
+
+tests_devel:
+  stage: test
+  image: python:3.11
+  before_script:
+    - pip install -r requirements.txt
+  script:
+    - python -m unittest discover -s tests -p 'test_*.py' -v
+  except:
+    - tags
+
 
 docker_build_prod:
   stage: docker_build
@@ -58,57 +101,43 @@ docker_build_devel:
     - tags
 
 docker_stop_remote_devel:
+  <<: *ssh_setup
   stage: docker_stop
   image: docker:latest
   script:
-    - echo "Using docker ${DOCKER_HOST_2}"
-    - DOCKER_HOST=${DOCKER_HOST_2} docker stop ${CI_PROJECT_NAME}-dev || true
-    - DOCKER_HOST=${DOCKER_HOST_2} docker rm ${CI_PROJECT_NAME}-dev || true
-    - DOCKER_HOST=${DOCKER_HOST_2} docker image rm -f netsystemcz/${CI_PROJECT_NAME}:dev || true
+    - echo "Using docker on ${SSH_TARGET}"
+    - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker stop ${CI_PROJECT_NAME}-dev || true"
+    - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker rm ${CI_PROJECT_NAME}-dev || true"
+    - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker image rm -f netsystemcz/${CI_PROJECT_NAME}:dev || true"
   except:
     - tags
 
 docker_copy_devel:
+  <<: *ssh_setup
   stage: docker_copy
   image: docker:latest
   script:
-    - echo "Using docker ${DOCKER_HOST_2}"
-    - docker login -u ${REPO_USERNAME} -p ${REPO_PASSWORD} ${REPO_HOST}
-    - docker tag netsystemcz/${CI_PROJECT_NAME}:dev ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev
-    - docker push ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev
-    - DOCKER_HOST=${DOCKER_HOST_2} docker login -u ${REPO_USERNAME} -p ${REPO_PASSWORD} ${REPO_HOST}
-    - DOCKER_HOST=${DOCKER_HOST_2} docker pull ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev
+    - echo "Using docker on ${SSH_TARGET}"
+    - export REPO_HOST_CLEAN="$(printf '%s' "$REPO_HOST" | tr -d '\r\n')"
+    - export REPO_USERNAME_CLEAN="$(printf '%s' "$REPO_USERNAME" | tr -d '\r\n')"
+    - export REPO_PASSWORD_CLEAN="$(printf '%s' "$REPO_PASSWORD" | tr -d '\r\n')"
+    - printf '%s' "$REPO_PASSWORD_CLEAN" | docker login -u "$REPO_USERNAME_CLEAN" --password-stdin "$REPO_HOST_CLEAN"
+    - docker tag netsystemcz/${CI_PROJECT_NAME}:dev ${REPO_HOST_CLEAN}/netsystemcz/${CI_PROJECT_NAME}:dev
+    - docker push ${REPO_HOST_CLEAN}/netsystemcz/${CI_PROJECT_NAME}:dev
+    - printf '%s' "$REPO_PASSWORD_CLEAN" | ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker login -u '${REPO_USERNAME_CLEAN}' --password-stdin '${REPO_HOST_CLEAN}'"
+    - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker pull ${REPO_HOST_CLEAN}/netsystemcz/${CI_PROJECT_NAME}:dev"
   except:
     - tags
 
 docker_run_devel:
+  <<: *ssh_setup
   stage: docker_run
   image: docker:latest
   dependencies:
     - docker_build_devel
   script:
-    - echo "Using docker ${DOCKER_HOST_2}"
+    - echo "Using docker on ${SSH_TARGET}"
     - echo "${PWD}"
-    - DOCKER_HOST=${DOCKER_HOST_2} docker run --detach --restart unless-stopped -p 7000:7000 --name ${CI_PROJECT_NAME}-dev -v /srv/netbox_zabbix/certs/nblab-root-ca.crt:/usr/local/share/ca-certificates/nblab-root-ca.crt:ro,z -v /srv/netbox_zabbix/certs/netsys-ca.pem:/usr/local/share/ca-certificates/netsys-ca.pem:ro,z -e LISTEN_ADDRESS=0.0.0.0 -e HTTP_PORT=7000 -e ZABBIX_DEFAULT_HOSTGROUP=${ZABBIX_DEFAULT_HOSTGROUP} -e ZABBIX_IP=${ZABBIX_URL} -e ZABBIX_KEY=${ZABBIX_KEY} -e NETBOX_IP=${NETBOX_URL} -e NETBOX_KEY=${NETBOX_KEY} --network bridge_network ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev
-  except:
-    - tags
-
-lint:
-  stage: lint
-  image: python:3.9
-  before_script:
-    - pip install pre-commit pylint
-  script:
-    - pre-commit run --all-files
-  except:
-    - tags
-
-tests_devel:
-  stage: test
-  image: python:3.11
-  before_script:
-    - pip install -r requirements.txt
-  script:
-    - python -m unittest discover -s tests -p 'test_*.py' -v
+    - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker run --detach --restart unless-stopped -p 7000:7000 --name ${CI_PROJECT_NAME}-dev -v /srv/netbox_zabbix/certs/nblab-root-ca.crt:/usr/local/share/ca-certificates/nblab-root-ca.crt:ro,z -v /srv/netbox_zabbix/certs/netsys-ca.pem:/usr/local/share/ca-certificates/netsys-ca.pem:ro,z -e LISTEN_ADDRESS=0.0.0.0 -e HTTP_PORT=7000 -e ZABBIX_DEFAULT_HOSTGROUP=${ZABBIX_DEFAULT_HOSTGROUP} -e ZABBIX_IP=${ZABBIX_URL} -e ZABBIX_KEY=${ZABBIX_KEY} -e NETBOX_IP=${NETBOX_URL} -e NETBOX_KEY=${NETBOX_KEY} --network bridge_network ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
   except:
     - tags

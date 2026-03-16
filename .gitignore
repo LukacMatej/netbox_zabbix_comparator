@@ -25,3 +25,4 @@ compose.yaml
 netbox-zabbix-sync-main*
 docker_init.sh
 init.sh
+.gitlab-ci-backup.yml
