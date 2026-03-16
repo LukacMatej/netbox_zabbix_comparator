@@ -21,6 +21,8 @@ stages:
     - export DEPLOY_HOST="$(printf '%s' "$DOCKER_HOST_SSH" | sed -E 's|^([^@]+@)?([^:]+).*$|\2|')"
     - ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
     - chmod 644 ~/.ssh/known_hosts
+    - export SSH_OPTS="-o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -i $HOME/.ssh/id_rsa"
+    - ssh $SSH_OPTS ${DOCKER_HOST_SSH} "echo ssh-auth-ok"
 
 lint:
   stage: lint
@@ -96,8 +98,8 @@ docker_stop_remote_devel:
   image: docker:latest
   script:
     - echo "Using docker ${DOCKER_HOST_SSH}"
-    - ssh ${DOCKER_HOST_SSH} "docker stop ${CI_PROJECT_NAME}-dev || true"
-    - ssh ${DOCKER_HOST_SSH} "docker rm ${CI_PROJECT_NAME}-dev || true"
+    - ssh $SSH_OPTS ${DOCKER_HOST_SSH} "docker stop ${CI_PROJECT_NAME}-dev || true"
+    - ssh $SSH_OPTS ${DOCKER_HOST_SSH} "docker rm ${CI_PROJECT_NAME}-dev || true"
   except:
     - tags
 
@@ -107,11 +109,11 @@ docker_copy_devel:
   image: docker:latest
   script:
     - echo "Using docker ${DOCKER_HOST_SSH}"
-    - ssh ${DOCKER_HOST_SSH} "docker login -u ${REPO_USERNAME} -p ${REPO_PASSWORD} ${REPO_HOST}"
-    - ssh ${DOCKER_HOST_SSH} "docker tag netsystemcz/${CI_PROJECT_NAME}:dev ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
-    - ssh ${DOCKER_HOST_SSH} "docker push ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
-    - ssh ${DOCKER_HOST_SSH} "docker login -u ${REPO_USERNAME} -p ${REPO_PASSWORD} ${REPO_HOST}"
-    - ssh ${DOCKER_HOST_SSH} "docker pull ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
+    - ssh $SSH_OPTS ${DOCKER_HOST_SSH} "docker login -u ${REPO_USERNAME} -p ${REPO_PASSWORD} ${REPO_HOST}"
+    - ssh $SSH_OPTS ${DOCKER_HOST_SSH} "docker tag netsystemcz/${CI_PROJECT_NAME}:dev ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
+    - ssh $SSH_OPTS ${DOCKER_HOST_SSH} "docker push ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
+    - ssh $SSH_OPTS ${DOCKER_HOST_SSH} "docker login -u ${REPO_USERNAME} -p ${REPO_PASSWORD} ${REPO_HOST}"
+    - ssh $SSH_OPTS ${DOCKER_HOST_SSH} "docker pull ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
   except:
     - tags
 
@@ -124,6 +126,6 @@ docker_run_devel:
   script:
     - echo "Using docker ${DOCKER_HOST_SSH}"
     - echo "${PWD}"
-    - ssh ${DOCKER_HOST_SSH} "docker run --detach --restart unless-stopped -p 7000:7000 --name ${CI_PROJECT_NAME}-dev -v /srv/netbox_zabbix/certs/nblab-root-ca.crt:/usr/local/share/ca-certificates/nblab-root-ca.crt:ro,z -v /srv/netbox_zabbix/certs/netsys-ca.pem:/usr/local/share/ca-certificates/netsys-ca.pem:ro,z -e LISTEN_ADDRESS=0.0.0.0 -e HTTP_PORT=7000 -e ZABBIX_DEFAULT_HOSTGROUP=${ZABBIX_DEFAULT_HOSTGROUP} -e ZABBIX_IP=${ZABBIX_URL} -e ZABBIX_KEY=${ZABBIX_KEY} -e NETBOX_IP=${NETBOX_URL} -e NETBOX_KEY=${NETBOX_KEY} --network bridge_network ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
+    - ssh $SSH_OPTS ${DOCKER_HOST_SSH} "docker run --detach --restart unless-stopped -p 7000:7000 --name ${CI_PROJECT_NAME}-dev -v /srv/netbox_zabbix/certs/nblab-root-ca.crt:/usr/local/share/ca-certificates/nblab-root-ca.crt:ro,z -v /srv/netbox_zabbix/certs/netsys-ca.pem:/usr/local/share/ca-certificates/netsys-ca.pem:ro,z -e LISTEN_ADDRESS=0.0.0.0 -e HTTP_PORT=7000 -e ZABBIX_DEFAULT_HOSTGROUP=${ZABBIX_DEFAULT_HOSTGROUP} -e ZABBIX_IP=${ZABBIX_URL} -e ZABBIX_KEY=${ZABBIX_KEY} -e NETBOX_IP=${NETBOX_URL} -e NETBOX_KEY=${NETBOX_KEY} --network bridge_network ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
   except:
     - tags
