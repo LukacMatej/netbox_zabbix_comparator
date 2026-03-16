@@ -108,6 +108,7 @@ docker_stop_remote_devel:
     - echo "Using docker on ${SSH_TARGET}"
     - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker stop ${CI_PROJECT_NAME}-dev || true"
     - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker rm ${CI_PROJECT_NAME}-dev || true"
+    - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker image rm -f netsystemcz/${CI_PROJECT_NAME}:dev || true"
   except:
     - tags
 
@@ -117,9 +118,9 @@ docker_copy_devel:
   image: docker:latest
   script:
     - echo "Using docker on ${SSH_TARGET}"
-    - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker login -u ${REPO_USERNAME} -p ${REPO_PASSWORD} ${REPO_HOST}"
-    - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker tag netsystemcz/${CI_PROJECT_NAME}:dev ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
-    - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker push ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
+    - docker login -u ${REPO_USERNAME} -p ${REPO_PASSWORD} ${REPO_HOST}"
+    - docker tag netsystemcz/${CI_PROJECT_NAME}:dev ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
+    - docker push ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
     - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker login -u ${REPO_USERNAME} -p ${REPO_PASSWORD} ${REPO_HOST}"
     - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker pull ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
   except:
