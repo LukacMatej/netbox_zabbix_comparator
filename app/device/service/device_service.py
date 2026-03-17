@@ -76,7 +76,7 @@ def find_hostinterface_id(hostid: str) -> int:
     }
     try:
         response = requests.post(
-            f"{zb_url}/api_jsonrpc.php", headers=headers, json=payload, timeout=10
+            f"{zb_url}/api_jsonrpc.php", headers=headers, json=payload, timeout=30
         )
         response.raise_for_status()
         log.logger.debug("Response from Zabbix API: %s", response.json())
@@ -107,7 +107,7 @@ def find_nb_site_id(site_name: str) -> int:
         "Accept": "application/json",
     }
     response = requests.get(
-        f"{nb_ip}/api/dcim/sites/?name={site_name}", headers=headers, timeout=10
+        f"{nb_ip}/api/dcim/sites/?name={site_name}", headers=headers, timeout=30
     )
     if response.status_code == 200:
         data = response.json()
@@ -135,7 +135,7 @@ def find_nb_device_type_id(device_type: str) -> int:
         "Accept": "application/json",
     }
     response = requests.get(
-        f"{nb_ip}/api/dcim/device-types/?model={device_type}", headers=headers, timeout=10
+        f"{nb_ip}/api/dcim/device-types/?model={device_type}", headers=headers, timeout=30
     )
     if response.status_code == 200:
         data = response.json()
@@ -163,7 +163,7 @@ def find_nb_device_role_id(device_role: str) -> int:
         "Accept": "application/json",
     }
     response = requests.get(
-        f"{nb_ip}/api/dcim/device-roles/?name={device_role}", headers=headers, timeout=10
+        f"{nb_ip}/api/dcim/device-roles/?name={device_role}", headers=headers, timeout=30
     )
     if response.status_code == 200:
         data = response.json()
@@ -419,7 +419,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
     """
     try:
         response: requests.Response = requests.post(
-            ip, headers=headers, json={"query": query}, timeout=10
+            ip, headers=headers, json={"query": query}, timeout=30
         )
         log.logger.debug(
             "Request to Netbox API: %s %s  with headers %s and body %s",
@@ -538,7 +538,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
         log.logger.debug(
             "Requesting Zabbix: %s devices with payload: %s and headers: %s", ip, payload, headers
         )
-        response: requests.Response = requests.post(ip, headers=headers, json=payload, timeout=10)
+        response: requests.Response = requests.post(ip, headers=headers, json=payload, timeout=30)
         log.logger.debug(response)
         response.raise_for_status()
         result = response.json()
