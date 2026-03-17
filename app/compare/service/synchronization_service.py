@@ -36,7 +36,7 @@ from app.device.models.difference_model import DeviceDifference as device_differ
 from app.device.models.synchonization_output_model import SyncOutput as sync_output_model
 from app.device.service import device_service
 
-REQUEST_TIMEOUT = 10
+REQUEST_TIMEOUT = 30
 
 
 def find_hostgroup_id(hostgroup_name: str) -> int:
