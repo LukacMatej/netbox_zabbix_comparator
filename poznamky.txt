@@ -1,0 +1,70 @@
+LOCAL TESTING
+docker run -d -p 7000:7000 --name netbox-zabbix -e LISTEN_ADDRESS=0.0.0.0 -e HTTP_PORT=7000 -e NETBOX_IP=http://172.26.248.142:8000/ -e NETBOX_KEY=8f9d3eaba15b0fb9c182f316ee9ee7f791ab0e4b -e ZABBIX_IP=http://172.26.248.142/ -e ZABBIX_KEY=14a116237840d411e877d16b511eecc00818a3c050470648db9a91d2326e00f5 netbox-zabbix
+
+    NETBOX_IP="http://172.26.248.142:8000"
+    NETBOX_KEY="8f9d3eaba15b0fb9c182f316ee9ee7f791ab0e4b"
+    ZABBIX_IP="http://172.26.248.142:80"
+    ZABBIX_KEY="14a116237840d411e877d16b511eecc00818a3c050470648db9a91d2326e00f5"
+
+git pull
+docker build . -t netbox-zabbix
+docker run -d -p 7000:7000 --name netbox-zabbix -e LISTEN_ADDRESS=0.0.0.0 -e HTTP_PORT=7000 -e NETBOX_IP=http://172.26.248.142:8000 -e NETBOX_KEY=hFmlBSG3xKUVrfGrjYupdAaPhlhxDYqjy4waZf7R -e ZABBIX_IP=http://172.26.248.142/ -e ZABBIX_KEY=14a116237840d411e877d16b511eecc00818a3c050470648db9a91d2326e00f5 netbox-zabbix
+
+Zabbix interface type
+1 - agent
+2 - snmp
+
+
+Otázky k synchronizaci
+- kam psát mac adresy portů, pokud víc? dvě místa v zabbixu pro A mac a B mac - nic
+- port u zabbixu pro SNMP, kde v netboxu? nebo vzdy SNMP? jen jeden defaultni port od kazdeho, co delat kdyz vice SNMP/agent?
+- bude vic ip adres na interface v netboxu nekdy?
+- podle ceho vytvaret hostgroupy v zabbixu? lokalita/manufacturer/device_role
+- v zabbixu není maska sítě, netbox potřebuje k vytvoření, co s tím? default 24?
+- zabbix nemá interfaces, jak vytvořit zařízení v netboxu ze zabbixu když o něm nic nevím? podle device_types?
+
+v config contextu typ interface snmp
+z netboxu filtrovat zařízení, který mají config context
+jednosměrná synchronizace netbox -> zabbix
+
+Synchronizace:
+mac -> hodnota z Zabbixu přepíše hodnotu v netboxu
+
+kouknout na netbox a jeho python kabeláž, když je něco zapojený do switche a pak dál přes patch panely 2-3 tak nejde vidět celá cesta
+napsat funkci k tomu?
+
+
+dodelat pozdeji, kdyz se porovnavaji zarizeni, tak kdyz jsou stejny tak je nepridavat - done
+
+brát primary ip z device do zabbixu jako hlavní - done
+nefunguje vytvoreni agent inferface v zabbixu - done
+nefunguje updatovani ip adres - done
+kdyz v zabbixu je host v hostgroupe tak ho tam nechat - done
+
+?aplikovat templates na hostgroup - martin nápad
+
+porovnavani template u zarizeni kdyz jsou podobny - done
+
+poslat jirkovi vsechny parametry pro build a otestovat vsechno aby fungovalo pred tim nez to poslu
+
+
+univerzální použítí, nastavit ip adresy a keys z fe?
+!chytat error hlasky z response od zabbixu - done
+
+porovnávat port type - done
+
+Zobrazit s jakým zabbixem, netboxem to je propojený na fe - done
+
+kontrola duplcitnich ip adres - výsledek v porovnání
+
+zkontrolovat zda stará verze netboxu bude fungovat s novou, jak to vyřešit?
+novinky v nový verzi:
+uprava graphql 
+novy api tokeny v2, stary tokeny prestanou fungovat ve verzi v4.7, ted v4.5
+3.10 a 3.11 nepodporuje novy netbox
+
+gitlab 3. merge request - stara verze
+
+DOCKER_HOST_2
+tcp://192.168.201.48:2375
+

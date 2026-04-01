@@ -11,6 +11,7 @@ COPY requirements.txt /
 RUN pip3 install -r requirements.txt
 
 WORKDIR /
+ADD poznamky.txt /
 ADD server.py /
 ADD app/ /app
 ADD templates/ /templates
