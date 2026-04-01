@@ -88,6 +88,8 @@ docker_rm_local_devel:
   image: docker:latest
   script:
     - echo "Using docker ${DOCKER_HOST_2}"
+    - docker stop ${CI_PROJECT_NAME}-dev || true
+    - docker rm ${CI_PROJECT_NAME}-dev || true
     - docker image rm -f netsystemcz/${CI_PROJECT_NAME}:dev || true
   except:
     - tags
