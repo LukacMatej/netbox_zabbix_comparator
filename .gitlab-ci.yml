@@ -1,8 +1,5 @@
 image: docker:latest
 
-variables:
-  DEPLOY_SSH_TARGET: "netsys@192.168.201.48"
-
 stages:
   - lint
   - test
@@ -21,16 +18,13 @@ stages:
     - printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
     - chmod 600 ~/.ssh/id_rsa
     - ssh-add ~/.ssh/id_rsa
-    - export DEPLOY_TARGET="${DEPLOY_SSH_TARGET:-$DOCKER_HOST_SSH}"
-    - export DEPLOY_USER="$(printf '%s' "$DEPLOY_TARGET" | sed -E 's|^([^@]+)@.*$|\1|')"
-    - export DEPLOY_HOST="$(printf '%s' "$DEPLOY_TARGET" | sed -E 's|^([^@]+@)?([^:]+).*$|\2|')"
-    - export SSH_TARGET="${DEPLOY_USER}@${DEPLOY_HOST}"
+    - DEPLOY_HOST="${DEPLOY_TARGET#*@}"
     - ssh-keyscan -t rsa,ecdsa,ed25519 -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
     - chmod 644 ~/.ssh/known_hosts
-    - export SSH_OPTS="-o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o HostKeyAlgorithms=ssh-ed25519,ecdsa-sha2-nistp256,rsa-sha2-512,rsa-sha2-256,ssh-rsa -i $HOME/.ssh/id_rsa"
-    - echo "Using SSH target ${SSH_TARGET}"
-    - ssh $SSH_OPTS ${SSH_TARGET} "echo ssh-auth-ok"
-    - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker ps >/dev/null"
+    - SSH_OPTS="-o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o HostKeyAlgorithms=ssh-ed25519,ecdsa-sha2-nistp256,rsa-sha2-512,rsa-sha2-256,ssh-rsa -i $HOME/.ssh/id_rsa"
+    - echo "Using SSH target ${DOCKER_HOST_SSH}"
+    - ssh $SSH_OPTS ${DOCKER_HOST_SSH} "echo ssh-auth-ok"
+    - ssh $SSH_OPTS ${DOCKER_HOST_SSH} "sudo -n docker ps >/dev/null"
 
 lint:
   stage: lint
@@ -107,10 +101,10 @@ docker_stop_remote_devel:
   stage: docker_stop
   image: docker:latest
   script:
-    - echo "Using docker on ${SSH_TARGET}"
-    - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker stop ${CI_PROJECT_NAME}-dev || true"
-    - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker rm ${CI_PROJECT_NAME}-dev || true"
-    - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker image rm -f ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev || true"
+    - echo "Using docker on ${DOCKER_HOST_SSH}"
+    - ssh $SSH_OPTS ${DOCKER_HOST_SSH} "sudo -n docker stop ${CI_PROJECT_NAME}-dev || true"
+    - ssh $SSH_OPTS ${DOCKER_HOST_SSH} "sudo -n docker rm ${CI_PROJECT_NAME}-dev || true"
+    - ssh $SSH_OPTS ${DOCKER_HOST_SSH} "sudo -n docker image rm -f ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev || true"
   except:
     - tags
 
@@ -119,7 +113,7 @@ docker_copy_devel:
   stage: docker_copy
   image: docker:latest
   script:
-    - echo "Using docker on ${SSH_TARGET}"
+    - echo "Using docker on ${DOCKER_HOST_SSH}"
     - export REPO_HOST_CLEAN="$(printf '%s' "$REPO_HOST" | tr -d '\r\n')"
     - export REPO_USERNAME_CLEAN="$(printf '%s' "$REPO_USERNAME" | tr -d '\r\n')"
     - export REPO_PASSWORD_CLEAN="$(printf '%s' "$REPO_PASSWORD" | tr -d '\r\n')"
