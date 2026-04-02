@@ -59,7 +59,7 @@ kontrola duplcitnich ip adres - výsledek v porovnání
 
 zkontrolovat zda stará verze netboxu bude fungovat s novou, jak to vyřešit?
 novinky v nový verzi:
-uprava graphql 
+uprava graphql
 novy api tokeny v2, stary tokeny prestanou fungovat ve verzi v4.7, ted v4.5
 3.10 a 3.11 nepodporuje novy netbox
 
