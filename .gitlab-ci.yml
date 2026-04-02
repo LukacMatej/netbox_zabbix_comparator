@@ -18,7 +18,7 @@ stages:
     - printf '%s' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
     - chmod 600 ~/.ssh/id_rsa
     - ssh-add ~/.ssh/id_rsa
-    - DEPLOY_HOST="${DEPLOY_TARGET#*@}"
+    - DEPLOY_HOST="${DOCKER_HOST_SSH#*@}"
     - ssh-keyscan -t rsa,ecdsa,ed25519 -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
     - chmod 644 ~/.ssh/known_hosts
     - SSH_OPTS="-o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o HostKeyAlgorithms=ssh-ed25519,ecdsa-sha2-nistp256,rsa-sha2-512,rsa-sha2-256,ssh-rsa -i $HOME/.ssh/id_rsa"
