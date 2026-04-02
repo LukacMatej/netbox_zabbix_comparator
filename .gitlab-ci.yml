@@ -114,14 +114,15 @@ docker_copy_devel:
   image: docker:latest
   script:
     - echo "Using docker on ${DOCKER_HOST_SSH}"
-    - export REPO_HOST_CLEAN="$(printf '%s' "$REPO_HOST" | tr -d '\r\n')"
-    - export REPO_USERNAME_CLEAN="$(printf '%s' "$REPO_USERNAME" | tr -d '\r\n')"
-    - export REPO_PASSWORD_CLEAN="$(printf '%s' "$REPO_PASSWORD" | tr -d '\r\n')"
-    - printf '%s' "$REPO_PASSWORD_CLEAN" | docker login -u "$REPO_USERNAME_CLEAN" --password-stdin "$REPO_HOST_CLEAN"
-    - docker tag netsystemcz/${CI_PROJECT_NAME}:dev ${REPO_HOST_CLEAN}/netsystemcz/${CI_PROJECT_NAME}:dev
-    - docker push ${REPO_HOST_CLEAN}/netsystemcz/${CI_PROJECT_NAME}:dev
-    - printf '%s' "$REPO_PASSWORD_CLEAN" | ssh $SSH_OPTS ${DOCKER_HOST_SSH} "sudo -n docker login -u '${REPO_USERNAME_CLEAN}' --password-stdin '${REPO_HOST_CLEAN}'"
-    - ssh $SSH_OPTS ${DOCKER_HOST_SSH} "sudo -n docker pull ${REPO_HOST_CLEAN}/netsystemcz/${CI_PROJECT_NAME}:dev"
+    # - export REPO_HOST_CLEAN="$(printf '%s' "$REPO_HOST" | tr -d '\r\n')"
+    # - export REPO_USERNAME_CLEAN="$(printf '%s' "$REPO_USERNAME" | tr -d '\r\n')"
+    # - export REPO_PASSWORD_CLEAN="$(printf '%s' "$REPO_PASSWORD" | tr -d '\r\n')"
+    # - printf '%s' "$REPO_PASSWORD_CLEAN" | docker login -u "$REPO_USERNAME_CLEAN" --password-stdin "$REPO_HOST_CLEAN"
+    - printf '%s' "$REPO_PASSWORD" | docker login -u "$REPO_USERNAME" --password-stdin "$REPO_HOST"
+    - docker tag netsystemcz/${CI_PROJECT_NAME}:dev ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev
+    - docker push ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev
+    - printf '%s' "$REPO_PASSWORD" | ssh $SSH_OPTS ${DOCKER_HOST_SSH} "sudo -n docker login -u '${REPO_USERNAME}' --password-stdin '${REPO_HOST}'"
+    - ssh $SSH_OPTS ${DOCKER_HOST_SSH} "sudo -n docker pull ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev"
   except:
     - tags
 
