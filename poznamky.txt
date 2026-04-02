@@ -67,4 +67,3 @@ gitlab 3. merge request - stara verze
 
 DOCKER_HOST_2
 tcp://192.168.201.48:2375
-
