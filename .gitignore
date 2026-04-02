@@ -14,7 +14,7 @@ __pycache__
 netsys-ca.crt
 lab-ca.crt
 test.txt
-# poznamky.txt
+poznamky.txt
 env.list
 *~
 *.swp
