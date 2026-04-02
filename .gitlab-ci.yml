@@ -110,7 +110,7 @@ docker_stop_remote_devel:
     - echo "Using docker on ${SSH_TARGET}"
     - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker stop ${CI_PROJECT_NAME}-dev || true"
     - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker rm ${CI_PROJECT_NAME}-dev || true"
-    - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker image rm -f netsystemcz/${CI_PROJECT_NAME}:dev || true"
+    - ssh $SSH_OPTS ${SSH_TARGET} "sudo -n docker image rm -f ${REPO_HOST}/netsystemcz/${CI_PROJECT_NAME}:dev || true"
   except:
     - tags
 
