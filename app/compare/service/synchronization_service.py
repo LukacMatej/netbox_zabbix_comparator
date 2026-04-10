@@ -133,21 +133,21 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             return field.split("(")[0].strip()
         return field.strip()
 
-    zabbix_ip = os.environ.get("ZABBIX_IP")
-    zabbix_key = os.environ.get("ZABBIX_KEY")
-    headers = {
+    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
+    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    headers: dict[str, str] = {
         "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
     }
-    hostid = None
-    response = requests.post(
+    hostid: str | None = None
+    response: requests.Response = requests.post(
         zabbix_ip + "api_jsonrpc.php",
         headers=headers,
         timeout=REQUEST_TIMEOUT,
         json={
             "jsonrpc": "2.0",
             "method": "host.get",
-            "params": {"filter": {"host": {zb_device.name}}},
+            "params": {"filter": {"host": [zb_device.name]}},
             "id": 1,
         },
     )
@@ -168,9 +168,9 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         )
         return
     log.logger.info("Zabbix Device before update %s", device_service.print_device(zb_device))
-    updated_fields = {}
-    interface_keys = ["port_type"]
-    address_keys = ["address", "dns_name"]
+    updated_fields: dict[str, str] = {}
+    interface_keys: list[str] = ["port_type"]
+    address_keys: list[str] = ["address", "dns_name"]
     # Check which fields are different and prepare update params
     for field in different_fields:
         field_name = extract_field_name(field)
@@ -239,18 +239,20 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     )
     log.logger.info("Zabbix Device after update %s", device_service.print_device(zb_device))
 
-    # Use the find_zabbix_hostgroup_ids function to get proper hostgroup IDs
-    hostgroupids = find_zabbix_hostgroup_ids(zb_device.hostgroup)
+    # Prefer updated Zabbix values, but fall back to Netbox if source data is missing.
+    hostgroup_source = zb_device.hostgroup if zb_device.hostgroup else nb_device.hostgroup
+    hostgroupids = find_zabbix_hostgroup_ids(hostgroup_source)
+    template_source = zb_device.templates if zb_device.templates else nb_device.templates
 
     update_data_zabbix = zb_device.update_data_zabbix(
         name=nb_device.name,
         hostid=hostid,
         interface_id=device_service.find_hostinterface_id(hostid),
         hostgroupids=hostgroupids,
-        templateids=[find_template_ids(template) for template in zb_device.templates if template],
+        templateids=[find_template_ids(template) for template in template_source if template],
     )
     log.logger.info(update_data_zabbix)
-    response = requests.post(
+    response: requests.Response = requests.post(
         zabbix_ip + "api_jsonrpc.php",
         headers=headers,
         timeout=REQUEST_TIMEOUT,
@@ -357,7 +359,7 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
         return
     data_zabbix = device.create_data_zabbix(hostgroupids=hostgroupids, templateids=templateids)
     log.logger.info("Data to be sent to Zabbix: %s", data_zabbix)
-    response = requests.post(
+    response: requests.Response = requests.post(
         zabbix_ip + "api_jsonrpc.php",
         headers=headers,
         timeout=REQUEST_TIMEOUT,
@@ -391,19 +393,43 @@ def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
     Returns:
         list[int]: The IDs of the hostgroups, -1 for any that could not be found or created.
     """
-    # If hostgroup_names is a string (not a list), convert to list
+    default_hostgroup = os.environ.get("ZABBIX_DEFAULT_HOSTGROUP", "Netbox")
+    if hostgroup_names is None:
+        hostgroup_names = [default_hostgroup]
+    # Normalize common input shapes (str, dict, tuple/set) to a list for iteration.
     if isinstance(hostgroup_names, str):
+        hostgroup_names = [hostgroup_names]
+    elif isinstance(hostgroup_names, dict):
+        hostgroup_names = [hostgroup_names]
+    elif isinstance(hostgroup_names, (tuple, set)):
+        hostgroup_names = list(hostgroup_names)
+    elif not isinstance(hostgroup_names, list):
+        log.logger.warning(
+            "Unexpected hostgroup_names type %s, coercing to single-item list",
+            type(hostgroup_names).__name__,
+        )
         hostgroup_names = [hostgroup_names]
     # Extract names from the list, handling both strings and dictionaries
     names_to_check = []
     for item in hostgroup_names:
         if isinstance(item, str):
-            names_to_check.append(item)
+            normalized_item = item.strip()
+            if normalized_item:
+                names_to_check.append(normalized_item)
         elif isinstance(item, dict) and "name" in item:
-            names_to_check.append(item["name"])
+            normalized_item = str(item["name"]).strip()
+            if normalized_item:
+                names_to_check.append(normalized_item)
         else:
             log.logger.warning("Unexpected hostgroup format: %s", item)
             continue
+
+    if not names_to_check:
+        log.logger.info(
+            "No valid hostgroup provided, falling back to default hostgroup %s.",
+            default_hostgroup,
+        )
+        names_to_check = [default_hostgroup]
 
     group_ids = []
     zabbix_ip = os.environ.get("ZABBIX_IP")
