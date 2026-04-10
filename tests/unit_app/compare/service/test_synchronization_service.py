@@ -58,9 +58,41 @@ class SynchronizationServiceTests(unittest.TestCase):
         result = ss.find_zabbix_hostgroup_ids(["new-group"])
         self.assertEqual(result, [50])
 
-    def test_find_zabbix_hostgroup_ids_none_returns_empty(self):
-        """None hostgroup input should be handled without exceptions."""
-        self.assertEqual(ss.find_zabbix_hostgroup_ids(None), [])
+    @patch.dict(
+        "os.environ",
+        {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k", "ZABBIX_DEFAULT_HOSTGROUP": "DefaultHG"},
+        clear=False,
+    )
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_find_zabbix_hostgroup_ids_none_uses_default_hostgroup(self, post_mock):
+        """None hostgroup input should resolve to env default hostgroup."""
+        response = Mock(status_code=200)
+        response.text = "found"
+        response.json.return_value = {"result": [{"groupid": "24"}]}
+        post_mock.return_value = response
+
+        result = ss.find_zabbix_hostgroup_ids(None)
+        self.assertEqual(result, [24])
+        called_json = post_mock.call_args.kwargs["json"]
+        self.assertEqual(called_json["params"]["filter"]["name"], ["DefaultHG"])
+
+    @patch.dict(
+        "os.environ",
+        {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k", "ZABBIX_DEFAULT_HOSTGROUP": "DefaultHG"},
+        clear=False,
+    )
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_find_zabbix_hostgroup_ids_empty_list_uses_default_hostgroup(self, post_mock):
+        """Empty hostgroup input should resolve to env default hostgroup."""
+        response = Mock(status_code=200)
+        response.text = "found"
+        response.json.return_value = {"result": [{"groupid": "24"}]}
+        post_mock.return_value = response
+
+        result = ss.find_zabbix_hostgroup_ids([])
+        self.assertEqual(result, [24])
+        called_json = post_mock.call_args.kwargs["json"]
+        self.assertEqual(called_json["params"]["filter"]["name"], ["DefaultHG"])
 
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
     @patch("app.compare.service.synchronization_service.requests.post")

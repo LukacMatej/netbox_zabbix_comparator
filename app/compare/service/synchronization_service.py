@@ -393,8 +393,9 @@ def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
     Returns:
         list[int]: The IDs of the hostgroups, -1 for any that could not be found or created.
     """
+    default_hostgroup = os.environ.get("ZABBIX_DEFAULT_HOSTGROUP", "Netbox")
     if hostgroup_names is None:
-        return []
+        hostgroup_names = [default_hostgroup]
     # Normalize common input shapes (str, dict, tuple/set) to a list for iteration.
     if isinstance(hostgroup_names, str):
         hostgroup_names = [hostgroup_names]
@@ -412,12 +413,23 @@ def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
     names_to_check = []
     for item in hostgroup_names:
         if isinstance(item, str):
-            names_to_check.append(item)
+            normalized_item = item.strip()
+            if normalized_item:
+                names_to_check.append(normalized_item)
         elif isinstance(item, dict) and "name" in item:
-            names_to_check.append(item["name"])
+            normalized_item = str(item["name"]).strip()
+            if normalized_item:
+                names_to_check.append(normalized_item)
         else:
             log.logger.warning("Unexpected hostgroup format: %s", item)
             continue
+
+    if not names_to_check:
+        log.logger.info(
+            "No valid hostgroup provided, falling back to default hostgroup %s.",
+            default_hostgroup,
+        )
+        names_to_check = [default_hostgroup]
 
     group_ids = []
     zabbix_ip = os.environ.get("ZABBIX_IP")
