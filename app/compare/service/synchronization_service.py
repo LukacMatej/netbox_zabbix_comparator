@@ -239,15 +239,17 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     )
     log.logger.info("Zabbix Device after update %s", device_service.print_device(zb_device))
 
-    # Use the find_zabbix_hostgroup_ids function to get proper hostgroup IDs
-    hostgroupids = find_zabbix_hostgroup_ids(zb_device.hostgroup)
+    # Prefer updated Zabbix values, but fall back to Netbox if source data is missing.
+    hostgroup_source = zb_device.hostgroup if zb_device.hostgroup else nb_device.hostgroup
+    hostgroupids = find_zabbix_hostgroup_ids(hostgroup_source)
+    template_source = zb_device.templates if zb_device.templates else nb_device.templates
 
     update_data_zabbix = zb_device.update_data_zabbix(
         name=nb_device.name,
         hostid=hostid,
         interface_id=device_service.find_hostinterface_id(hostid),
         hostgroupids=hostgroupids,
-        templateids=[find_template_ids(template) for template in zb_device.templates if template],
+        templateids=[find_template_ids(template) for template in template_source if template],
     )
     log.logger.info(update_data_zabbix)
     response: requests.Response = requests.post(
@@ -391,8 +393,20 @@ def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
     Returns:
         list[int]: The IDs of the hostgroups, -1 for any that could not be found or created.
     """
-    # If hostgroup_names is a string (not a list), convert to list
+    if hostgroup_names is None:
+        return []
+    # Normalize common input shapes (str, dict, tuple/set) to a list for iteration.
     if isinstance(hostgroup_names, str):
+        hostgroup_names = [hostgroup_names]
+    elif isinstance(hostgroup_names, dict):
+        hostgroup_names = [hostgroup_names]
+    elif isinstance(hostgroup_names, (tuple, set)):
+        hostgroup_names = list(hostgroup_names)
+    elif not isinstance(hostgroup_names, list):
+        log.logger.warning(
+            "Unexpected hostgroup_names type %s, coercing to single-item list",
+            type(hostgroup_names).__name__,
+        )
         hostgroup_names = [hostgroup_names]
     # Extract names from the list, handling both strings and dictionaries
     names_to_check = []
