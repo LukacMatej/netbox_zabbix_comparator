@@ -133,21 +133,21 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             return field.split("(")[0].strip()
         return field.strip()
 
-    zabbix_ip = os.environ.get("ZABBIX_IP")
-    zabbix_key = os.environ.get("ZABBIX_KEY")
-    headers = {
+    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
+    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    headers: dict[str, str] = {
         "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
     }
-    hostid = None
-    response = requests.post(
+    hostid: str | None = None
+    response: requests.Response = requests.post(
         zabbix_ip + "api_jsonrpc.php",
         headers=headers,
         timeout=REQUEST_TIMEOUT,
         json={
             "jsonrpc": "2.0",
             "method": "host.get",
-            "params": {"filter": {"host": {zb_device.name}}},
+            "params": {"filter": {"host": [zb_device.name]}},
             "id": 1,
         },
     )
@@ -168,9 +168,9 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         )
         return
     log.logger.info("Zabbix Device before update %s", device_service.print_device(zb_device))
-    updated_fields = {}
-    interface_keys = ["port_type"]
-    address_keys = ["address", "dns_name"]
+    updated_fields: dict[str, str] = {}
+    interface_keys: list[str] = ["port_type"]
+    address_keys: list[str] = ["address", "dns_name"]
     # Check which fields are different and prepare update params
     for field in different_fields:
         field_name = extract_field_name(field)
@@ -250,7 +250,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         templateids=[find_template_ids(template) for template in zb_device.templates if template],
     )
     log.logger.info(update_data_zabbix)
-    response = requests.post(
+    response: requests.Response = requests.post(
         zabbix_ip + "api_jsonrpc.php",
         headers=headers,
         timeout=REQUEST_TIMEOUT,
@@ -357,7 +357,7 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
         return
     data_zabbix = device.create_data_zabbix(hostgroupids=hostgroupids, templateids=templateids)
     log.logger.info("Data to be sent to Zabbix: %s", data_zabbix)
-    response = requests.post(
+    response: requests.Response = requests.post(
         zabbix_ip + "api_jsonrpc.php",
         headers=headers,
         timeout=REQUEST_TIMEOUT,
