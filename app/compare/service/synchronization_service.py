@@ -244,12 +244,14 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     hostgroupids = find_zabbix_hostgroup_ids(hostgroup_source)
     template_source = zb_device.templates if zb_device.templates else nb_device.templates
 
+    interface_id = device_service.find_hostinterface_id(hostid)
     update_data_zabbix = zb_device.update_data_zabbix(
         name=nb_device.name,
         hostid=hostid,
-        interface_id=device_service.find_hostinterface_id(hostid),
+        interface_id=interface_id,
         hostgroupids=hostgroupids,
         templateids=[find_template_ids(template) for template in template_source if template],
+        include_interfaces=False,
     )
     log.logger.info(update_data_zabbix)
     response: requests.Response = requests.post(
@@ -265,6 +267,35 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         )
         log.logger.error("Error in Zabbix API response: %s", response_json["error"])
         return
+
+    interface_update_data_zabbix = zb_device.update_interface_data_zabbix(interface_id)
+    log.logger.info(interface_update_data_zabbix)
+    interface_response: requests.Response = requests.post(
+        zabbix_ip + "api_jsonrpc.php",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
+        json=interface_update_data_zabbix,
+    )
+    interface_response_json = interface_response.json()
+    if "error" in interface_response_json:
+        sync_output.add_difference_output(
+            f"Error in Zabbix API response: {interface_response_json['error']['data']}"
+        )
+        log.logger.error("Error in Zabbix API response: %s", interface_response_json["error"])
+        return
+    if interface_response.status_code != 200:
+        sync_output.add_difference_output(
+            f"Failed to update interface for device {zb_device.name} in Zabbix: "
+            f"{interface_response.text}"
+        )
+        log.logger.error(
+            "Failed to update interface for device %s in Zabbix: %s with response status %s.",
+            zb_device.name,
+            interface_response.text,
+            interface_response.status_code,
+        )
+        return
+
     if response.status_code == 200:
         sync_output.add_difference_output(
             f"Device {zb_device.name} updated successfully in Zabbix."

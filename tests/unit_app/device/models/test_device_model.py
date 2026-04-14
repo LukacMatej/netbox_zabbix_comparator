@@ -57,12 +57,24 @@ class DeviceModelTests(unittest.TestCase):
         update_data = device.update_data_zabbix(
             hostid="101", interface_id=77, hostgroupids=[1], templateids=[10], name="r1-new"
         )
+        update_data_no_interfaces = device.update_data_zabbix(
+            hostid="101",
+            interface_id=77,
+            hostgroupids=[1],
+            templateids=[10],
+            name="r1-new",
+            include_interfaces=False,
+        )
+        interface_update_data = device.update_interface_data_zabbix(interface_id=77)
 
         self.assertEqual(create_data["method"], "host.create")
         self.assertEqual(len(create_data["params"]["groups"]), 4)
         self.assertEqual(update_data["method"], "host.update")
         self.assertEqual(update_data["params"]["hostid"], "101")
         self.assertEqual(update_data["params"]["name"], "r1-new")
+        self.assertEqual(update_data_no_interfaces["params"]["interfaces"], [])
+        self.assertEqual(interface_update_data["method"], "hostinterface.update")
+        self.assertEqual(interface_update_data["params"]["interfaceid"], 77)
 
 
 if __name__ == "__main__":
