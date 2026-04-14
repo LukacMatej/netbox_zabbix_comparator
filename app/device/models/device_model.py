@@ -70,7 +70,15 @@ class Device:
             f"{self.description} {self.templates} {self.status}"
         )
 
-    def update_data_zabbix(self, hostid, interface_id, hostgroupids, templateids, name) -> dict:
+    def update_data_zabbix(
+        self,
+        hostid,
+        interface_id,
+        hostgroupids,
+        templateids,
+        name,
+        include_interfaces: bool = True,
+    ) -> dict:
         """Creates a dictionary representation of the device for Zabbix API."""
         groups = []
         for gid in hostgroupids:
@@ -84,21 +92,56 @@ class Device:
                         groups.append({"groupid": int(gid["groupid"])})
                 except (ValueError, TypeError):
                     continue
+
+        params = {
+            "hostid": hostid,
+            "name": name,
+            "groups": groups,
+            "description": self.description,
+            "templates": [{"templateid": tempId} for tempId in templateids if tempId],
+            "status": 0 if self.status == "Active" else 1,
+        }
+        if include_interfaces:
+            params["interfaces"] = (
+                dict_interfaces_zb_id(self.interfaces, interface_id=interface_id)
+                if self.interfaces
+                else []
+            )
+
         return {
             "jsonrpc": "2.0",
             "method": "host.update",
+            "params": params,
+            "id": 1,
+        }
+
+    def update_interface_data_zabbix(self, interface_id) -> dict:
+        """Creates a dictionary representation for Zabbix host interface update."""
+        if not self.interfaces:
+            return {
+                "jsonrpc": "2.0",
+                "method": "hostinterface.update",
+                "params": {"interfaceid": interface_id},
+                "id": 1,
+            }
+
+        interface = self.interfaces[0]
+        return {
+            "jsonrpc": "2.0",
+            "method": "hostinterface.update",
             "params": {
-                "hostid": hostid,
-                "name": name,
-                "interfaces": (
-                    dict_interfaces_zb_id(self.interfaces, interface_id=interface_id)
-                    if self.interfaces
-                    else []
+                "interfaceid": interface_id,
+                "type": map_port_type(interface.port_type),
+                "main": 1,
+                "useip": 1,
+                "ip": (
+                    str(interface.addresses[0].address).split("/", maxsplit=1)[0]
+                    if interface.addresses
+                    else ""
                 ),
-                "groups": groups,
-                "description": self.description,
-                "templates": [{"templateid": tempId} for tempId in templateids if tempId],
-                "status": 0 if self.status == "Active" else 1,
+                "dns": interface.addresses[0].dns_name if interface.addresses else "",
+                "port": 161,
+                "details": {"version": 3},
             },
             "id": 1,
         }

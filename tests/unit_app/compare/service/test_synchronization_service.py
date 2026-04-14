@@ -152,6 +152,48 @@ class SynchronizationServiceTests(unittest.TestCase):
             any("cannot update device" in item for item in out.synchronization_output_differences)
         )
 
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.device_service.find_hostinterface_id")
+    @patch("app.compare.service.synchronization_service.find_template_ids", return_value=101)
+    @patch(
+        "app.compare.service.synchronization_service.find_zabbix_hostgroup_ids", return_value=[24]
+    )
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_apply_differences_splits_host_and_interface_update(
+        self, post_mock, _hostgroup_mock, _template_mock, interface_id_mock
+    ):
+        """Host basic fields and interfaces should be updated via separate API methods."""
+        host_get = Mock(status_code=200)
+        host_get.json.return_value = {"result": [{"hostid": "9001"}]}
+
+        host_update = Mock(status_code=200)
+        host_update.json.return_value = {"result": {"hostids": ["9001"]}}
+
+        interface_update = Mock(status_code=200)
+        interface_update.json.return_value = {"result": {"interfaceids": ["77"]}}
+
+        post_mock.side_effect = [host_get, host_update, interface_update]
+        interface_id_mock.return_value = 77
+
+        nb = _device("nb", "10.0.0.1", "nb.local")
+        zb = _device("zb", "10.0.0.2", "zb.local")
+        diff = DeviceDifference(nb, zb, (["name", "address", "port_type"], []))
+        out = SyncOutput()
+
+        ss.apply_differences(diff, out)
+
+        self.assertEqual(post_mock.call_count, 3)
+        host_update_payload = post_mock.call_args_list[1].kwargs["json"]
+        interface_update_payload = post_mock.call_args_list[2].kwargs["json"]
+
+        self.assertEqual(host_update_payload["method"], "host.update")
+        self.assertNotIn("interfaces", host_update_payload["params"])
+        self.assertEqual(interface_update_payload["method"], "hostinterface.update")
+        self.assertEqual(interface_update_payload["params"]["interfaceid"], 77)
+        self.assertTrue(
+            any("updated successfully" in item for item in out.synchronization_output_differences)
+        )
+
     @patch("app.compare.service.synchronization_service.apply_differences")
     @patch("app.compare.service.synchronization_service.create_zabbix_device")
     def test_sync_netbox_zabbix_devices(self, create_mock, apply_mock):
