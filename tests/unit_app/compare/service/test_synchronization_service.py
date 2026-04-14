@@ -187,7 +187,7 @@ class SynchronizationServiceTests(unittest.TestCase):
         interface_update_payload = post_mock.call_args_list[2].kwargs["json"]
 
         self.assertEqual(host_update_payload["method"], "host.update")
-        self.assertEqual(host_update_payload["params"]["interfaces"], [])
+        self.assertNotIn("interfaces", host_update_payload["params"])
         self.assertEqual(interface_update_payload["method"], "hostinterface.update")
         self.assertEqual(interface_update_payload["params"]["interfaceid"], 77)
         self.assertTrue(

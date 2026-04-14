@@ -92,22 +92,26 @@ class Device:
                         groups.append({"groupid": int(gid["groupid"])})
                 except (ValueError, TypeError):
                     continue
+
+        params = {
+            "hostid": hostid,
+            "name": name,
+            "groups": groups,
+            "description": self.description,
+            "templates": [{"templateid": tempId} for tempId in templateids if tempId],
+            "status": 0 if self.status == "Active" else 1,
+        }
+        if include_interfaces:
+            params["interfaces"] = (
+                dict_interfaces_zb_id(self.interfaces, interface_id=interface_id)
+                if self.interfaces
+                else []
+            )
+
         return {
             "jsonrpc": "2.0",
             "method": "host.update",
-            "params": {
-                "hostid": hostid,
-                "name": name,
-                "interfaces": (
-                    dict_interfaces_zb_id(self.interfaces, interface_id=interface_id)
-                    if include_interfaces and self.interfaces
-                    else []
-                ),
-                "groups": groups,
-                "description": self.description,
-                "templates": [{"templateid": tempId} for tempId in templateids if tempId],
-                "status": 0 if self.status == "Active" else 1,
-            },
+            "params": params,
             "id": 1,
         }
 

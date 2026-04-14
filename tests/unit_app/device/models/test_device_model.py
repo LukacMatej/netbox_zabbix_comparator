@@ -72,7 +72,7 @@ class DeviceModelTests(unittest.TestCase):
         self.assertEqual(update_data["method"], "host.update")
         self.assertEqual(update_data["params"]["hostid"], "101")
         self.assertEqual(update_data["params"]["name"], "r1-new")
-        self.assertEqual(update_data_no_interfaces["params"]["interfaces"], [])
+        self.assertNotIn("interfaces", update_data_no_interfaces["params"])
         self.assertEqual(interface_update_data["method"], "hostinterface.update")
         self.assertEqual(interface_update_data["params"]["interfaceid"], 77)
 
