@@ -130,6 +130,7 @@ def run_compare_sync() -> tuple[str, int]:
     netbox_ip: str = os.environ.get("NETBOX_IP")
     zabbix_ip: str = os.environ.get("ZABBIX_IP")
     zabbix_key: str = os.environ.get("ZABBIX_KEY")
+
     compare_output: Exception | tuple[list[DeviceDifference], list[Device], list[Device]] = (
         ct.compare(nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key)
     )

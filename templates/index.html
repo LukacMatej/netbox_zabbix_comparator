@@ -6,8 +6,13 @@
     <title>Comparison Output</title>
 </head>
 <body>
-    <a href="RunCompare" >Porovnání se zabbixem</a>
+    <a href="RunCompare" >Porovnání Netboxu s Zabbixem</a>
     <br><br>
-    <a href="RunCompareSync" >Synchronizace se zabbixem</a>
+    <a
+        href="RunCompareSync"
+        onclick="return confirm('Synchronization will make changes based on comparison in Zabbix. Continue?');"
+    >
+        Synchronizace Netboxu s Zabbixem
+    </a>
 </body>
 </html>
