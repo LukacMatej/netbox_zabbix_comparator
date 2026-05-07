@@ -392,7 +392,9 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
             "Hostgroup %s not found in Zabbix, cannot create device in Netbox.", device.hostgroup
         )
         return
-    templateids: list[int] = [find_template_ids(template) for template in device.templates if template]
+    templateids: list[int] = [
+        find_template_ids(template) for template in device.templates if template
+        ]
     if -1 in templateids:
         sync_output.add_zabbix_output(
             f"No valid templates found for device {device.name}, cannot create in Zabbix."
