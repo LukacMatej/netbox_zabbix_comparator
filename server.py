@@ -179,6 +179,12 @@ def test_connection() -> tuple[str, int]:
         "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
     }
+    data = {
+        "jsonrpc": "2.0",
+        "method": "host.get",
+        "params": [],
+        "id": 1,
+    }
     try:
         netbox_response: requests.Response = requests.get(f"{netbox_ip}/api", headers=netbox_headers, timeout=10)
         netbox_response.raise_for_status()
@@ -186,7 +192,7 @@ def test_connection() -> tuple[str, int]:
         return f"Error connecting to NetBox: {e}", 500
 
     try:
-        zabbix_response: requests.Response = requests.get(f"{zabbix_ip}api/jsonrpc.php", headers=zabbix_headers, timeout=10)
+        zabbix_response: requests.Response = requests.post(f"{zabbix_ip}api_jsonrpc.php", headers=zabbix_headers, json=data, timeout=10)
         zabbix_response.raise_for_status()
     except requests.RequestException as e:
         return f"Error connecting to Zabbix: {e}", 500
