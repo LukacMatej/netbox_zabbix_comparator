@@ -186,7 +186,7 @@ def test_connection() -> tuple[str, int]:
         return f"Error connecting to NetBox: {e}", 500
 
     try:
-        zabbix_response: requests.Response = requests.get(f"{zabbix_ip}/api/jsonrpc.php", headers=zabbix_headers, timeout=10)
+        zabbix_response: requests.Response = requests.get(f"{zabbix_ip}api/jsonrpc.php", headers=zabbix_headers, timeout=10)
         zabbix_response.raise_for_status()
     except requests.RequestException as e:
         return f"Error connecting to Zabbix: {e}", 500
