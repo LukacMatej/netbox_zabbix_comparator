@@ -37,3 +37,10 @@ class DeviceDifference:
     def __str__(self) -> str:
         """Returns a string representation of the DeviceDifference."""
         return f"{self.nb_device} {self.zb_device} {self.differences}"
+
+    def __repr__(self) -> str:
+        """Returns a detailed string representation of the DeviceDifference."""
+        return (
+            f"DeviceDifference(nb_device={self.nb_device}, "
+            f"zb_device={self.zb_device}, differences={self.differences})"
+        )

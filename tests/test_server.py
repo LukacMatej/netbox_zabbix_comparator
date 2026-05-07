@@ -35,17 +35,19 @@ class ServerRoutesTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data.decode(), "ok")
 
+    @patch("server.test_connection", return_value=("Connection successful.", 200))
     @patch("server.ct.compare", return_value=Exception("boom"))
-    def test_run_compare_error(self, _compare):
+    def test_run_compare_error(self, _compare, _test_conn):
         """Compare route returns 500 when compare service raises error output."""
         response = self.client.get("/RunCompare")
         self.assertEqual(response.status_code, 500)
         self.assertIn("boom", response.data.decode())
 
+    @patch("server.test_connection", return_value=("Connection successful.", 200))
     @patch("server.render_template", return_value="compare")
     @patch("server.ds.uniform_output_text")
     @patch("server.ct.compare")
-    def test_run_compare_success(self, compare_mock, uniform_mock, _render):
+    def test_run_compare_success(self, compare_mock, uniform_mock, _render, _test_conn):
         """Compare route returns rendered output for successful comparison."""
         nb = _device("nb")
         zb = _device("zb")
@@ -57,11 +59,12 @@ class ServerRoutesTests(unittest.TestCase):
         self.assertEqual(response.data.decode(), "compare")
         uniform_mock.assert_called_once()
 
+    @patch("server.test_connection", return_value=("Connection successful.", 200))
     @patch("server.render_template", return_value="compare_sync")
     @patch("server.ds.uniform_output_text")
     @patch("server.ss.sync_netbox_zabbix_devices")
     @patch("server.ct.compare")
-    def test_run_compare_sync_success(self, compare_mock, sync_mock, uniform_mock, _render):
+    def test_run_compare_sync_success(self, compare_mock, sync_mock, uniform_mock, _render, _test_conn):
         """Sync route renders result and triggers synchronization service."""
         nb = _device("nb")
         zb = _device("zb")

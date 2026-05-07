@@ -49,7 +49,7 @@ class Device:
 
     name: str = ""
     interfaces: list[InterfaceModel] = []
-    hostgroup: list[str] = []
+    hostgroup: list[str] | str = []
     description: str = ""
     templates: list[str] = []
     status: str = ""
