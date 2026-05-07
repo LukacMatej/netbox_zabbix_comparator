@@ -79,9 +79,6 @@ def run_compare() -> tuple[str, int]:
     netbox_ip: str | None = os.environ.get("NETBOX_IP")
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
     zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
-    response: tuple[str, int] = test_connection()
-    if response[1] != 200:
-        return response[0], response[1]
     compare_output: Exception | tuple[list[DeviceDifference], list[Device], list[Device]] = (
         ct.compare(nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key)
     )
@@ -134,9 +131,6 @@ def run_compare_sync() -> tuple[str, int]:
     netbox_ip: str | None = os.environ.get("NETBOX_IP")
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
     zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
-    response: tuple[str, int] = test_connection()
-    if response[1] != 200:
-        return response[0], response[1]
     compare_output: Exception | tuple[list[DeviceDifference], list[Device], list[Device]] = (
         ct.compare(nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key)
     )
@@ -186,13 +180,13 @@ def test_connection() -> tuple[str, int]:
         "Content-Type": "application/json-rpc",
     }
     try:
-        netbox_response: requests.Response = requests.get(f"http://{netbox_ip}/api/dcim/devices/", headers=netbox_headers, timeout=10)
+        netbox_response: requests.Response = requests.get(f"{netbox_ip}/api", headers=netbox_headers, timeout=10)
         netbox_response.raise_for_status()
     except requests.RequestException as e:
         return f"Error connecting to NetBox: {e}", 500
 
     try:
-        zabbix_response: requests.Response = requests.get(f"http://{zabbix_ip}/api/jsonrpc.php", headers=zabbix_headers, timeout=10)
+        zabbix_response: requests.Response = requests.get(f"{zabbix_ip}/api/jsonrpc.php", headers=zabbix_headers, timeout=10)
         zabbix_response.raise_for_status()
     except requests.RequestException as e:
         return f"Error connecting to Zabbix: {e}", 500
@@ -217,6 +211,10 @@ def parser_init() -> argparse.ArgumentParser:
 if __name__ == "__main__":
     parser: argparse.ArgumentParser = parser_init()
     args: argparse.Namespace = parser.parse_args()
+    response: tuple[str, int] = test_connection()
+    if response[1] != 200:
+        log.logger.error(response[0])
+        exit(1)
     docker_ip: str = os.environ.get("LISTEN_ADDRESS", "0.0.0.0")
     docker_port: str | int = os.environ.get("HTTP_PORT", 7000)
     if not args.development:
