@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import requests
 from flask import Flask, render_template
 from waitress import serve
 from app.compare.service import compare_service as ct
@@ -74,10 +75,13 @@ def run_compare() -> tuple[str, int]:
         Implicitly handles exceptions from the compare operation and returns
         them as error responses with status code 500.
     """
-    netbox_key: str = os.environ.get("NETBOX_KEY")
-    netbox_ip: str = os.environ.get("NETBOX_IP")
-    zabbix_ip: str = os.environ.get("ZABBIX_IP")
-    zabbix_key: str = os.environ.get("ZABBIX_KEY")
+    netbox_key: str | None = os.environ.get("NETBOX_KEY")
+    netbox_ip: str | None = os.environ.get("NETBOX_IP")
+    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
+    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    response: tuple[str, int] = test_connection()
+    if response[1] != 200:
+        return response[0], response[1]
     compare_output: Exception | tuple[list[DeviceDifference], list[Device], list[Device]] = (
         ct.compare(nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key)
     )
@@ -125,12 +129,14 @@ def run_compare_sync() -> tuple[str, int]:
         - ZABBIX_KEY: API key for Zabbix authentication
     """
     synchronization: bool = True
-    sync_output: sync_output_model = None
-    netbox_key: str = os.environ.get("NETBOX_KEY")
-    netbox_ip: str = os.environ.get("NETBOX_IP")
-    zabbix_ip: str = os.environ.get("ZABBIX_IP")
-    zabbix_key: str = os.environ.get("ZABBIX_KEY")
-
+    sync_output: sync_output_model
+    netbox_key: str | None = os.environ.get("NETBOX_KEY")
+    netbox_ip: str | None = os.environ.get("NETBOX_IP")
+    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
+    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    response: tuple[str, int] = test_connection()
+    if response[1] != 200:
+        return response[0], response[1]
     compare_output: Exception | tuple[list[DeviceDifference], list[Device], list[Device]] = (
         ct.compare(nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key)
     )
@@ -161,6 +167,37 @@ def run_compare_sync() -> tuple[str, int]:
         200,
     )
 
+def test_connection() -> tuple[str, int]:
+    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
+    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    netbox_ip: str | None = os.environ.get("NETBOX_IP")
+    netbox_key: str | None = os.environ.get("NETBOX_KEY")
+    if not zabbix_ip or not zabbix_key:
+        return "Zabbix credentials not set in environment variables.", 500
+    if not netbox_ip or not netbox_key:
+        return "NetBox credentials not set in environment variables.", 500
+    netbox_headers: dict[str, str] = {
+        "Authorization": f"Token {netbox_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    zabbix_headers: dict[str, str] = {
+        "Authorization": f"Bearer {zabbix_key}",
+        "Content-Type": "application/json-rpc",
+    }
+    try:
+        netbox_response: requests.Response = requests.get(f"http://{netbox_ip}/api/dcim/devices/", headers=netbox_headers, timeout=10)
+        netbox_response.raise_for_status()
+    except requests.RequestException as e:
+        return f"Error connecting to NetBox: {e}", 500
+
+    try:
+        zabbix_response: requests.Response = requests.get(f"http://{zabbix_ip}/api/jsonrpc.php", headers=zabbix_headers, timeout=10)
+        zabbix_response.raise_for_status()
+    except requests.RequestException as e:
+        return f"Error connecting to Zabbix: {e}", 500
+
+    return "Connection to Zabbix and NetBox successful.", 200
 
 def parser_init() -> argparse.ArgumentParser:
     """
@@ -181,7 +218,7 @@ if __name__ == "__main__":
     parser: argparse.ArgumentParser = parser_init()
     args: argparse.Namespace = parser.parse_args()
     docker_ip: str = os.environ.get("LISTEN_ADDRESS", "0.0.0.0")
-    docker_port: str = os.environ.get("HTTP_PORT", 7000)
+    docker_port: str | int = os.environ.get("HTTP_PORT", 7000)
     if not args.development:
         # production
         serve(app, host=docker_ip, port=docker_port)

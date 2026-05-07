@@ -50,10 +50,10 @@ def find_differences(
                             comparison info and note that NetBox value overwrites Zabbix.
               - similarities: List of field names that are identical between devices.
     """
-    differences: tuple[bool, tuple[device_model, device_model], str] = (
+    differences: tuple[int, tuple[device_model, device_model], tuple[list[str], list[str]]] = (
         0,
         (nb_device, zb_device),
-        "",
+        ([], []),
     )
     found = 0
     fields: list[str] = []
@@ -174,7 +174,7 @@ def find_differences(
 
 def compare_devices(
     nb_device_list: list[device_model], zb_device_list: list[device_model]
-) -> list[device_difference_model]:
+) -> tuple[list[device_difference_model], list[device_model], list[device_model]]:
     """
     Compare devices from two sources (NetBox and Zabbix) and identify differences.
     This function compares devices from a NetBox device list against a Zabbix device list.
@@ -196,7 +196,7 @@ def compare_devices(
     """
 
     different_devices: list[device_difference_model] = []
-    differences: tuple[bool, tuple[device_model, device_model], str]
+    differences: tuple[int, tuple[device_model, device_model], tuple[list[str], list[str]]]
     nb_devices: list[device_model] = []
     zb_devices: list[device_model] = []
     found: bool

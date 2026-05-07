@@ -27,6 +27,7 @@ Functions:
 """
 
 import os
+from typing import Any
 import requests
 from app.logger import logger_conf as log
 from app.device.models.device_model import Device as device_model
@@ -47,13 +48,16 @@ def find_hostgroup_id(hostgroup_name: str) -> int:
         int: The ID of the hostgroup if found, otherwise -1.
     """
     log.logger.info("Finding Zabbix hostgroup ID for %s.", hostgroup_name)
-    zabbix_ip = os.environ.get("ZABBIX_IP")
-    zabbix_key = os.environ.get("ZABBIX_KEY")
-    headers = {
+    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
+    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    if zabbix_ip is None or zabbix_key is None:
+        log.logger.error("Zabbix IP or API key not set in environment variables.")
+        return -1
+    headers: dict[str, str] = {
         "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
     }
-    response = requests.post(
+    response: requests.Response = requests.post(
         zabbix_ip + "api_jsonrpc.php",
         headers=headers,
         timeout=REQUEST_TIMEOUT,
@@ -85,13 +89,16 @@ def find_template_ids(template_name: str) -> int:
         int: The ID of the template if found, otherwise -1.
     """
     log.logger.info("Finding Zabbix template ID for %s.", template_name)
-    zabbix_ip = os.environ.get("ZABBIX_IP")
-    zabbix_key = os.environ.get("ZABBIX_KEY")
-    headers = {
+    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
+    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    if zabbix_ip is None or zabbix_key is None:
+        log.logger.error("Zabbix IP or API key not set in environment variables.")
+        return -1
+    headers: dict[str, str] = {
         "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
     }
-    response = requests.post(
+    response: requests.Response = requests.post(
         zabbix_ip + "api_jsonrpc.php",
         headers=headers,
         timeout=REQUEST_TIMEOUT,
@@ -103,7 +110,7 @@ def find_template_ids(template_name: str) -> int:
         },
     )
     if response.status_code == 200:
-        data = response.json()
+        data: Any = response.json()
         if "error" in data:
             log.logger.error("Error in Zabbix API response: %s", data["error"])
             return -1
@@ -135,6 +142,9 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
 
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
     zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    if zabbix_ip is None or zabbix_key is None:
+        log.logger.error("Zabbix IP or API key not set in environment variables.")
+        return
     headers: dict[str, str] = {
         "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
@@ -317,40 +327,40 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         )
 
 
-def create_netbox_device(device: device_model, sync_output: sync_output_model):
-    """Creates a device in Netbox based on the provided device model.
-    Args:
-        device (device_model): The device model to create in Netbox.
-    """
-    log.logger.info("Creating device %s in Netbox.", device.name)
-    netbox_ip = os.environ.get("NETBOX_IP")
-    netbox_key = os.environ.get("NETBOX_KEY")
-    headers = {
-        "Authorization": f"Token {netbox_key}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-    data_netbox = device.create_data_netbox()
-    response = requests.post(
-        netbox_ip + "api/dcim/devices/",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT,
-        json=data_netbox,
-    )
-    if response.status_code == 201:
-        sync_output.add_netbox_output(f"Device {device.name} created successfully in Netbox.")
-        log.logger.info("Device %s created successfully in Netbox.", device.name)
-    else:
-        sync_output.add_netbox_output(
-            f"Failed to create device {device.name} in Netbox: {response.text}"
-        )
-        log.logger.error(
-            "Failed to create device %s in Netbox: %s | Request Body: %s | Data: %s",
-            device.name,
-            response.text,
-            response.request.body,
-            data_netbox,
-        )
+# def create_netbox_device(device: device_model, sync_output: sync_output_model):
+#     """Creates a device in Netbox based on the provided device model.
+#     Args:
+#         device (device_model): The device model to create in Netbox.
+#     """
+#     log.logger.info("Creating device %s in Netbox.", device.name)
+#     netbox_ip = os.environ.get("NETBOX_IP")
+#     netbox_key = os.environ.get("NETBOX_KEY")
+#     headers = {
+#         "Authorization": f"Token {netbox_key}",
+#         "Content-Type": "application/json",
+#         "Accept": "application/json",
+#     }
+#     data_netbox = device.create_data_netbox()
+#     response = requests.post(
+#         netbox_ip + "api/dcim/devices/",
+#         headers=headers,
+#         timeout=REQUEST_TIMEOUT,
+#         json=data_netbox,
+#     )
+#     if response.status_code == 201:
+#         sync_output.add_netbox_output(f"Device {device.name} created successfully in Netbox.")
+#         log.logger.info("Device %s created successfully in Netbox.", device.name)
+#     else:
+#         sync_output.add_netbox_output(
+#             f"Failed to create device {device.name} in Netbox: {response.text}"
+#         )
+#         log.logger.error(
+#             "Failed to create device %s in Netbox: %s | Request Body: %s | Data: %s",
+#             device.name,
+#             response.text,
+#             response.request.body,
+#             data_netbox,
+#         )
 
 
 def create_zabbix_device(device: device_model, sync_output: sync_output_model):
@@ -359,18 +369,21 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
         device (device_model): The device model to create in Zabbix.
     """
     log.logger.info("Creating device %s in Zabbix.", device.name)
-    zabbix_ip = os.environ.get("ZABBIX_IP")
-    zabbix_key = os.environ.get("ZABBIX_KEY")
-    headers = {
+    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
+    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    if zabbix_ip is None or zabbix_key is None:
+        log.logger.error("Zabbix IP or API key not set in environment variables.")
+        return
+    headers: dict[str, str] = {
         "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
     }
     if not isinstance(device.hostgroup, list):
         device.hostgroup = [device.hostgroup]
-    default_hostgroup = os.environ.get("ZABBIX_DEFAULT_HOSTGROUP", "Netbox")
-    if not "Netbox" in device.hostgroup:
-        device.hostgroup = [device.hostgroup, default_hostgroup]
-    hostgroupids = find_zabbix_hostgroup_ids(device.hostgroup)
+    default_hostgroup: str = os.environ.get("ZABBIX_DEFAULT_HOSTGROUP", "Netbox")
+    if not default_hostgroup in device.hostgroup:
+        device.hostgroup = device.hostgroup.append(default_hostgroup) or [default_hostgroup]
+    hostgroupids: list[int] = find_zabbix_hostgroup_ids(device.hostgroup)
     if not hostgroupids or -1 in hostgroupids:
         sync_output.add_zabbix_output(
             f"Hostgroup {device.hostgroup} not found in Zabbix, cannot create device {device.name}."
@@ -379,7 +392,7 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
             "Hostgroup %s not found in Zabbix, cannot create device in Netbox.", device.hostgroup
         )
         return
-    templateids = [find_template_ids(template) for template in device.templates if template]
+    templateids: list[int] = [find_template_ids(template) for template in device.templates if template]
     if -1 in templateids:
         sync_output.add_zabbix_output(
             f"No valid templates found for device {device.name}, cannot create in Zabbix."
@@ -396,7 +409,7 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
         timeout=REQUEST_TIMEOUT,
         json=data_zabbix,
     )
-    reponse_json = response.json()
+    reponse_json: Any = response.json()
     if "error" in reponse_json:
         sync_output.add_zabbix_output(
             f"Error in Zabbix API response: {reponse_json['error']['data']}"
@@ -462,10 +475,13 @@ def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
         )
         names_to_check = [default_hostgroup]
 
-    group_ids = []
-    zabbix_ip = os.environ.get("ZABBIX_IP")
-    zabbix_key = os.environ.get("ZABBIX_KEY")
-    headers = {
+    group_ids: list[int] = []
+    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
+    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    if zabbix_ip is None or zabbix_key is None:
+        log.logger.error("Zabbix IP or API key not set in environment variables.")
+        return [-1] * len(names_to_check)
+    headers: dict[str, str] = {
         "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
     }

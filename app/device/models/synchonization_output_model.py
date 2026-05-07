@@ -37,9 +37,9 @@ class SyncOutput:
 
     def __init__(
         self,
-        synchronization_output_differences: list[str] = None,
-        synchronization_output_netbox: list[str] = None,
-        synchronization_output_zabbix: list[str] = None,
+        synchronization_output_differences: list[str] | None = None,
+        synchronization_output_netbox: list[str] | None = None,
+        synchronization_output_zabbix: list[str] | None = None,
     ) -> None:
         """Initialize optional lists for differences, NetBox, and Zabbix outputs."""
         self.synchronization_output_differences: list[str] = (
