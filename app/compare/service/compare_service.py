@@ -44,6 +44,24 @@ def normalize_name(name: str) -> str:
     s = re.sub(r"[^a-z0-9]", "", s)
     return s
 
+
+def _primary_ip_dns(device: device_model) -> tuple[str, str]:
+    """Return the primary IP and DNS name for a device if available.
+
+    Uses the first interface and its first address when present. IPs are
+    returned without CIDR suffix.
+    """
+    try:
+        if device.interfaces and device.interfaces[0].addresses:
+            addr = device.interfaces[0].addresses[0]
+            ip = str(getattr(addr, "address", ""))
+            ip = ip.split("/", 1)[0] if ip else ""
+            dns = str(getattr(addr, "dns_name", ""))
+            return ip, dns
+    except Exception:
+        pass
+    return "", ""
+
 def check_device_model(nb_device: device_model, zb_device: device_model, device_fields: list[str]) -> tuple[bool, str | None]:
     """
     Check if two device models are identical based on specified fields.
@@ -253,37 +271,53 @@ def compare_devices(
         key = normalize_name(getattr(d, "name", ""))
         zb_map.setdefault(key, []).append(d)
 
-    all_keys = set(nb_map.keys()) | set(zb_map.keys())
-    for key in all_keys:
-        nbl = nb_map.get(key, [])
-        zbl = zb_map.get(key, [])
+    # We'll match NetBox devices to Zabbix devices with this priority:
+    # 1) normalized name, 2) primary IP, 3) primary DNS name. This ensures
+    # devices aren't paired just because templates or port types match.
+    zb_remaining = list(zb_device_list)
+    for nb_dev in nb_device_list:
+        matched_zb = None
 
-        # If both sides have devices with the same normalized key, pair them
-        # by simple deterministic ordering and compare each pair deeply.
-        if nbl and zbl:
-            nbl_sorted = sorted(nbl, key=lambda d: d.name.lower())
-            zbl_sorted = sorted(zbl, key=lambda d: d.name.lower())
-            for nb_dev, zb_dev in zip(nbl_sorted, zbl_sorted):
-                differences = find_differences(nb_dev, zb_dev)
-                if differences[0] == 1:
-                    different_devices.append(
-                        device_difference_model(nb_dev, zb_dev, differences[2])
-                    )
-            # Any leftovers on either side are unmatched
-            if len(nbl_sorted) > len(zbl_sorted):
-                nb_devices.extend(nbl_sorted[len(zbl_sorted) :])
-            if len(zbl_sorted) > len(nbl_sorted):
-                zb_devices.extend(zbl_sorted[len(nbl_sorted) :])
+        # 1) try normalized name
+        nb_key = normalize_name(getattr(nb_dev, "name", ""))
+        for z in zb_remaining:
+            if normalize_name(getattr(z, "name", "")) == nb_key:
+                matched_zb = z
+                break
+
+        # 2) try primary IP
+        if not matched_zb:
+            nb_ip, nb_dns = _primary_ip_dns(nb_dev)
+            if nb_ip:
+                for z in zb_remaining:
+                    z_ip, _ = _primary_ip_dns(z)
+                    if z_ip and z_ip == nb_ip:
+                        matched_zb = z
+                        break
+
+        # 3) try primary DNS
+        if not matched_zb:
+            if 'nb_dns' not in locals():
+                nb_ip, nb_dns = _primary_ip_dns(nb_dev)
+            if nb_dns:
+                for z in zb_remaining:
+                    _, z_dns = _primary_ip_dns(z)
+                    if z_dns and z_dns == nb_dns:
+                        matched_zb = z
+                        break
+
+        if matched_zb:
+            differences = find_differences(nb_dev, matched_zb)
+            if differences[0] == 1:
+                different_devices.append(device_difference_model(nb_dev, matched_zb, differences[2]))
+            zb_remaining.remove(matched_zb)
         else:
-            # Only in NetBox
-            if nbl and not zbl:
-                nb_devices.extend(nbl)
-            # Only in Zabbix
-            if zbl and not nbl:
-                zb_devices.extend(zbl)
+            nb_devices.append(nb_dev)
+
+    # Any Zabbix devices left unmatched are ZB-only
+    zb_devices.extend(zb_remaining)
 
     return different_devices, nb_devices, zb_devices
-
 
 def compare(
     nb_ip, nb_key, zb_ip, zb_key
