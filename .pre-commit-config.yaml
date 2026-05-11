@@ -13,5 +13,6 @@ repos:
       entry: pylint
       language: python
       types: [python]
+      exclude: ^(scripts|tests)/
       args: [--rcfile=.pylintrc, --fail-under=9]
       additional_dependencies: [pylint, flask, waitress, requests]

@@ -95,6 +95,7 @@ class Device:
 
         params = {
             "hostid": hostid,
+            "host": name,
             "name": name,
             "groups": groups,
             "description": self.description,
@@ -165,6 +166,7 @@ class Device:
             "method": "host.create",
             "params": {
                 "host": self.name,
+                "name": self.name,
                 "interfaces": dict_interfaces_zb(self.interfaces) if self.interfaces else [],
                 "groups": groups,
                 "description": self.description,

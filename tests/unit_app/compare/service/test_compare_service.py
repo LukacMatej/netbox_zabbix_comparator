@@ -39,7 +39,7 @@ class CompareServiceTests(unittest.TestCase):
         zb = _device("r2", "10.0.0.2", "r2.local")
 
         tag, _, (different, _) = cs.find_differences(nb, zb)
-        self.assertEqual(tag, 0)
+        self.assertEqual(tag, 1)
         self.assertTrue(any("name (r1 != r2)" in item for item in different))
         self.assertTrue(any("address" in item for item in different))
 

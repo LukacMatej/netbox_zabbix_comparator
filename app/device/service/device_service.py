@@ -43,6 +43,7 @@ Dependencies:
 
 from __future__ import annotations
 
+import copy
 import re
 import os
 import requests
@@ -429,7 +430,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
             response.request.body,
         )
         device_list: list[device_model] = []
-        log.logger.debug(response)
+        log.logger.debug(response.json)
         if response.status_code != 200:
             log.logger.error("Failed to fetch devices from Netbox: %s", response.text)
             return f"Failed to fetch devices from Netbox: {response.text}"
@@ -437,21 +438,25 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
             data = response.json()
             for device in data["data"]["device_list"]:
                 if (
-                    device["config_context"]
+                    (device["config_context"]
                     and "zabbix" in device["config_context"]
                     and "templates" in device["config_context"]["zabbix"]
-                    and "port_type" in device["config_context"]["zabbix"]
+                    and "port_type" in device["config_context"]["zabbix"])
+                    or device["custom_fields"].get("zabbix_templates")
                 ):
                     custom_fields = device.get("custom_fields") or {}
+                    device_templates = custom_fields.get("zabbix_templates") if custom_fields.get("zabbix_templates") else(
+                        device["config_context"]["zabbix"]["templates"]
+                        if device["config_context"]
+                        else ""
+                    )
                     device_list.append(
                         device_model(
                             name=device["name"],
                             hostgroup=custom_fields.get("zabbix_hostgroups", ""),
                             description=device["description"],
                             templates=(
-                                device["config_context"]["zabbix"]["templates"]
-                                if device["config_context"]
-                                else ""
+                                device_templates
                             ),
                             status=format_status(device["status"]),
                             interfaces=[
@@ -488,6 +493,11 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                                 if interface["ip_addresses"]
                             ],
                         )
+                    )
+                else:
+                    log.logger.warning(
+                        "Device %s skipped due to missing Zabbix configuration context or custom fields.",
+                        device["name"],
                     )
         return device_list
     except requests.exceptions.RequestException as e:
@@ -627,12 +637,24 @@ def uniform_output_text(
     differences: list[difference_model],
     netbox_devices: list[device_model],
     zabbix_devices: list[device_model],
-) -> None:
-    """Uniforms the output text for differences, netbox devices and zabbix devices."""
+) -> tuple[list[difference_model], list[device_model], list[device_model]]:
+    """Return display-ready copies of differences, NetBox devices, and Zabbix devices."""
     try:
-        dif_nb_devices: list[device_model] = [difference.nb_device for difference in differences]
-        dif_zb_devices: list[device_model] = [difference.zb_device for difference in differences]
-        for device_list in [dif_nb_devices, dif_zb_devices, netbox_devices, zabbix_devices]:
+        display_differences: list[difference_model] = copy.deepcopy(differences)
+        display_netbox_devices: list[device_model] = copy.deepcopy(netbox_devices)
+        display_zabbix_devices: list[device_model] = copy.deepcopy(zabbix_devices)
+        dif_nb_devices: list[device_model] = [
+            difference.nb_device for difference in display_differences
+        ]
+        dif_zb_devices: list[device_model] = [
+            difference.zb_device for difference in display_differences
+        ]
+        for device_list in [
+            dif_nb_devices,
+            dif_zb_devices,
+            display_netbox_devices,
+            display_zabbix_devices,
+        ]:
             for device in device_list:
                 if isinstance(device.hostgroup, list):
                     device.hostgroup = (
@@ -648,5 +670,7 @@ def uniform_output_text(
                         if device.templates
                         else ""
                     )
+        return display_differences, display_netbox_devices, display_zabbix_devices
     except (TypeError, AttributeError, KeyError) as e:
         log.logger.error("Error uniforming output text: %s", e)
+        return differences, netbox_devices, zabbix_devices

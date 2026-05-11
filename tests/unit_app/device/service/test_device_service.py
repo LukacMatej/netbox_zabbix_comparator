@@ -43,9 +43,11 @@ class DeviceServiceTests(unittest.TestCase):
         self.assertEqual(zb[0].interfaces[0].port_type, "SNMP")
 
         diff = [DeviceDifference(nb[0], zb[0], (["name"], ["status"]))]
-        ds.uniform_output_text(diff, nb, zb)
-        self.assertEqual(nb[0].hostgroup, "HG")
-        self.assertEqual(nb[0].templates, "T1")
+        _, display_nb, _ = ds.uniform_output_text(diff, nb, zb)
+        self.assertEqual(nb[0].hostgroup, [{"name": "HG"}])
+        self.assertEqual(nb[0].templates, ["T1"])
+        self.assertEqual(display_nb[0].hostgroup, "HG")
+        self.assertEqual(display_nb[0].templates, "T1")
 
     @patch("app.device.service.device_service.requests.post")
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb", "ZABBIX_KEY": "k"}, clear=False)

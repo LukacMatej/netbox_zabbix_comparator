@@ -276,7 +276,6 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             f"Error in Zabbix API response: {response_json['error']['data']}"
         )
         log.logger.error("Error in Zabbix API response: %s", response_json["error"])
-        return
 
     interface_update_data_zabbix = zb_device.update_interface_data_zabbix(interface_id)
     log.logger.info(interface_update_data_zabbix)
@@ -292,7 +291,6 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             f"Error in Zabbix API response: {interface_response_json['error']['data']}"
         )
         log.logger.error("Error in Zabbix API response: %s", interface_response_json["error"])
-        return
     if interface_response.status_code != 200:
         sync_output.add_difference_output(
             f"Failed to update interface for device {zb_device.name} in Zabbix: "
@@ -304,7 +302,6 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             interface_response.text,
             interface_response.status_code,
         )
-        return
 
     if response.status_code == 200:
         sync_output.add_difference_output(
