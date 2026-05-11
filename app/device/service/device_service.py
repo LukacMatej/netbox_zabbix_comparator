@@ -429,7 +429,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
             response.request.body,
         )
         device_list: list[device_model] = []
-        log.logger.debug(response)
+        log.logger.debug(response.json)
         if response.status_code != 200:
             log.logger.error("Failed to fetch devices from Netbox: %s", response.text)
             return f"Failed to fetch devices from Netbox: {response.text}"
@@ -437,21 +437,25 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
             data = response.json()
             for device in data["data"]["device_list"]:
                 if (
-                    device["config_context"]
+                    (device["config_context"]
                     and "zabbix" in device["config_context"]
                     and "templates" in device["config_context"]["zabbix"]
-                    and "port_type" in device["config_context"]["zabbix"]
+                    and "port_type" in device["config_context"]["zabbix"])
+                    or device["custom_fields"].get("zabbix_templates")
                 ):
                     custom_fields = device.get("custom_fields") or {}
+                    device_templates = custom_fields.get("zabbix_templates") if custom_fields.get("zabbix_templates") else(
+                        device["config_context"]["zabbix"]["templates"]
+                        if device["config_context"]
+                        else ""
+                    )
                     device_list.append(
                         device_model(
                             name=device["name"],
                             hostgroup=custom_fields.get("zabbix_hostgroups", ""),
                             description=device["description"],
                             templates=(
-                                device["config_context"]["zabbix"]["templates"]
-                                if device["config_context"]
-                                else ""
+                                device_templates
                             ),
                             status=format_status(device["status"]),
                             interfaces=[
@@ -488,6 +492,11 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                                 if interface["ip_addresses"]
                             ],
                         )
+                    )
+                else:
+                    log.logger.warning(
+                        "Device %s skipped due to missing Zabbix configuration context or custom fields.",
+                        device["name"],
                     )
         return device_list
     except requests.exceptions.RequestException as e:
