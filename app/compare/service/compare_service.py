@@ -29,6 +29,22 @@ from app.device.models.difference_model import DeviceDifference as device_differ
 from app.device.models.address_model import Address as address_model
 from app.device.models.interface_model import Interface as interface_model
 
+def check_device_model(nb_device: device_model, zb_device: device_model, device_fields: list[str]) -> tuple[bool, str | None]:
+    """
+    Check if two device models are identical based on specified fields.
+    Args:
+        nb_device (device_model): Device model from NetBox.
+        zb_device (device_model): Device model from Zabbix.
+        device_fields (list[str]): List of field names to compare between devices.
+    Returns:
+        tuple[bool, str | None]: A tuple containing a boolean indicating if the devices are identical and a string with the name of the differing field or None if they are identical.
+    """
+    for field in device_fields:
+        nb_value = getattr(nb_device, field)
+        zb_value = getattr(zb_device, field)
+        if nb_value != zb_value:
+            return False, field, nb_value, zb_value
+    return True, None , None, None
 
 def find_differences(
     nb_device: device_model, zb_device: device_model
@@ -61,6 +77,7 @@ def find_differences(
     fields_counter = 0
     same: list[str] = []
     device_fields: list[str] = list(device_model.__annotations__.keys())
+    #name, interfaces, hostgroup, description, templates, status
     device_fields = [
         key
         for key in device_model.__annotations__.keys()
@@ -128,7 +145,16 @@ def find_differences(
     if count < 1 or len(fields) < 1:
         found = 0
     if len(same) == fields_counter:
-        found = 2
+        check_device_model_result: tuple[bool, str | None, str | None, str | None]
+        check_device_model_result = check_device_model(nb_device, zb_device, device_fields)
+        if check_device_model_result[0]:
+            found = 2
+        else:
+            found = 1
+            fields.append(
+                f"{check_device_model_result[1]} ({check_device_model_result[2]} != {check_device_model_result[3]}), "
+                "Hodnota v netboxu přepíše hodnotu v zabbixu"
+            )
     if len(fields) > 0:
         device_fields: list[str] = list(device_model.__annotations__.keys())
         device_fields = [
