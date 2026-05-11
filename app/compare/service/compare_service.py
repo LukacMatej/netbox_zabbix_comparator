@@ -79,6 +79,70 @@ def check_device_model(nb_device: device_model, zb_device: device_model, device_
             return False, field, nb_value, zb_value
     return True, None , None, None
 
+
+def _compare_device_fields(nb_device: device_model, zb_device: device_model, exclude: list[str]) -> tuple[list[str], list[str], int, int]:
+    """Compare top-level device fields except those in exclude.
+
+    Returns (differences, same, fields_counter, same_count)
+    """
+    diffs: list[str] = []
+    same: list[str] = []
+    fields_counter = 0
+    same_count = 0
+    device_fields = [
+        key
+        for key in device_model.__annotations__.keys()
+        if key not in exclude
+    ]
+    for field in device_fields:
+        nb_value = getattr(nb_device, field)
+        zb_value = getattr(zb_device, field)
+        if nb_value == "" and zb_value == "":
+            continue
+        fields_counter += 1
+        if nb_value != zb_value:
+            if field == "name":
+                msg = f"{field} ({nb_value} != {zb_value}), "
+                msg += "Hodnota v netboxu přepíše hodnotu v zabbixu"
+                diffs.append(msg)
+            else:
+                diffs.append(field)
+        else:
+            same_count += 1
+            same.append(field)
+    return diffs, same, fields_counter, same_count
+
+
+def _compare_address_fields(nb_device: device_model, zb_device: device_model) -> tuple[list[str], list[str], int, int]:
+    """Compare address fields across interfaces and addresses using zips.
+
+    Returns (differences, same, fields_counter, same_count)
+    """
+    diffs: list[str] = []
+    same: list[str] = []
+    fields_counter = 0
+    same_count = 0
+    for nb_interface, zb_interface in zip(nb_device.interfaces, zb_device.interfaces):
+        for nb_address, zb_address in zip(nb_interface.addresses, zb_interface.addresses):
+            address_fields: list[str] = list(address_model.__annotations__.keys())
+            for field in address_fields:
+                nb_value = getattr(nb_address, field)
+                zb_value = getattr(zb_address, field)
+                if nb_value == "" and zb_value == "":
+                    continue
+                fields_counter += 1
+                if nb_value != zb_value:
+                    if field in ("address", "dns_name"):
+                        msg = f"{field} ({nb_value} != {zb_value}), "
+                        msg += "Hodnota v netboxu přepíše hodnotu v zabbixu"
+                        diffs.append(msg)
+                    else:
+                        diffs.append(f"{field}")
+                else:
+                    same_count += 1
+                    same.append(field)
+    return diffs, same, fields_counter, same_count
+
 def find_differences(
     nb_device: device_model, zb_device: device_model
 ) -> tuple[int, tuple[device_model, device_model], tuple[list[str], list[str]]]:
@@ -104,130 +168,53 @@ def find_differences(
         (nb_device, zb_device),
         ([], []),
     )
-    found = 0
-    fields: list[str] = []
-    count = 0
-    fields_counter = 0
-    same: list[str] = []
-    device_fields: list[str] = list(device_model.__annotations__.keys())
-    #name, interfaces, hostgroup, description, templates, status
-    device_fields = [
-        key
-        for key in device_model.__annotations__.keys()
-        if key not in ["hostgroup", "description", "status", "templates", "interfaces"]
-    ]
-    for field in device_fields:
-        nb_value = getattr(nb_device, field)
-        zb_value = getattr(zb_device, field)
-        if nb_value == "" and zb_value == "":
-            continue
-        fields_counter += 1
-        if nb_value != zb_value:
-            found = 1
-            if field == "name":
-                fields.append(
-                            f"{field} ({nb_value} != {zb_value}), "
-                            "Hodnota v netboxu přepíše hodnotu v zabbixu"
-                )
-            else:
-                fields.append(field)
-        else:
-            count += 1
-            same.append(field)
-    for nb_interface, zb_interface in zip(nb_device.interfaces, zb_device.interfaces):
-        # interface_fields: list[str] = list(interface_model.__annotations__.keys())
-        # interface_fields = [
-        #   key for key in interface_model.__annotations__.keys()
-        #   if key not in ["name", "addresses", "mac_address"]
-        # ]
-        # for field in interface_fields:
-        #     nb_value = getattr(nb_interface, field)
-        #     zb_value = getattr(zb_interface, field)
-        #     if field == "port_type":
-        #         nb_value = ds.formatPortType(nb_value)
-        #         zb_value = ds.formatPortType(zb_value)
-        #     if nb_value == "" and zb_value == "":
-        #         continue
-        #     fields_counter += 1
-        #     if nb_value != zb_value:
-        #         found = 1
-        #         fields.append(f"{field}")
-        #     else:
-        #         count += 1
-        #         same.append(field)
-        for nb_address, zb_address in zip(nb_interface.addresses, zb_interface.addresses):
-            address_fields: list[str] = list(address_model.__annotations__.keys())
-            for field in address_fields:
-                nb_value = getattr(nb_address, field)
-                zb_value = getattr(zb_address, field)
-                if nb_value == "" and zb_value == "":
-                    continue
-                fields_counter += 1
-                if nb_value != zb_value:
-                    found = 1
-                    if field in ("address", "dns_name"):
-                        fields.append(
-                            f"{field} ({nb_value} != {zb_value}), "
-                            "Hodnota v netboxu přepíše hodnotu v zabbixu"
-                        )
-                    else:
-                        fields.append(f"{field}")
-                else:
-                    count += 1
-                    same.append(field)
-    if count < 1 or len(fields) < 1:
+
+    # Compare top-level device fields (excluding some heavy/irrelevant ones)
+    diffs, same, fields_counter, same_count = _compare_device_fields(
+        nb_device,
+        zb_device,
+        exclude=["", "description", "status", "", "interfaces"],
+    )
+
+    # Compare address fields nested in interfaces
+    addr_diffs, addr_same, addr_counter, addr_same_count = _compare_address_fields(nb_device, zb_device)
+    diffs.extend(addr_diffs)
+    same.extend(addr_same)
+    fields_counter += addr_counter
+    same_count += addr_same_count
+
+    found = 1 if diffs else 0
+
+    # If no address/device field comparisons were done, ensure we don't falsely
+    # mark as unmatched
+    if same_count < 1 or len(diffs) < 1:
         found = 0
-    if len(same) == fields_counter:
-        check_device_model_result: tuple[bool, str | None, str | None, str | None]
-        check_device_model_result = check_device_model(nb_device, zb_device, device_fields)
+
+    # If all compared fields were the same, use check_device_model as final check
+    if len(same) == fields_counter and fields_counter > 0:
+        check_device_model_result = check_device_model(nb_device, zb_device, [
+            key
+            for key in device_model.__annotations__.keys()
+            if key not in ["hostgroup", "description", "status", "templates", "interfaces"]
+        ])
         if check_device_model_result[0]:
             found = 2
         else:
             found = 1
-            fields.append(
-                f"{check_device_model_result[1]} ({check_device_model_result[2]} != {check_device_model_result[3]}), "
-                "Hodnota v netboxu přepíše hodnotu v zabbixu"
-            )
-    if len(fields) > 0:
-        device_fields: list[str] = list(device_model.__annotations__.keys())
-        device_fields = [
-            key
-            for key in device_model.__annotations__.keys()
-            if key not in ["description", "name", "interfaces"]
-        ]
-        for field in device_fields:
-            nb_value = getattr(nb_device, field)
-            zb_value = getattr(zb_device, field)
-            if nb_value == "" and zb_value == "":
-                continue
-            if nb_value != zb_value:
-                fields.append(field)
-            else:
-                same.append(field)
-        for nb_interface, zb_interface in zip(nb_device.interfaces, zb_device.interfaces):
-            interface_fields: list[str] = list(interface_model.__annotations__.keys())
-            interface_fields = [
-                key
-                for key in interface_model.__annotations__.keys()
-                if key not in ["name", "addresses", "mac_address"]
-            ]
-            for field in interface_fields:
-                nb_value = getattr(nb_interface, field)
-                zb_value = getattr(zb_interface, field)
-                if field == "port_type":
-                    nb_value = ds.format_port_type(nb_value)
-                    zb_value = ds.format_port_type(zb_value)
-                if nb_value == "" and zb_value == "":
-                    continue
-                if nb_value != zb_value:
-                    fields.append(f"{field}")
-                else:
-                    same.append(field)
+            msg = f"{check_device_model_result[1]} ({check_device_model_result[2]} "
+            msg += f"!= {check_device_model_result[3]}), "
+            msg += "Hodnota v netboxu přepíše hodnotu v zabbixu"
+            diffs.append(msg)
+
+    # No secondary pass: matching occurs before calling this function, so a
+    # single-pass comparison of device and address fields is sufficient.
     log.logger.debug(
-        "Fields counter: %s, same: %s, different: %s", fields_counter, len(same), len(fields)
+        "Fields counter: %s, same: %s, different: %s", fields_counter, len(same), len(diffs)
     )
-    log.logger.debug("Tag: %s, %s, %s, %s, %s", found, nb_device.name, zb_device.name, fields, same)
-    differences = found, (nb_device, zb_device), (fields, same)
+    log.logger.debug(
+        "Tag: %s, %s, %s, %s, %s", found, nb_device.name, zb_device.name, diffs, same
+    )
+    differences = found, (nb_device, zb_device), (diffs, same)
     return differences
 
 
