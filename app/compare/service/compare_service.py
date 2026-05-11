@@ -28,6 +28,21 @@ from app.device.models.device_model import Device as device_model
 from app.device.models.difference_model import DeviceDifference as device_difference_model
 from app.device.models.address_model import Address as address_model
 from app.device.models.interface_model import Interface as interface_model
+import re
+
+
+def normalize_name(name: str) -> str:
+    """Normalize device names for matching.
+
+    Lowercase, replace common long words with short forms (e.g. "switch" -> "sw"),
+    then remove non-alphanumeric characters so "Switch 1" -> "sw1" and "Sw1" -> "sw1".
+    """
+    if not isinstance(name, str):
+        return ""
+    s = name.lower()
+    s = s.replace("switch", "sw").replace("router", "r")
+    s = re.sub(r"[^a-z0-9]", "", s)
+    return s
 
 def check_device_model(nb_device: device_model, zb_device: device_model, device_fields: list[str]) -> tuple[bool, str | None]:
     """
@@ -222,43 +237,51 @@ def compare_devices(
     """
 
     different_devices: list[device_difference_model] = []
-    differences: tuple[int, tuple[device_model, device_model], tuple[list[str], list[str]]]
     nb_devices: list[device_model] = []
     zb_devices: list[device_model] = []
-    found: bool
-    for nb_device in nb_device_list:
-        found = False
-        for zb_device in zb_device_list:
-            if nb_device == zb_device:
-                continue
-            differences = find_differences(nb_device, zb_device)
-            if differences[0] == 1:
-                different_devices.append(
-                    device_difference_model(nb_device, zb_device, differences[2])
-                )
-                found = True
-                break
-            if differences[0] == 2:
-                found = True
-                break
-            found = False
-        if not found:
-            nb_devices.append(nb_device)
-    for zb_device in zb_device_list:
-        found = False
-        for nb_device in nb_device_list:
-            if nb_device == zb_device:
-                continue
-            differences = find_differences(nb_device, zb_device)
-            if differences[0] == 1:
-                found = True
-                break
-            if differences[0] == 2:
-                found = True
-                break
-            found = False
-        if not found:
-            zb_devices.append(zb_device)
+
+    # Build normalized-name -> [devices] maps for both sources. This avoids
+    # matching by incidental similarity (templates/port types) and allows
+    # explicit name-based pairing (including fuzzy normalization like
+    # "Switch 1" -> "sw1").
+    nb_map: dict[str, list[device_model]] = {}
+    zb_map: dict[str, list[device_model]] = {}
+    for d in nb_device_list:
+        key = normalize_name(getattr(d, "name", ""))
+        nb_map.setdefault(key, []).append(d)
+    for d in zb_device_list:
+        key = normalize_name(getattr(d, "name", ""))
+        zb_map.setdefault(key, []).append(d)
+
+    all_keys = set(nb_map.keys()) | set(zb_map.keys())
+    for key in all_keys:
+        nbl = nb_map.get(key, [])
+        zbl = zb_map.get(key, [])
+
+        # If both sides have devices with the same normalized key, pair them
+        # by simple deterministic ordering and compare each pair deeply.
+        if nbl and zbl:
+            nbl_sorted = sorted(nbl, key=lambda d: d.name.lower())
+            zbl_sorted = sorted(zbl, key=lambda d: d.name.lower())
+            for nb_dev, zb_dev in zip(nbl_sorted, zbl_sorted):
+                differences = find_differences(nb_dev, zb_dev)
+                if differences[0] == 1:
+                    different_devices.append(
+                        device_difference_model(nb_dev, zb_dev, differences[2])
+                    )
+            # Any leftovers on either side are unmatched
+            if len(nbl_sorted) > len(zbl_sorted):
+                nb_devices.extend(nbl_sorted[len(zbl_sorted) :])
+            if len(zbl_sorted) > len(nbl_sorted):
+                zb_devices.extend(zbl_sorted[len(nbl_sorted) :])
+        else:
+            # Only in NetBox
+            if nbl and not zbl:
+                nb_devices.extend(nbl)
+            # Only in Zabbix
+            if zbl and not nbl:
+                zb_devices.extend(zbl)
+
     return different_devices, nb_devices, zb_devices
 
 
