@@ -22,13 +22,13 @@ Compare devices from NetBox and Zabbix sources using their connection parameters
 
 from __future__ import annotations
 
+import re
+
 from app.logger import logger_conf as log
 from app.device.service import device_service as ds
 from app.device.models.device_model import Device as device_model
 from app.device.models.difference_model import DeviceDifference as device_difference_model
 from app.device.models.address_model import Address as address_model
-from app.device.models.interface_model import Interface as interface_model
-import re
 
 
 def normalize_name(name: str) -> str:
@@ -58,11 +58,33 @@ def _primary_ip_dns(device: device_model) -> tuple[str, str]:
             ip = ip.split("/", 1)[0] if ip else ""
             dns = str(getattr(addr, "dns_name", ""))
             return ip, dns
-    except Exception:
+    except (AttributeError, IndexError, TypeError):
         pass
     return "", ""
 
-def check_device_model(nb_device: device_model, zb_device: device_model, device_fields: list[str]) -> tuple[bool, str | None]:
+def _normalize_hostgroups(hostgroups) -> list[str]:
+    """Normalize hostgroups for comparison.
+
+    Converts Zabbix format (list of dicts with 'name' key) to simple list of names.
+    """
+    if not hostgroups:
+        return []
+    if isinstance(hostgroups, list):
+        normalized = []
+        for item in hostgroups:
+            if isinstance(item, dict) and "name" in item:
+                normalized.append(item["name"])
+            elif isinstance(item, str):
+                normalized.append(item)
+        return sorted(normalized)
+    return []
+
+
+def check_device_model(
+    nb_device: device_model,
+    zb_device: device_model,
+    device_fields: list[str],
+) -> tuple[bool, str | None]:
     """
     Check if two device models are identical based on specified fields.
     Args:
@@ -70,17 +92,30 @@ def check_device_model(nb_device: device_model, zb_device: device_model, device_
         zb_device (device_model): Device model from Zabbix.
         device_fields (list[str]): List of field names to compare between devices.
     Returns:
-        tuple[bool, str | None]: A tuple containing a boolean indicating if the devices are identical and a string with the name of the differing field or None if they are identical.
+        tuple[bool, str | None]: A tuple containing a boolean indicating if the
+            devices are identical and a string with the name of the differing
+            field or None if they are identical.
     """
     for field in device_fields:
         nb_value = getattr(nb_device, field)
         zb_value = getattr(zb_device, field)
-        if nb_value != zb_value:
-            return False, field, nb_value, zb_value
-    return True, None , None, None
+
+        # Special handling for hostgroups: normalize both formats
+        compare_value = zb_value
+        if field == "hostgroup":
+            nb_value = _normalize_hostgroups(nb_value)
+            compare_value = _normalize_hostgroups(zb_value)
+
+        if nb_value != compare_value:
+            return False, field, nb_value, compare_value
+    return True, None, None, None
 
 
-def _compare_device_fields(nb_device: device_model, zb_device: device_model, exclude: list[str]) -> tuple[list[str], list[str], int, int]:
+def _compare_device_fields(
+    nb_device: device_model,
+    zb_device: device_model,
+    exclude: list[str],
+) -> tuple[list[str], list[str], int, int]:
     """Compare top-level device fields except those in exclude.
 
     Returns (differences, same, fields_counter, same_count)
@@ -100,9 +135,16 @@ def _compare_device_fields(nb_device: device_model, zb_device: device_model, exc
         if nb_value == "" and zb_value == "":
             continue
         fields_counter += 1
-        if nb_value != zb_value:
+
+        # Special handling for hostgroups: normalize both formats
+        compare_value = zb_value
+        if field == "hostgroup":
+            nb_value = _normalize_hostgroups(nb_value)
+            compare_value = _normalize_hostgroups(zb_value)
+
+        if nb_value != compare_value:
             if field == "name":
-                msg = f"{field} ({nb_value} != {zb_value}), "
+                msg = f"{field} ({nb_value} != {compare_value}), "
                 msg += "Hodnota v netboxu přepíše hodnotu v zabbixu"
                 diffs.append(msg)
             else:
@@ -113,7 +155,10 @@ def _compare_device_fields(nb_device: device_model, zb_device: device_model, exc
     return diffs, same, fields_counter, same_count
 
 
-def _compare_address_fields(nb_device: device_model, zb_device: device_model) -> tuple[list[str], list[str], int, int]:
+def _compare_address_fields(
+    nb_device: device_model,
+    zb_device: device_model,
+) -> tuple[list[str], list[str], int, int]:
     """Compare address fields across interfaces and addresses using zips.
 
     Returns (differences, same, fields_counter, same_count)
@@ -177,7 +222,9 @@ def find_differences(
     )
 
     # Compare address fields nested in interfaces
-    addr_diffs, addr_same, addr_counter, addr_same_count = _compare_address_fields(nb_device, zb_device)
+    addr_diffs, addr_same, addr_counter, addr_same_count = _compare_address_fields(
+        nb_device, zb_device
+    )
     diffs.extend(addr_diffs)
     same.extend(addr_same)
     fields_counter += addr_counter
@@ -296,7 +343,11 @@ def compare_devices(
         if matched_zb:
             differences = find_differences(nb_dev, matched_zb)
             if differences[0] == 1:
-                different_devices.append(device_difference_model(nb_dev, matched_zb, differences[2]))
+                different_devices.append(
+                    device_difference_model(
+                        nb_dev, matched_zb, differences[2]
+                    )
+                )
             zb_remaining.remove(matched_zb)
         else:
             nb_devices.append(nb_dev)
