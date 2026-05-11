@@ -43,6 +43,7 @@ Dependencies:
 
 from __future__ import annotations
 
+import copy
 import re
 import os
 import requests
@@ -636,12 +637,24 @@ def uniform_output_text(
     differences: list[difference_model],
     netbox_devices: list[device_model],
     zabbix_devices: list[device_model],
-) -> None:
-    """Uniforms the output text for differences, netbox devices and zabbix devices."""
+) -> tuple[list[difference_model], list[device_model], list[device_model]]:
+    """Return display-ready copies of differences, NetBox devices, and Zabbix devices."""
     try:
-        dif_nb_devices: list[device_model] = [difference.nb_device for difference in differences]
-        dif_zb_devices: list[device_model] = [difference.zb_device for difference in differences]
-        for device_list in [dif_nb_devices, dif_zb_devices, netbox_devices, zabbix_devices]:
+        display_differences: list[difference_model] = copy.deepcopy(differences)
+        display_netbox_devices: list[device_model] = copy.deepcopy(netbox_devices)
+        display_zabbix_devices: list[device_model] = copy.deepcopy(zabbix_devices)
+        dif_nb_devices: list[device_model] = [
+            difference.nb_device for difference in display_differences
+        ]
+        dif_zb_devices: list[device_model] = [
+            difference.zb_device for difference in display_differences
+        ]
+        for device_list in [
+            dif_nb_devices,
+            dif_zb_devices,
+            display_netbox_devices,
+            display_zabbix_devices,
+        ]:
             for device in device_list:
                 if isinstance(device.hostgroup, list):
                     device.hostgroup = (
@@ -657,5 +670,7 @@ def uniform_output_text(
                         if device.templates
                         else ""
                     )
+        return display_differences, display_netbox_devices, display_zabbix_devices
     except (TypeError, AttributeError, KeyError) as e:
         log.logger.error("Error uniforming output text: %s", e)
+        return differences, netbox_devices, zabbix_devices

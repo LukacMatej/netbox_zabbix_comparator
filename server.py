@@ -90,13 +90,17 @@ def run_compare() -> tuple[str, int]:
     log.logger.debug(ds.print_differences(differences))
     log.logger.debug(ds.print_devices(netbox_devices))
     log.logger.debug(ds.print_devices(zabbix_devices))
-    ds.uniform_output_text(differences, netbox_devices, zabbix_devices)
+    display_differences, display_netbox_devices, display_zabbix_devices = ds.uniform_output_text(
+        differences,
+        netbox_devices,
+        zabbix_devices,
+    )
     return (
         render_template(
             "compare_output.html",
-            differences=compare_output[0],
-            netbox_devices=compare_output[1],
-            zabbix_devices=compare_output[2],
+            differences=display_differences,
+            netbox_devices=display_netbox_devices,
+            zabbix_devices=display_zabbix_devices,
             netbox_url=netbox_ip,
             zabbix_url=zabbix_ip,
         ),
@@ -146,15 +150,19 @@ def run_compare_sync() -> tuple[str, int]:
         netbox_devices=netbox_devices, zabbix_devices=zabbix_devices, differences=differences
     )
     log.logger.debug("Synchronization Output: %s", sync_output)
-    ds.uniform_output_text(differences, netbox_devices, zabbix_devices)
+    display_differences, display_netbox_devices, display_zabbix_devices = ds.uniform_output_text(
+        differences,
+        netbox_devices,
+        zabbix_devices,
+    )
     return (
         render_template(
             "compare_output.html",
             sync_output=sync_output,
             synchronization=synchronization,
-            differences=compare_output[0],
-            netbox_devices=compare_output[1],
-            zabbix_devices=compare_output[2],
+            differences=display_differences,
+            netbox_devices=display_netbox_devices,
+            zabbix_devices=display_zabbix_devices,
             netbox_url=netbox_ip,
             zabbix_url=zabbix_ip,
         ),
