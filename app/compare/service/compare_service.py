@@ -188,6 +188,38 @@ def _compare_address_fields(
                     same.append(field)
     return diffs, same, fields_counter, same_count
 
+def _compare_interface_fields(
+    nb_device: device_model,
+    zb_device: device_model,
+) -> tuple[list[str], list[str], int, int]:
+    """Compare interface fields (e.g., port_type) across interfaces using zips.
+
+    Returns (differences, same, fields_counter, same_count)
+    """
+    diffs: list[str] = []
+    same: list[str] = []
+    fields_counter = 0
+    same_count = 0
+    interface_fields = ["port_type"]
+    for nb_interface, zb_interface in zip(nb_device.interfaces, zb_device.interfaces):
+        for field in interface_fields:
+            nb_value = getattr(nb_interface, field, "")
+            zb_value = getattr(zb_interface, field, "")
+            if nb_value == "" and zb_value == "":
+                continue
+            fields_counter += 1
+            if nb_value != zb_value:
+                if field == "port_type":
+                    msg = f"{field} ({nb_value} != {zb_value}), "
+                    msg += "Hodnota v netboxu přepíše hodnotu v zabbixu"
+                    diffs.append(msg)
+                else:
+                    diffs.append(f"{field}")
+            else:
+                same_count += 1
+                same.append(field)
+    return diffs, same, fields_counter, same_count
+
 def find_differences(
     nb_device: device_model, zb_device: device_model
 ) -> tuple[int, tuple[device_model, device_model], tuple[list[str], list[str]]]:
@@ -218,7 +250,7 @@ def find_differences(
     diffs, same, fields_counter, same_count = _compare_device_fields(
         nb_device,
         zb_device,
-        exclude=["", "description", "status", "", "interfaces"],
+        exclude=["description", "status", "interfaces"],
     )
 
     # Compare address fields nested in interfaces
@@ -229,6 +261,15 @@ def find_differences(
     same.extend(addr_same)
     fields_counter += addr_counter
     same_count += addr_same_count
+
+    # Compare interface fields (port_type, mac_address, etc.)
+    iface_diffs, iface_same, iface_counter, iface_same_count = _compare_interface_fields(
+        nb_device, zb_device
+    )
+    diffs.extend(iface_diffs)
+    same.extend(iface_same)
+    fields_counter += iface_counter
+    same_count += iface_same_count
 
     found = 1 if diffs else 0
 
