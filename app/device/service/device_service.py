@@ -416,6 +416,10 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
             }
         }
       }
+    device_role_list {
+      name
+      custom_fields
+    }
     }
     """
     try:
@@ -430,25 +434,51 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
             response.request.body,
         )
         device_list: list[device_model] = []
-        log.logger.debug(response.json)
         if response.status_code != 200:
             log.logger.error("Failed to fetch devices from Netbox: %s", response.text)
             return f"Failed to fetch devices from Netbox: {response.text}"
         if response.status_code == 200:
             data = response.json()
-            for device in data["data"]["device_list"]:
+            log.logger.debug(data)
+            device_role_map: dict[str, list[str]] = {}
+            for device_role in data.get("data", {}).get("device_role_list", []):
                 if (
-                    (device["config_context"]
-                    and "zabbix" in device["config_context"]
-                    and "templates" in device["config_context"]["zabbix"]
-                    and "port_type" in device["config_context"]["zabbix"])
-                    or device["custom_fields"].get("zabbix_templates")
+                    device_role.get("custom_fields")
+                    and "zabbix_templates" in device_role.get("custom_fields", {})
+                ):
+                    log.logger.info(
+                        "Device role %s has Zabbix templates: %s",
+                        device_role["name"],
+                        device_role["custom_fields"]["zabbix_templates"],
+                    )
+                    device_role_map[device_role["name"]] = device_role["custom_fields"]["zabbix_templates"]
+                else:
+                    log.logger.info(
+                        "Device role %s does not have Zabbix templates defined.",
+                        device_role["name"],
+                    )
+            for device in data.get("data", {}).get("device_list", []):
+                if (
+                    (device.get("config_context")
+                    and "zabbix" in device.get("config_context", {})
+                    and "templates" in device.get("config_context", {}).get("zabbix", {})
+                    and "port_type" in device.get("config_context", {}).get("zabbix", {}))
+                    or device.get("custom_fields", {}).get("zabbix_templates")
                 ):
                     custom_fields = device.get("custom_fields") or {}
-                    device_templates = custom_fields.get("zabbix_templates") if custom_fields.get("zabbix_templates") else(
-                        device["config_context"]["zabbix"]["templates"]
-                        if device["config_context"]
-                        else ""
+                    if custom_fields.get("zabbix_templates") != None:
+                        device_templates: list[str] = custom_fields.get("zabbix_templates")
+                        log.logger.info("Device %s has Zabbix templates from custom fields: %s", device["name"], device_templates)
+                    elif device.get("role") and device_role_map[device.get("role", {}).get("name")] and device.get("role", {}).get("name") in device_role_map:
+                        device_templates = device_role_map[device.get("role", {}).get("name")]
+                        log.logger.info("Device %s has Zabbix templates from device role %s: %s", device["name"], device.get("role", {}).get("name"), device_templates)
+                    else:
+                        device_templates = device["config_context"]["zabbix"]["templates"] if device["config_context"] else ""
+                        log.logger.info("Device %s has Zabbix templates from config context: %s", device["name"], device_templates)
+                    log.logger.info(
+                        "Device %s has Zabbix templates: %s",
+                        device["name"],
+                        device_templates,
                     )
                     device_list.append(
                         device_model(
