@@ -441,10 +441,10 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
         if response.status_code == 200:
             data = response.json()
             device_role_map: dict[str, list[str]] = {}
-            for device_role in data["data"]["device_role_list"]:
+            for device_role in data.get("data", {}).get("device_role_list", []):
                 if (
-                    device_role["custom_fields"]
-                    and "zabbix_templates" in device_role["custom_fields"]
+                    device_role.get("custom_fields")
+                    and "zabbix_templates" in device_role.get("custom_fields", {})
                 ):
                     log.logger.info(
                         "Device role %s has Zabbix templates: %s",
@@ -457,19 +457,19 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                         "Device role %s does not have Zabbix templates defined.",
                         device_role["name"],
                     )
-            for device in data["data"]["device_list"]:
+            for device in data.get("data", {}).get("device_list", []):
                 if (
-                    (device["config_context"]
-                    and "zabbix" in device["config_context"]
-                    and "templates" in device["config_context"]["zabbix"]
-                    and "port_type" in device["config_context"]["zabbix"])
-                    or device["custom_fields"].get("zabbix_templates")
+                    (device.get("config_context")
+                    and "zabbix" in device.get("config_context", {})
+                    and "templates" in device.get("config_context", {}).get("zabbix", {})
+                    and "port_type" in device.get("config_context", {}).get("zabbix", {}))
+                    or device.get("custom_fields", {}).get("zabbix_templates")
                 ):
                     custom_fields = device.get("custom_fields") or {}
                     if custom_fields.get("zabbix_templates"):
                         device_templates: list[str] = custom_fields.get("zabbix_templates")
-                    elif device["role"] and device["role"]["name"] in device_role_map:
-                        device_templates = device_role_map[device["role"]["name"]]
+                    elif device.get("role") and device.get("role", {}).get("name") in device_role_map:
+                        device_templates = device_role_map[device.get("role", {}).get("name")]
                     else:
                         device_templates = device["config_context"]["zabbix"]["templates"] if device["config_context"] else ""
                     device_list.append(
