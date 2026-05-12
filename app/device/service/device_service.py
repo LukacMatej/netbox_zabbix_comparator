@@ -469,7 +469,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                     if custom_fields.get("zabbix_templates") != None:
                         device_templates: list[str] = custom_fields.get("zabbix_templates")
                         log.logger.info("Device %s has Zabbix templates from custom fields: %s", device["name"], device_templates)
-                    elif device.get("role") != "None" and device.get("role", {}).get("name") in device_role_map:
+                    elif device.get("role") and device_role_map[device.get("role", {}).get("name")] and device.get("role", {}).get("name") in device_role_map:
                         device_templates = device_role_map[device.get("role", {}).get("name")]
                         log.logger.info("Device %s has Zabbix templates from device role %s: %s", device["name"], device.get("role", {}).get("name"), device_templates)
                     else:
