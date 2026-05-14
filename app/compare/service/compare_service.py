@@ -34,15 +34,33 @@ from app.device.models.address_model import Address as address_model
 def normalize_name(name: str) -> str:
     """Normalize device names for matching.
 
-    Lowercase, replace common long words with short forms (e.g. "switch" -> "sw"),
-    then remove non-alphanumeric characters so "Switch 1" -> "sw1" and "Sw1" -> "sw1".
+    Converts to lowercase and removes all non-alphanumeric characters.
+    Examples:
+        "Router-01" -> "router01"
+        "Switch 1" -> "switch1"
+        "ESX1-CIMC" -> "esx1cimc"
     """
     if not isinstance(name, str):
         return ""
-    s = name.lower()
-    s = s.replace("switch", "sw").replace("router", "r")
-    s = re.sub(r"[^a-z0-9]", "", s)
-    return s
+    # Convert to lowercase and keep only alphanumeric characters
+    return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+def get_base_name(name: str) -> str:
+    """Extract the base name before the first dash or dot.
+
+    For example:
+    - "esx1" -> "esx1"
+    - "esx1-cimc" -> "esx1"
+    - "esx1-cimc.netsystem.local" -> "esx1"
+
+    This is useful for matching related devices like a server and its management interface.
+    """
+    if not isinstance(name, str):
+        return ""
+    # Split on dash or dot and take the first part
+    base = name.split("-")[0].split(".")[0]
+    return normalize_name(base)
 
 
 def _primary_ip_dns(device: device_model) -> tuple[str, str]:
@@ -346,17 +364,22 @@ def compare_devices(
         key = normalize_name(getattr(d, "name", ""))
         zb_map.setdefault(key, []).append(d)
 
-    # We'll match NetBox devices to Zabbix devices with this priority:
-    # 1) normalized name, 2) primary IP, 3) primary DNS name. This ensures
-    # devices aren't paired just because templates or port types match.
     zb_remaining = list(zb_device_list)
     for nb_dev in nb_device_list:
         matched_zb = None
 
-        # 1) try normalized name
+        # 1) try normalized name (exact match)
         nb_key = normalize_name(getattr(nb_dev, "name", ""))
+        nb_base = get_base_name(getattr(nb_dev, "name", ""))
         for z in zb_remaining:
-            if normalize_name(getattr(z, "name", "")) == nb_key:
+            zb_key = normalize_name(getattr(z, "name", ""))
+            # Try exact match first
+            if zb_key == nb_key:
+                matched_zb = z
+                break
+            # Try base name match (e.g., "esx1" matches "esx1-cimc")
+            zb_base = get_base_name(getattr(z, "name", ""))
+            if zb_base and zb_base == nb_base and len(nb_base) > 2:
                 matched_zb = z
                 break
 

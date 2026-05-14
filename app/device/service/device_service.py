@@ -486,7 +486,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                             hostgroup=custom_fields.get("zabbix_hostgroups", ""),
                             description=device["description"],
                             templates=(
-                                device_templates
+                                sorted(device_templates) if isinstance(device_templates, list) else device_templates
                             ),
                             status=format_status(device["status"]),
                             interfaces=[
@@ -593,7 +593,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
                         name=host["host"],
                         hostgroup=host["hostgroups"],
                         description=host["description"],
-                        templates=[template["name"] for template in host["parentTemplates"]],
+                        templates=sorted([template["name"] for template in host["parentTemplates"]]),
                         status=format_status(host["status"]),
                         interfaces=[
                             interface_model(
@@ -696,7 +696,7 @@ def uniform_output_text(
                     device.hostgroup = device.hostgroup if device.hostgroup else ""
                 if isinstance(device.templates, list):
                     device.templates = (
-                        ", ".join(str(template) for template in device.templates)
+                        ", ".join(str(template) for template in sorted(device.templates))
                         if device.templates
                         else ""
                     )
