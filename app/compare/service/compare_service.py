@@ -445,21 +445,72 @@ def compare_devices(
                 if len(filtered) == 1:
                     best_match = filtered[0]
                 else:
-                    # Secondary tie-breakers: prefer exact IP, then exact DNS, then exact name
+                    # Secondary tie-breakers: prefer candidates with higher
+                    # template and hostgroup overlap with NetBox device, then
+                    # exact IP/DNS/name as fallback.
                     nb_ip, nb_dns = _primary_ip_dns(nb_dev)
                     nb_name = normalize_name(getattr(nb_dev, "name", ""))
-                    def secondary_score(candidate: device_model) -> int:
-                        score = 0
+
+                    def overlap_score(candidate: device_model) -> tuple[int, int, int]:
+                        # templates overlap (normalized)
+                        try:
+                            nb_templates = set(
+                                t.lower() for t in (nb_dev.templates or []) if isinstance(t, str)
+                            )
+                        except Exception:
+                            nb_templates = set()
+                        try:
+                            c_templates = set(
+                                t.lower() for t in (candidate.templates or []) if isinstance(t, str)
+                            )
+                        except Exception:
+                            c_templates = set()
+                        templates_overlap = len(nb_templates & c_templates)
+
+                        # hostgroup overlap (Zabbix hostgroups may be list of dicts)
+                        def hg_names(hg):
+                            if not hg:
+                                return set()
+                            if isinstance(hg, list):
+                                names = set()
+                                for item in hg:
+                                    if isinstance(item, dict) and "name" in item:
+                                        names.add(str(item["name"]).lower())
+                                    elif isinstance(item, str):
+                                        names.add(item.lower())
+                                return names
+                            if isinstance(hg, str):
+                                return {hg.lower()}
+                            return set()
+
+                        nb_hg = hg_names(nb_dev.hostgroup)
+                        c_hg = hg_names(candidate.hostgroup)
+                        hostgroup_overlap = len(nb_hg & c_hg)
+
+                        # secondary exact matches weight (IP/DNS/name)
+                        sec = 0
                         c_ip, c_dns = _primary_ip_dns(candidate)
                         c_name = normalize_name(getattr(candidate, "name", ""))
                         if nb_ip and c_ip and nb_ip == c_ip:
-                            score += 8
+                            sec += 8
                         if nb_dns and c_dns and nb_dns == c_dns:
-                            score += 4
+                            sec += 4
                         if nb_name and c_name and nb_name == c_name:
-                            score += 2
-                        return score
-                    ranked = sorted(filtered, key=lambda c: (-secondary_score(c), getattr(c, "name", "")))
+                            sec += 2
+
+                        # Return tuple for sorting: templates, hostgroups, secondary
+                        return (templates_overlap, hostgroup_overlap, sec)
+
+                    # Sort by highest templates overlap, then hostgroup overlap, then secondary score, then name
+                    ranked = sorted(
+                        filtered,
+                        key=lambda c: (
+                            -overlap_score(c)[0],
+                            -overlap_score(c)[1],
+                            -overlap_score(c)[2],
+                            getattr(c, "name", ""),
+                        ),
+                    )
                     best_match = ranked[0]
 
         # Use match only if score is above threshold (>0.3 recommends good confidence)
