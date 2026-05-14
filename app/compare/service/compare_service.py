@@ -368,7 +368,17 @@ def compare_devices(
     for nb_dev in nb_device_list:
         matched_zb = None
 
-        # 1 ) try primary DNS
+        # 1) try primary IP
+        if not matched_zb:
+            nb_ip, nb_dns = _primary_ip_dns(nb_dev)
+            if nb_ip:
+                for z in zb_remaining:
+                    z_ip, _ = _primary_ip_dns(z)
+                    if z_ip and z_ip == nb_ip:
+                        matched_zb = z
+                        break
+
+        # 2 ) try primary DNS
         if not matched_zb:
             if 'nb_dns' not in locals():
                 nb_ip, nb_dns = _primary_ip_dns(nb_dev)
@@ -376,16 +386,6 @@ def compare_devices(
                 for z in zb_remaining:
                     _, z_dns = _primary_ip_dns(z)
                     if z_dns and z_dns == nb_dns:
-                        matched_zb = z
-                        break
-
-        # 2) try primary IP
-        if not matched_zb:
-            nb_ip, nb_dns = _primary_ip_dns(nb_dev)
-            if nb_ip:
-                for z in zb_remaining:
-                    z_ip, _ = _primary_ip_dns(z)
-                    if z_ip and z_ip == nb_ip:
                         matched_zb = z
                         break
 
