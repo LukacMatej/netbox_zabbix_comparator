@@ -324,6 +324,67 @@ def find_differences(
     return differences
 
 
+def _calculate_match_score(nb_dev: device_model, zb_dev: device_model) -> float:
+    """Calculate a match score between two devices (0.0 to 1.0).
+
+    Prioritizes exact matches for IP, DNS, and name in that order.
+    Higher score means better match.
+    """
+    score = 0.0
+
+    nb_ip, nb_dns = _primary_ip_dns(nb_dev)
+    zb_ip, zb_dns = _primary_ip_dns(zb_dev)
+    nb_name = normalize_name(getattr(nb_dev, "name", ""))
+    zb_name = normalize_name(getattr(zb_dev, "name", ""))
+
+    # Priority 1: IP address match (strongest signal)
+    if nb_ip and zb_ip and nb_ip == zb_ip:
+        score += 0.6
+        log.logger.debug(
+            "IP match: %s (%s) == %s (%s)",
+            getattr(nb_dev, "name", ""), nb_ip,
+            getattr(zb_dev, "name", ""), zb_ip
+        )
+
+    # Priority 2: DNS name match
+    if nb_dns and zb_dns and nb_dns == zb_dns:
+        score += 0.5
+        log.logger.debug(
+            "DNS match: %s (%s) == %s (%s)",
+            getattr(nb_dev, "name", ""), nb_dns,
+            getattr(zb_dev, "name", ""), zb_dns
+        )
+
+    # Priority 3: Device name matching (multiple strategies)
+    if nb_name and zb_name:
+        # Exact normalized name match
+        if nb_name == zb_name:
+            score += 0.55
+            log.logger.debug(
+                "Name exact match: %s == %s",
+                getattr(nb_dev, "name", ""), getattr(zb_dev, "name", "")
+            )
+        else:
+            # Base name match (e.g., "esx1" in "esx1-cimc.netsystem.local")
+            nb_base = get_base_name(getattr(nb_dev, "name", ""))
+            zb_base = get_base_name(getattr(zb_dev, "name", ""))
+            if nb_base and zb_base and nb_base == zb_base and len(nb_base) > 2:
+                score += 0.35
+                log.logger.debug(
+                    "Base name match: %s (%s) == %s (%s)",
+                    getattr(nb_dev, "name", ""), nb_base,
+                    getattr(zb_dev, "name", ""), zb_base
+                )
+            else:
+                # Substring match (shorter name is part of longer)
+                shorter = min(nb_name, zb_name, key=len)
+                longer = max(nb_name, zb_name, key=len)
+                if shorter and shorter in longer and len(shorter) > 2:
+                    score += 0.2
+
+    return min(score, 1.0)  # Cap at 1.0
+
+
 def compare_devices(
     nb_device_list: list[device_model], zb_device_list: list[device_model]
 ) -> tuple[list[device_difference_model], list[device_model], list[device_model]]:
@@ -351,69 +412,38 @@ def compare_devices(
     nb_devices: list[device_model] = []
     zb_devices: list[device_model] = []
 
-    # Build normalized-name -> [devices] maps for both sources. This avoids
-    # matching by incidental similarity (templates/port types) and allows
-    # explicit name-based pairing (including fuzzy normalization like
-    # "Switch 1" -> "sw1").
-    nb_map: dict[str, list[device_model]] = {}
-    zb_map: dict[str, list[device_model]] = {}
-    for d in nb_device_list:
-        key = normalize_name(getattr(d, "name", ""))
-        nb_map.setdefault(key, []).append(d)
-    for d in zb_device_list:
-        key = normalize_name(getattr(d, "name", ""))
-        zb_map.setdefault(key, []).append(d)
-
     zb_remaining = list(zb_device_list)
     for nb_dev in nb_device_list:
-        matched_zb = None
+        # Find best match by scoring all remaining Zabbix devices
+        best_match = None
+        best_score = 0.0
 
-        # 1) try primary IP
-        if not matched_zb:
-            nb_ip, nb_dns = _primary_ip_dns(nb_dev)
-            if nb_ip:
-                for z in zb_remaining:
-                    z_ip, _ = _primary_ip_dns(z)
-                    if z_ip and z_ip == nb_ip:
-                        matched_zb = z
-                        break
+        for zb_dev in zb_remaining:
+            score = _calculate_match_score(nb_dev, zb_dev)
+            if score > best_score:
+                best_score = score
+                best_match = zb_dev
 
-        # 2 ) try primary DNS
-        if not matched_zb:
-            if 'nb_dns' not in locals():
-                nb_ip, nb_dns = _primary_ip_dns(nb_dev)
-            if nb_dns:
-                for z in zb_remaining:
-                    _, z_dns = _primary_ip_dns(z)
-                    if z_dns and z_dns == nb_dns:
-                        matched_zb = z
-                        break
-
-        # 3) try normalized name (exact match)
-        nb_key = normalize_name(getattr(nb_dev, "name", ""))
-        nb_base = get_base_name(getattr(nb_dev, "name", ""))
-        for z in zb_remaining:
-            zb_key = normalize_name(getattr(z, "name", ""))
-            # Try exact match first
-            if zb_key == nb_key:
-                matched_zb = z
-                break
-            # Try base name match (e.g., "esx1" matches "esx1-cimc")
-            zb_base = get_base_name(getattr(z, "name", ""))
-            if zb_base and zb_base == nb_base and len(nb_base) > 2:
-                matched_zb = z
-                break
-
-        if matched_zb:
-            differences = find_differences(nb_dev, matched_zb)
+        # Use match only if score is above threshold (>0.3 recommends good confidence)
+        if best_match and best_score > 0.3:
+            log.logger.info(
+                "Matched: %s (NB) <-> %s (ZB) with score %.2f",
+                getattr(nb_dev, "name", ""), getattr(best_match, "name", ""), best_score
+            )
+            differences = find_differences(nb_dev, best_match)
             if differences[0] == 1:
                 different_devices.append(
                     device_difference_model(
-                        nb_dev, matched_zb, differences[2]
+                        nb_dev, best_match, differences[2]
                     )
                 )
-            zb_remaining.remove(matched_zb)
+            zb_remaining.remove(best_match)
         else:
+            if best_match:
+                log.logger.info(
+                    "No match for %s (best score: %.2f)",
+                    getattr(nb_dev, "name", ""), best_score
+                )
             nb_devices.append(nb_dev)
 
     # Any Zabbix devices left unmatched are ZB-only
