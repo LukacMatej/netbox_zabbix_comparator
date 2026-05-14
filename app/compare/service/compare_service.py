@@ -418,11 +418,49 @@ def compare_devices(
         best_match = None
         best_score = 0.0
 
+        candidates: list[device_model] = []
         for zb_dev in zb_remaining:
             score = _calculate_match_score(nb_dev, zb_dev)
             if score > best_score:
                 best_score = score
-                best_match = zb_dev
+                candidates = [zb_dev]
+            elif abs(score - best_score) < 1e-9:
+                candidates.append(zb_dev)
+
+        # Resolve ties using stronger heuristics: prefer candidate with fewest differences
+        best_match = None
+        if candidates:
+            if len(candidates) == 1:
+                best_match = candidates[0]
+            else:
+                # Use find_differences to pick candidate with minimal difference count
+                best_candidates: list[tuple[device_model, int]] = []
+                for c in candidates:
+                    dif = find_differences(nb_dev, c)
+                    dif_list = dif[2][0] if dif and len(dif) > 2 and dif[2] else []
+                    best_candidates.append((c, len(dif_list)))
+                # Find minimum diff count
+                min_diff = min(count for _, count in best_candidates)
+                filtered = [c for c, count in best_candidates if count == min_diff]
+                if len(filtered) == 1:
+                    best_match = filtered[0]
+                else:
+                    # Secondary tie-breakers: prefer exact IP, then exact DNS, then exact name
+                    nb_ip, nb_dns = _primary_ip_dns(nb_dev)
+                    nb_name = normalize_name(getattr(nb_dev, "name", ""))
+                    def secondary_score(candidate: device_model) -> int:
+                        score = 0
+                        c_ip, c_dns = _primary_ip_dns(candidate)
+                        c_name = normalize_name(getattr(candidate, "name", ""))
+                        if nb_ip and c_ip and nb_ip == c_ip:
+                            score += 8
+                        if nb_dns and c_dns and nb_dns == c_dns:
+                            score += 4
+                        if nb_name and c_name and nb_name == c_name:
+                            score += 2
+                        return score
+                    ranked = sorted(filtered, key=lambda c: (-secondary_score(c), getattr(c, "name", "")))
+                    best_match = ranked[0]
 
         # Use match only if score is above threshold (>0.3 recommends good confidence)
         if best_match and best_score > 0.3:
