@@ -368,7 +368,28 @@ def compare_devices(
     for nb_dev in nb_device_list:
         matched_zb = None
 
-        # 1) try normalized name (exact match)
+        # 1 ) try primary DNS
+        if not matched_zb:
+            if 'nb_dns' not in locals():
+                nb_ip, nb_dns = _primary_ip_dns(nb_dev)
+            if nb_dns:
+                for z in zb_remaining:
+                    _, z_dns = _primary_ip_dns(z)
+                    if z_dns and z_dns == nb_dns:
+                        matched_zb = z
+                        break
+
+        # 2) try primary IP
+        if not matched_zb:
+            nb_ip, nb_dns = _primary_ip_dns(nb_dev)
+            if nb_ip:
+                for z in zb_remaining:
+                    z_ip, _ = _primary_ip_dns(z)
+                    if z_ip and z_ip == nb_ip:
+                        matched_zb = z
+                        break
+
+        # 3) try normalized name (exact match)
         nb_key = normalize_name(getattr(nb_dev, "name", ""))
         nb_base = get_base_name(getattr(nb_dev, "name", ""))
         for z in zb_remaining:
@@ -382,27 +403,6 @@ def compare_devices(
             if zb_base and zb_base == nb_base and len(nb_base) > 2:
                 matched_zb = z
                 break
-
-        # 2) try primary IP
-        if not matched_zb:
-            nb_ip, nb_dns = _primary_ip_dns(nb_dev)
-            if nb_ip:
-                for z in zb_remaining:
-                    z_ip, _ = _primary_ip_dns(z)
-                    if z_ip and z_ip == nb_ip:
-                        matched_zb = z
-                        break
-
-        # 3) try primary DNS
-        if not matched_zb:
-            if 'nb_dns' not in locals():
-                nb_ip, nb_dns = _primary_ip_dns(nb_dev)
-            if nb_dns:
-                for z in zb_remaining:
-                    _, z_dns = _primary_ip_dns(z)
-                    if z_dns and z_dns == nb_dns:
-                        matched_zb = z
-                        break
 
         if matched_zb:
             differences = find_differences(nb_dev, matched_zb)
