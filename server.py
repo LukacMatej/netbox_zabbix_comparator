@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 import requests
 import uvicorn
 from fastapi import FastAPI, Request, Response
@@ -110,8 +111,13 @@ def run_compare(request: Request) -> Response:
         netbox_devices,
         zabbix_devices,
     )
-    if isinstance(formatted_output, tuple) and len(formatted_output) == 3:
-        display_differences, display_netbox_devices, display_zabbix_devices = formatted_output
+    if (
+        isinstance(formatted_output, tuple)
+        and len(formatted_output) == 3
+    ):
+        display_differences, display_netbox_devices, display_zabbix_devices = (
+            formatted_output
+        )
     else:
         display_differences = differences
         display_netbox_devices = netbox_devices
@@ -179,13 +185,18 @@ def run_compare_sync(request: Request) -> Response:
         netbox_devices=netbox_devices, zabbix_devices=zabbix_devices, differences=differences
     )
     log.logger.debug("Synchronization Output: %s", sync_output)
-    formatted_output: tuple[list[DeviceDifference], list[Device], list[Device]] = ds.uniform_output_text(
+    formatted_output_result = ds.uniform_output_text(
         differences,
         netbox_devices,
         zabbix_devices,
     )
-    if isinstance(formatted_output, tuple) and len(formatted_output) == 3:
-        display_differences, display_netbox_devices, display_zabbix_devices = formatted_output
+    if (
+        isinstance(formatted_output_result, tuple)
+        and len(formatted_output_result) == 3
+    ):
+        display_differences, display_netbox_devices, display_zabbix_devices = (
+            formatted_output_result
+        )
     else:
         display_differences: list[DeviceDifference] = differences
         display_netbox_devices: list[Device] = netbox_devices
@@ -211,6 +222,15 @@ def run_compare_sync(request: Request) -> Response:
     )
 
 def test_connection() -> tuple[str, int]:
+    """
+    Test connection to NetBox and Zabbix servers.
+
+    Validates that credentials are set in environment variables and tests HTTP
+    connectivity to both services.
+
+    Returns:
+        tuple[str, int]: A tuple containing status message and HTTP status code.
+    """
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
     zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
     netbox_ip: str | None = os.environ.get("NETBOX_IP")
@@ -235,13 +255,20 @@ def test_connection() -> tuple[str, int]:
         "id": 1,
     }
     try:
-        netbox_response: requests.Response = requests.get(f"{netbox_ip}/api", headers=netbox_headers, timeout=10)
+        netbox_response: requests.Response = requests.get(
+            f"{netbox_ip}/api", headers=netbox_headers, timeout=10
+        )
         netbox_response.raise_for_status()
     except requests.RequestException as e:
         return f"Error connecting to NetBox: {e}", 500
 
     try:
-        zabbix_response: requests.Response = requests.post(f"{zabbix_ip}api_jsonrpc.php", headers=zabbix_headers, json=data, timeout=10)
+        zabbix_response: requests.Response = requests.post(
+            f"{zabbix_ip}api_jsonrpc.php",
+            headers=zabbix_headers,
+            json=data,
+            timeout=10,
+        )
         zabbix_response.raise_for_status()
     except requests.RequestException as e:
         return f"Error connecting to Zabbix: {e}", 500
@@ -269,7 +296,7 @@ if __name__ == "__main__":
     response: tuple[str, int] = test_connection()
     if response[1] != 200:
         log.logger.error(response[0])
-        exit(1)
+        sys.exit(1)
     docker_ip: str = os.environ.get("LISTEN_ADDRESS", "0.0.0.0")
     docker_port: str | int = os.environ.get("HTTP_PORT", 7000)
     uvicorn.run(

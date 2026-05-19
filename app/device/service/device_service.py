@@ -623,23 +623,6 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
     return zb_device_list
 
 
-def format_port_type(port_type: str) -> str:
-    """Maps the port type to a Netbox compatible format."""
-    if isinstance(port_type, list):
-        port_type = port_type[0] if port_type else ""
-    port_type_map: dict[str, str] = {
-        "Agent": "1",
-        "SNMP": "2",
-        "IPMI": "3",
-        "JMX": "4",
-        "1": "1",
-        "2": "2",
-        "3": "3",
-        "4": "4",
-    }
-    return port_type_map.get(port_type, "1")
-
-
 def uniform_port_type(port_type: str) -> str:
     """Uniforms the port type to a human readable format."""
     if isinstance(port_type, list):

@@ -127,7 +127,7 @@ class Device:
             },
             "id": 1,
         }
-
+    
     def update_interface_data_zabbix(self, interface_id) -> dict:
         """Creates a dictionary representation for Zabbix host interface update."""
         if not self.interfaces:
