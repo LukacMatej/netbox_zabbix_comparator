@@ -53,9 +53,10 @@ Custom Field Choices napojit na Custom Field s jménem zabbix_hostgroups s multi
 
 ### REST API
 
-- /RunCompare
+- Ovládní přes burger menu
+- Compare
   - Spuštění porovnání zařízení v netboxu a zabbixu
-- /RunCompareSync
+- Synchonize
   - Spuštění synchronizace, synchronizace je jedním směrem, z netboxu do zabbixu
   - Pokud zařízení exisutuje jen v Netboxu, vytvoří se i v zabixu
   - Pokud zařízení existuje v Netboxu a Zabbixu a jsou stejné, tak se nic nestane
