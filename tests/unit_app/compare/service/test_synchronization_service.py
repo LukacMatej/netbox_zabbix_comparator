@@ -166,13 +166,16 @@ class SynchronizationServiceTests(unittest.TestCase):
         host_get = Mock(status_code=200)
         host_get.json.return_value = {"result": [{"hostid": "9001"}]}
 
-        host_update = Mock(status_code=200)
-        host_update.json.return_value = {"result": {"hostids": ["9001"]}}
+        clear_templates = Mock(status_code=200)
+        clear_templates.json.return_value = {"result": {"hostids": ["9001"]}}
 
         interface_update = Mock(status_code=200)
         interface_update.json.return_value = {"result": {"interfaceids": ["77"]}}
 
-        post_mock.side_effect = [host_get, host_update, interface_update]
+        host_update = Mock(status_code=200)
+        host_update.json.return_value = {"result": {"hostids": ["9001"]}}
+
+        post_mock.side_effect = [host_get, clear_templates, interface_update, host_update]
         interface_id_mock.return_value = 77
 
         nb = _device("nb", "10.0.0.1", "nb.local")
@@ -182,10 +185,13 @@ class SynchronizationServiceTests(unittest.TestCase):
 
         ss.apply_differences(diff, out)
 
-        self.assertEqual(post_mock.call_count, 3)
-        host_update_payload = post_mock.call_args_list[1].kwargs["json"]
+        self.assertEqual(post_mock.call_count, 4)
+        clear_templates_payload = post_mock.call_args_list[1].kwargs["json"]
         interface_update_payload = post_mock.call_args_list[2].kwargs["json"]
+        host_update_payload = post_mock.call_args_list[3].kwargs["json"]
 
+        self.assertEqual(clear_templates_payload["method"], "host.update")
+        self.assertIn("templates_clear", clear_templates_payload["params"])
         self.assertEqual(host_update_payload["method"], "host.update")
         self.assertNotIn("interfaces", host_update_payload["params"])
         self.assertEqual(interface_update_payload["method"], "hostinterface.update")

@@ -5,7 +5,6 @@ repos:
     - id: trailing-whitespace
     - id: end-of-file-fixer
     - id: check-yaml
-
 - repo: local
   hooks:
     - id: pylint
@@ -15,4 +14,4 @@ repos:
       types: [python]
       exclude: ^(scripts|tests)/
       args: [--rcfile=.pylintrc, --fail-under=9]
-      additional_dependencies: [pylint, flask, waitress, requests]
+      additional_dependencies: [pylint, fastapi, uvicorn, requests]

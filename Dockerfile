@@ -8,7 +8,7 @@ RUN apk update && apk upgrade && apk add --no-cache \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /
-RUN pip3 install -r requirements.txt
+RUN pip3 install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
 
 WORKDIR /
 ADD server.py /
@@ -17,4 +17,4 @@ ADD templates/ /templates
 
 EXPOSE 7000
 
-CMD ["python3", "./server.py", "--development"]
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "7000"]

@@ -116,6 +116,18 @@ class Device:
             "id": 1,
         }
 
+    def clear_templates_data_zabbix(self, hostid, templateids) -> dict:
+        """Creates a dictionary representation for Zabbix host template update."""
+        return {
+            "jsonrpc": "2.0",
+            "method": "host.update",
+            "params": {
+                "hostid": hostid,
+                "templates_clear": [{"templateid": tempId} for tempId in templateids if tempId],
+            },
+            "id": 1,
+        }
+
     def update_interface_data_zabbix(self, interface_id) -> dict:
         """Creates a dictionary representation for Zabbix host interface update."""
         if not self.interfaces:
@@ -125,7 +137,6 @@ class Device:
                 "params": {"interfaceid": interface_id},
                 "id": 1,
             }
-
         interface = self.interfaces[0]
         return {
             "jsonrpc": "2.0",

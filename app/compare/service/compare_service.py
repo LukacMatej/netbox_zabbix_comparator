@@ -102,7 +102,7 @@ def check_device_model(
     nb_device: device_model,
     zb_device: device_model,
     device_fields: list[str],
-) -> tuple[bool, str | None]:
+) -> tuple[bool, str | None, list[str] | None, list[str] | None]:
     """
     Check if two device models are identical based on specified fields.
     Args:
@@ -110,9 +110,9 @@ def check_device_model(
         zb_device (device_model): Device model from Zabbix.
         device_fields (list[str]): List of field names to compare between devices.
     Returns:
-        tuple[bool, str | None]: A tuple containing a boolean indicating if the
-            devices are identical and a string with the name of the differing
-            field or None if they are identical.
+        tuple[bool, str | None, list[str] | None, list[str] | None]: A tuple containing a boolean indicating if the
+            devices are identical and strings with the name of the differing
+            field and their values or None if they are identical.
     """
     for field in device_fields:
         nb_value = getattr(nb_device, field)
@@ -451,19 +451,29 @@ def compare_devices(
                     nb_ip, nb_dns = _primary_ip_dns(nb_dev)
                     nb_name = normalize_name(getattr(nb_dev, "name", ""))
 
-                    def overlap_score(candidate: device_model) -> tuple[int, int, int]:
+                    def overlap_score(
+                        candidate: device_model,
+                        nb_device: device_model,
+                        nb_ip_val: str,
+                        nb_dns_val: str,
+                        nb_name_val: str,
+                    ) -> tuple[int, int, int]:
                         # templates overlap (normalized)
                         try:
                             nb_templates = set(
-                                t.lower() for t in (nb_dev.templates or []) if isinstance(t, str)
+                                t.lower()
+                                for t in (nb_device.templates or [])
+                                if isinstance(t, str)
                             )
-                        except Exception:
+                        except (TypeError, AttributeError):
                             nb_templates = set()
                         try:
                             c_templates = set(
-                                t.lower() for t in (candidate.templates or []) if isinstance(t, str)
+                                t.lower()
+                                for t in (candidate.templates or [])
+                                if isinstance(t, str)
                             )
-                        except Exception:
+                        except (TypeError, AttributeError):
                             c_templates = set()
                         templates_overlap = len(nb_templates & c_templates)
 
@@ -483,7 +493,7 @@ def compare_devices(
                                 return {hg.lower()}
                             return set()
 
-                        nb_hg = hg_names(nb_dev.hostgroup)
+                        nb_hg = hg_names(nb_device.hostgroup)
                         c_hg = hg_names(candidate.hostgroup)
                         hostgroup_overlap = len(nb_hg & c_hg)
 
@@ -491,27 +501,37 @@ def compare_devices(
                         sec = 0
                         c_ip, c_dns = _primary_ip_dns(candidate)
                         c_name = normalize_name(getattr(candidate, "name", ""))
-                        if nb_ip and c_ip and nb_ip == c_ip:
+                        if nb_ip_val and c_ip and nb_ip_val == c_ip:
                             sec += 8
-                        if nb_dns and c_dns and nb_dns == c_dns:
+                        if nb_dns_val and c_dns and nb_dns_val == c_dns:
                             sec += 4
-                        if nb_name and c_name and nb_name == c_name:
+                        if nb_name_val and c_name and nb_name_val == c_name:
                             sec += 2
 
                         # Return tuple for sorting: templates, hostgroups, secondary
                         return (templates_overlap, hostgroup_overlap, sec)
 
+                    # Pre-compute scores for all candidates to avoid repeated function calls
+                    # and eliminate cell-variable-from-loop warnings
+                    scored_candidates = [
+                        (
+                            candidate,
+                            overlap_score(candidate, nb_dev, nb_ip, nb_dns, nb_name),
+                        )
+                        for candidate in filtered
+                    ]
+
                     # Sort by highest templates overlap, then hostgroup overlap, then secondary score, then name
                     ranked = sorted(
-                        filtered,
-                        key=lambda c: (
-                            -overlap_score(c)[0],
-                            -overlap_score(c)[1],
-                            -overlap_score(c)[2],
-                            getattr(c, "name", ""),
+                        scored_candidates,
+                        key=lambda item: (
+                            -item[1][0],
+                            -item[1][1],
+                            -item[1][2],
+                            getattr(item[0], "name", ""),
                         ),
                     )
-                    best_match = ranked[0]
+                    best_match = ranked[0][0]
 
         # Use match only if score is above threshold (>0.3 recommends good confidence)
         if best_match and best_score > 0.3:

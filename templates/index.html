@@ -3,16 +3,153 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Comparison Output</title>
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <title>NetBox Zabbix Comparison</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+        nav {
+            margin-top: 0 !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            background: none !important;
+            width: 100%;
+            display: flex;
+            justify-content: flex-start;
+        }
+        nav {
+            position: relative;
+            padding: 16px 0 16px 0;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        }
+        #nav-links a:hover {
+            background: #f0f0f0;
+        }
+        #nav-links .menu-action:hover {
+            background: #f0f0f0;
+        }
+        .menu-action {
+            text-decoration: none;
+            padding: 12px 20px;
+            color: rgb(0, 0, 0);
+            font-size: 1em;
+            font-weight: 500;
+            border: 0;
+            background: #fff;
+            text-align: left;
+            width: 100%;
+            cursor: pointer;
+        }
+        .comparison-loading {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 12px;
+            background: rgba(255, 255, 255, 0.78);
+            backdrop-filter: blur(2px);
+            z-index: 200;
+        }
+        .comparison-loading.htmx-request {
+            display: flex;
+        }
+        .loading-spinner {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            border: 4px solid #d7d7d7;
+            border-top-color: #111;
+            animation: spin 0.8s linear infinite;
+        }
+        .loading-text {
+            margin: 0;
+            font-size: 0.98rem;
+            color: #222;
+            font-weight: 500;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        @media (min-width: 600px) {
+            #nav-links {
+                left: 36px;
+            }
+        }
+        nav > div {
+            margin-left: 2vh !important;
+        }
+    </style>
 </head>
 <body>
-    <a href="RunCompare" >Porovnání Netboxu s Zabbixem</a>
-    <br><br>
-    <a
-        href="RunCompareSync"
-        onclick="return confirm('Synchronization will make changes based on comparison in Zabbix. Continue?');"
-    >
-        Synchronizace Netboxu s Zabbixem
-    </a>
+    <nav>
+        <div style="display: flex; align-items: center; max-width: 1100px; margin-left: 2; width: 100%;">
+            <div id="burger-menu" style="width: 36px; height: 36px; display: flex; flex-direction: column; justify-content: center; cursor: pointer;">
+                <span style="height: 4px; background:rgb(0, 0, 0); margin: 4px 0; border-radius: 2px; display: block;"></span>
+                <span style="height: 4px; background:rgb(0, 0, 0); margin: 4px 0; border-radius: 2px; display: block;"></span>
+                <span style="height: 4px; background:rgb(0, 0, 0); margin: 4px 0; border-radius: 2px; display: block;"></span>
+            </div>
+            <div style="flex: 1;"></div>
+            <div style="margin-left: 24px;">
+                <span style="background: #e3e3e3; border-radius: 6px; padding: 6px 12px; font-size: 0.95em; margin-right: 8px;">
+                    Netbox: {{ netbox_url }}
+                </span>
+                <span style="background: #e3e3e3; border-radius: 6px; padding: 6px 12px; font-size: 0.95em;">
+                    Zabbix: {{ zabbix_url }}
+                </span>
+            </div>
+        </div>
+        <div id="nav-links" style="display: none; flex-direction: column; position: absolute; top: 56px; left: 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border-radius: 8px; min-width: 180px; z-index: 100;">
+            <button type="button" class="menu-action" style="border-bottom: 1px solid #eee;" onclick="document.getElementById('page-content').innerHTML = ''; navLinks.style.display = 'none';">Home</button>
+            <button
+                type="button"
+                class="menu-action"
+                style="border-bottom: 1px solid #eee;"
+                hx-get="/run_comparison"
+                hx-target="#page-content"
+                hx-swap="innerHTML"
+                hx-indicator="#comparison-loading"
+                hx-push-url="false"
+            >Compare</button>
+            <button
+                type="button"
+                class="menu-action"
+                hx-get="/run_comparison_sync"
+                hx-target="#page-content"
+                hx-swap="innerHTML"
+                hx-indicator="#comparison-loading"
+                hx-push-url="false"
+                hx-confirm="Synchronization will make changes based on comparison in Zabbix. Continue?"
+            >Synchronize</button>
+        </div>
+        <script>
+            const burger = document.getElementById('burger-menu');
+            const navLinks = document.getElementById('nav-links');
+            burger.onclick = function() {
+                navLinks.style.display = navLinks.style.display === 'flex' ? 'none' : 'flex';
+            };
+            navLinks.addEventListener('click', function(e) {
+                if (e.target.classList.contains('menu-action')) {
+                    navLinks.style.display = 'none';
+                }
+            });
+            document.addEventListener('click', function(e) {
+                if (!burger.contains(e.target) && !navLinks.contains(e.target)) {
+                    navLinks.style.display = 'none';
+                }
+            });
+        </script>
+    </nav>
+    <div id="comparison-loading" class="comparison-loading" aria-live="polite" aria-busy="true">
+        <div class="loading-spinner"></div>
+        <p class="loading-text">Loading comparison...</p>
+    </div>
+    <div id="page-content"></div>
 </body>
 </html>

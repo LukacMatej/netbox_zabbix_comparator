@@ -1,15 +1,17 @@
 """server.py
 Tested with Netbox version v4.5.2 and Zabbix version 7.4.2
-This script sets up a Flask web server
-with routes for handling webhooks and a test route.
+This script sets up a FastAPI web server
+with Jinja2 templates and HTMX-friendly routes.
 It also includes an argument parser
 for configuring the server to run in development or production mode.
 Routes:
-    /webhook (POST): Executes a subprocess to run a Python script for syncing NetBox and Zabbix.
-    / (GET): Renders an index.html template to check if the server is up and running.
+    / (GET): Renders the index page.
+    /run_comparison (GET): Compares devices between NetBox and Zabbix.
+    /run_comparison_sync (GET): Compares and synchronizes devices.
 Functions:
-    webhook(): Handles POST requests to the /webhook route and runs a subprocess.
-    test(): Renders an index.html template to check if the server is up and running.
+    test(): Renders an index template with actions for compare/sync.
+    run_compare(): Returns comparison output in full page or HTMX partial mode.
+    run_compare_sync(): Returns synchronized output in full page or HTMX partial mode.
     parser_init(): Initializes and returns an argument parser for server configuration.
 Usage:
     Run the script with optional arguments to start the server in development or production mode.
@@ -20,8 +22,8 @@ Environment Variables:
     LISTEN_ADDRESS: The IP address the server will listen on.
     HTTP_PORT: The port the server will listen on.
 Dependencies:
-    - Flask
-    - subprocess
+    - FastAPI
+    - uvicorn
     - argparse
     - os
 """
@@ -30,9 +32,12 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 import requests
-from flask import Flask, render_template
-from waitress import serve
+import uvicorn
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.templating import Jinja2Templates
 from app.compare.service import compare_service as ct
 from app.compare.service import synchronization_service as ss
 from app.device.models.synchonization_output_model import SyncOutput as sync_output_model
@@ -41,22 +46,33 @@ from app.device.models.difference_model import DeviceDifference
 from app.device.models.device_model import Device
 from app.logger import logger_conf as log
 
-app = Flask(__name__)
+
+app = FastAPI(title="NetBox Zabbix Compare")
+templates = Jinja2Templates(directory="templates")
 
 
-@app.route("/")
-def test() -> tuple[str, int]:
+@app.get("/", response_class=HTMLResponse)
+def test(request: Request) -> HTMLResponse:
     """
     A test route to check if the server is up and running.
 
     Returns:
         str: A message indicating that the server is up and running.
     """
-    return render_template("index.html"), 200
+    netbox_url: str | None = os.environ.get("NETBOX_IP")
+    zabbix_url: str | None = os.environ.get("ZABBIX_IP")
+    return templates.TemplateResponse(
+        request,
+        "index.html",
+        {
+            "netbox_url": netbox_url,
+            "zabbix_url": zabbix_url
+        },
+        status_code=200)
 
 
-@app.route("/RunCompare")
-def run_compare() -> tuple[str, int]:
+@app.get("/run_comparison", response_class=HTMLResponse)
+def run_compare(request: Request) -> Response:
     """
     Compare devices between Netbox and Zabbix systems.
     Retrieves API credentials and IP addresses from environment variables,
@@ -83,7 +99,7 @@ def run_compare() -> tuple[str, int]:
         ct.compare(nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key)
     )
     if isinstance(compare_output, Exception):
-        return str(compare_output), 500
+        return PlainTextResponse(str(compare_output), status_code=500)
     differences: list[DeviceDifference] = compare_output[0]
     netbox_devices: list[Device] = compare_output[1]
     zabbix_devices: list[Device] = compare_output[2]
@@ -95,27 +111,40 @@ def run_compare() -> tuple[str, int]:
         netbox_devices,
         zabbix_devices,
     )
-    if isinstance(formatted_output, tuple) and len(formatted_output) == 3:
-        display_differences, display_netbox_devices, display_zabbix_devices = formatted_output
+    if (
+        isinstance(formatted_output, tuple)
+        and len(formatted_output) == 3
+    ):
+        display_differences, display_netbox_devices, display_zabbix_devices = (
+            formatted_output
+        )
     else:
         display_differences = differences
         display_netbox_devices = netbox_devices
         display_zabbix_devices = zabbix_devices
-    return (
-        render_template(
-            "compare_output.html",
-            differences=display_differences,
-            netbox_devices=display_netbox_devices,
-            zabbix_devices=display_zabbix_devices,
-            netbox_url=netbox_ip,
-            zabbix_url=zabbix_ip,
-        ),
-        200,
+    template_name = (
+        "compare_output_content.html"
+        if request.headers.get("hx-request", "").lower() == "true"
+        else "compare_output.html"
+    )
+    return templates.TemplateResponse(
+        request,
+        template_name,
+        {
+            "differences": display_differences,
+            "netbox_devices": display_netbox_devices,
+            "zabbix_devices": display_zabbix_devices,
+            "netbox_url": netbox_ip,
+            "zabbix_url": zabbix_ip,
+            "synchronization": False,
+            "sync_output": None,
+        },
+        status_code=200,
     )
 
 
-@app.route("/RunCompareSync")
-def run_compare_sync() -> tuple[str, int]:
+@app.get("/run_comparison_sync", response_class=HTMLResponse)
+def run_compare_sync(request: Request) -> Response:
     """
     Execute a comparison and synchronization between NetBox and Zabbix devices.
     Retrieves NetBox and Zabbix credentials from environment variables, performs
@@ -145,7 +174,7 @@ def run_compare_sync() -> tuple[str, int]:
         ct.compare(nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key)
     )
     if isinstance(compare_output, Exception):
-        return str(compare_output), 500
+        return PlainTextResponse(str(compare_output), status_code=500)
     differences: list[DeviceDifference] = compare_output[0]
     netbox_devices: list[Device] = compare_output[1]
     zabbix_devices: list[Device] = compare_output[2]
@@ -156,32 +185,52 @@ def run_compare_sync() -> tuple[str, int]:
         netbox_devices=netbox_devices, zabbix_devices=zabbix_devices, differences=differences
     )
     log.logger.debug("Synchronization Output: %s", sync_output)
-    formatted_output = ds.uniform_output_text(
+    formatted_output_result = ds.uniform_output_text(
         differences,
         netbox_devices,
         zabbix_devices,
     )
-    if isinstance(formatted_output, tuple) and len(formatted_output) == 3:
-        display_differences, display_netbox_devices, display_zabbix_devices = formatted_output
+    if (
+        isinstance(formatted_output_result, tuple)
+        and len(formatted_output_result) == 3
+    ):
+        display_differences, display_netbox_devices, display_zabbix_devices = (
+            formatted_output_result
+        )
     else:
-        display_differences = differences
-        display_netbox_devices = netbox_devices
-        display_zabbix_devices = zabbix_devices
-    return (
-        render_template(
-            "compare_output.html",
-            sync_output=sync_output,
-            synchronization=synchronization,
-            differences=display_differences,
-            netbox_devices=display_netbox_devices,
-            zabbix_devices=display_zabbix_devices,
-            netbox_url=netbox_ip,
-            zabbix_url=zabbix_ip,
-        ),
-        200,
+        display_differences: list[DeviceDifference] = differences
+        display_netbox_devices: list[Device] = netbox_devices
+        display_zabbix_devices: list[Device] = zabbix_devices
+    template_name = (
+        "compare_output_content.html"
+        if request.headers.get("hx-request", "").lower() == "true"
+        else "compare_output.html"
+    )
+    return templates.TemplateResponse(
+        request,
+        template_name,
+        {
+            "sync_output": sync_output,
+            "synchronization": synchronization,
+            "differences": display_differences,
+            "netbox_devices": display_netbox_devices,
+            "zabbix_devices": display_zabbix_devices,
+            "netbox_url": netbox_ip,
+            "zabbix_url": zabbix_ip,
+        },
+        status_code=200,
     )
 
 def test_connection() -> tuple[str, int]:
+    """
+    Test connection to NetBox and Zabbix servers.
+
+    Validates that credentials are set in environment variables and tests HTTP
+    connectivity to both services.
+
+    Returns:
+        tuple[str, int]: A tuple containing status message and HTTP status code.
+    """
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
     zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
     netbox_ip: str | None = os.environ.get("NETBOX_IP")
@@ -206,13 +255,20 @@ def test_connection() -> tuple[str, int]:
         "id": 1,
     }
     try:
-        netbox_response: requests.Response = requests.get(f"{netbox_ip}/api", headers=netbox_headers, timeout=10)
+        netbox_response: requests.Response = requests.get(
+            f"{netbox_ip}/api", headers=netbox_headers, timeout=10
+        )
         netbox_response.raise_for_status()
     except requests.RequestException as e:
         return f"Error connecting to NetBox: {e}", 500
 
     try:
-        zabbix_response: requests.Response = requests.post(f"{zabbix_ip}api_jsonrpc.php", headers=zabbix_headers, json=data, timeout=10)
+        zabbix_response: requests.Response = requests.post(
+            f"{zabbix_ip}api_jsonrpc.php",
+            headers=zabbix_headers,
+            json=data,
+            timeout=10,
+        )
         zabbix_response.raise_for_status()
     except requests.RequestException as e:
         return f"Error connecting to Zabbix: {e}", 500
@@ -240,12 +296,13 @@ if __name__ == "__main__":
     response: tuple[str, int] = test_connection()
     if response[1] != 200:
         log.logger.error(response[0])
-        exit(1)
+        sys.exit(1)
     docker_ip: str = os.environ.get("LISTEN_ADDRESS", "0.0.0.0")
     docker_port: str | int = os.environ.get("HTTP_PORT", 7000)
-    if not args.development:
-        # production
-        serve(app, host=docker_ip, port=docker_port)
-    else:
-        # development
-        app.run(debug=True, host=docker_ip, port=docker_port)
+    uvicorn.run(
+        "server:app",
+        host=docker_ip,
+        port=int(docker_port),
+        reload=args.development,
+        log_level="debug" if args.debug else "info",
+    )

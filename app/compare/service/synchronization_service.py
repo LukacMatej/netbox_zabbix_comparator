@@ -58,7 +58,7 @@ def find_hostgroup_id(hostgroup_name: str) -> int:
         "Content-Type": "application/json-rpc",
     }
     response: requests.Response = requests.post(
-        zabbix_ip + "api_jsonrpc.php",
+        zabbix_ip + "/api_jsonrpc.php",
         headers=headers,
         timeout=REQUEST_TIMEOUT,
         json={
@@ -99,7 +99,7 @@ def find_template_ids(template_name: str) -> int:
         "Content-Type": "application/json-rpc",
     }
     response: requests.Response = requests.post(
-        zabbix_ip + "api_jsonrpc.php",
+        zabbix_ip + "/api_jsonrpc.php",
         headers=headers,
         timeout=REQUEST_TIMEOUT,
         json={
@@ -131,6 +131,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     """
     nb_device: device_model = differences.nb_device
     zb_device: device_model = differences.zb_device
+    old_templateids: list[str] = zb_device.templates
     different_fields: list[str] = differences.differences[
         0
     ]  # tuple: (different_fields, same_fields)
@@ -151,7 +152,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     }
     hostid: str | None = None
     response: requests.Response = requests.post(
-        zabbix_ip + "api_jsonrpc.php",
+        zabbix_ip + "/api_jsonrpc.php",
         headers=headers,
         timeout=REQUEST_TIMEOUT,
         json={
@@ -255,17 +256,73 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     template_source = zb_device.templates if zb_device.templates else nb_device.templates
 
     interface_id = device_service.find_hostinterface_id(hostid)
+    templateids = [find_template_ids(template) for template in template_source if template]
     update_data_zabbix = zb_device.update_data_zabbix(
         name=nb_device.name,
         hostid=hostid,
         interface_id=interface_id,
         hostgroupids=hostgroupids,
-        templateids=[find_template_ids(template) for template in template_source if template],
+        templateids=templateids,
         include_interfaces=False,
     )
+    clear_templateids = [find_template_ids(template) for template in old_templateids if template]
+    clear_templates_data = zb_device.clear_templates_data_zabbix(hostid, templateids=clear_templateids)
+    log.logger.info(clear_templates_data)
+    clear_response: requests.Response = requests.post(
+        zabbix_ip + "/api_jsonrpc.php",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
+        json=clear_templates_data,
+    )
+    clear_response_json = clear_response.json()
+    if "error" in clear_response_json:
+        sync_output.add_difference_output(
+            f"Error clearing templates for device {zb_device.name} in Zabbix: {clear_response_json['error']['data']}"
+        )
+        log.logger.error(
+            "Error clearing templates for device %s in Zabbix: %s with response status %s.",
+            zb_device.name,
+            clear_response_json["error"],
+            clear_response.status_code,
+        )
+    else:
+        log.logger.info(
+            "Templates cleared for device %s in Zabbix with response status %s.",
+            zb_device.name,
+            clear_response.status_code,
+        )
+    interface_update_data_zabbix = zb_device.update_interface_data_zabbix(interface_id)
+    log.logger.info(interface_update_data_zabbix)
+    interface_response: requests.Response = requests.post(
+        zabbix_ip + "/api_jsonrpc.php",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
+        json=interface_update_data_zabbix,
+    )
+    interface_response_json = interface_response.json()
+    if "error" not in interface_response_json:
+        sync_output.add_difference_output(
+            f"Interface for device {zb_device.name} updated successfully in Zabbix."
+        )
+        log.logger.info(
+            "Interface for device %s updated successfully in Zabbix with response status %s.",
+            zb_device.name,
+            interface_response.status_code,
+        )
+    else:
+        sync_output.add_difference_output(
+            f"Failed to update interface for device {zb_device.name} in Zabbix: {interface_response.text}"
+        )
+        log.logger.error(
+            "Failed to update interface for device %s in Zabbix: %s with response status %s.",
+            zb_device.name,
+            interface_response.text,
+            interface_response.status_code,
+        )
+
     log.logger.info(update_data_zabbix)
     response: requests.Response = requests.post(
-        zabbix_ip + "api_jsonrpc.php",
+        zabbix_ip + "/api_jsonrpc.php",
         headers=headers,
         timeout=REQUEST_TIMEOUT,
         json=update_data_zabbix,
@@ -276,34 +333,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             f"Error in Zabbix API response: {response_json['error']['data']}"
         )
         log.logger.error("Error in Zabbix API response: %s", response_json["error"])
-
-    interface_update_data_zabbix = zb_device.update_interface_data_zabbix(interface_id)
-    log.logger.info(interface_update_data_zabbix)
-    interface_response: requests.Response = requests.post(
-        zabbix_ip + "api_jsonrpc.php",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT,
-        json=interface_update_data_zabbix,
-    )
-    interface_response_json = interface_response.json()
-    if "error" in interface_response_json:
-        sync_output.add_difference_output(
-            f"Error in Zabbix API response: {interface_response_json['error']['data']}"
-        )
-        log.logger.error("Error in Zabbix API response: %s", interface_response_json["error"])
-    if interface_response.status_code != 200:
-        sync_output.add_difference_output(
-            f"Failed to update interface for device {zb_device.name} in Zabbix: "
-            f"{interface_response.text}"
-        )
-        log.logger.error(
-            "Failed to update interface for device %s in Zabbix: %s with response status %s.",
-            zb_device.name,
-            interface_response.text,
-            interface_response.status_code,
-        )
-
-    if response.status_code == 200:
+    else:
         sync_output.add_difference_output(
             f"Device {zb_device.name} updated successfully in Zabbix."
         )
@@ -312,16 +342,8 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             zb_device.name,
             response.status_code,
         )
-    else:
-        sync_output.add_difference_output(
-            f"Failed to update device {zb_device.name} in Zabbix: {response.text}"
-        )
-        log.logger.error(
-            "Failed to update device %s in Zabbix: %s with response status %s.",
-            zb_device.name,
-            response.text,
-            response.status_code,
-        )
+
+
 
 
 # def create_netbox_device(device: device_model, sync_output: sync_output_model):
@@ -403,7 +425,7 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
     data_zabbix = device.create_data_zabbix(hostgroupids=hostgroupids, templateids=templateids)
     log.logger.info("Data to be sent to Zabbix: %s", data_zabbix)
     response: requests.Response = requests.post(
-        zabbix_ip + "api_jsonrpc.php",
+        zabbix_ip + "/api_jsonrpc.php",
         headers=headers,
         timeout=REQUEST_TIMEOUT,
         json=data_zabbix,
@@ -487,7 +509,7 @@ def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
     for hostgroup_name in names_to_check:
         log.logger.info("Finding Zabbix hostgroup ID for %s.", hostgroup_name)
         response = requests.post(
-            zabbix_ip + "api_jsonrpc.php",
+            zabbix_ip + "/api_jsonrpc.php",
             headers=headers,
             timeout=REQUEST_TIMEOUT,
             json={
@@ -515,7 +537,7 @@ def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
                 log.logger.info("Found Zabbix hostgroup ID: %s for %s.", group_id, hostgroup_name)
             else:
                 create_response = requests.post(
-                    zabbix_ip + "api_jsonrpc.php",
+                    zabbix_ip + "/api_jsonrpc.php",
                     headers=headers,
                     timeout=REQUEST_TIMEOUT,
                     json={

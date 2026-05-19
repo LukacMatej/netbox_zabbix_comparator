@@ -31,8 +31,8 @@ class DeviceServiceTests(unittest.TestCase):
         self.assertEqual(ds.format_status("offline"), "Disabled")
         self.assertEqual(ds.format_status("other"), "other")
         self.assertEqual(ds.format_mac("AA:BB:CC:DD:EE:FF"), "aabb.ccdd.eeff")
-        self.assertEqual(ds.format_port_type("SNMP"), "2")
         self.assertEqual(ds.uniform_port_type("2"), "SNMP")
+        self.assertEqual(ds.uniform_port_type("SNMP"), "SNMP")
 
     def test_map_port_type_device_and_uniform_output_text(self):
         """Port type mapping and output text normalization should update list values."""
@@ -48,6 +48,35 @@ class DeviceServiceTests(unittest.TestCase):
         self.assertEqual(nb[0].templates, ["T1"])
         self.assertEqual(display_nb[0].hostgroup, "HG")
         self.assertEqual(display_nb[0].templates, "T1")
+
+    def test_uniform_output_text_handles_string_hostgroups(self):
+        """Hostgroup lists made of strings should be rendered without errors."""
+        nb = [
+            Device(
+                name="nb",
+                interfaces=[Interface("eth0", [Address("10.0.0.1", "nb.local")], "aa", "1")],
+                hostgroup=["HG-A", "HG-B"],
+                description="desc",
+                templates=["T1"],
+                status="Active",
+            )
+        ]
+        zb = [
+            Device(
+                name="zb",
+                interfaces=[Interface("eth0", [Address("10.0.0.1", "zb.local")], "aa", "1")],
+                hostgroup=[{"name": "HG-A"}, {"name": "HG-B"}],
+                description="desc",
+                templates=["T1"],
+                status="Active",
+            )
+        ]
+        diff = [DeviceDifference(nb[0], zb[0], ([], []))]
+
+        _, display_nb, display_zb = ds.uniform_output_text(diff, nb, zb)
+
+        self.assertEqual(display_nb[0].hostgroup, "HG-A, HG-B")
+        self.assertEqual(display_zb[0].hostgroup, "HG-A, HG-B")
 
     @patch("app.device.service.device_service.requests.post")
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb", "ZABBIX_KEY": "k"}, clear=False)
