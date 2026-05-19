@@ -1,18 +1,17 @@
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v6.0.0
+  rev: v3.4.0
   hooks:
     - id: trailing-whitespace
     - id: end-of-file-fixer
     - id: check-yaml
-
 - repo: local
   hooks:
     - id: pylint
       name: pylint
-      entry: python -m pylint
-      language: system
+      entry: pylint
+      language: python
       types: [python]
       exclude: ^(scripts|tests)/
-      args: ['--rcfile=.pylintrc', '--fail-under=9', '--disable=E0401,R0914,R0912,R0915']
-      additional_dependencies: ['pylint', 'fastapi', 'uvicorn', 'requests']
+      args: [--rcfile=.pylintrc, --fail-under=9]
+      additional_dependencies: [pylint, fastapi, uvicorn, requests]
