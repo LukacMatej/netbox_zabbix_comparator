@@ -34,12 +34,12 @@ class ServerRoutesTests(unittest.TestCase):
         """Root route returns success and renders template."""
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("NetBox and Zabbix", response.text)
+        self.assertIn("NetBox Zabbix Comparison", response.text)
 
     @patch("server.ct.compare", return_value=Exception("boom"))
     def test_run_compare_error(self, _compare):
         """Compare route returns 500 when compare service raises error output."""
-        response = self.client.get("/RunCompare")
+        response = self.client.get("/run_comparison")
         self.assertEqual(response.status_code, 500)
         self.assertIn("boom", response.text)
 
@@ -52,7 +52,7 @@ class ServerRoutesTests(unittest.TestCase):
         diff = DeviceDifference(nb, zb, (["name"], ["status"]))
         compare_mock.return_value = ([diff], [nb], [zb])
 
-        response = self.client.get("/RunCompare")
+        response = self.client.get("/run_comparison")
         self.assertEqual(response.status_code, 200)
         self.assertIn("Differences", response.text)
         uniform_mock.assert_called_once()
@@ -76,7 +76,7 @@ class ServerRoutesTests(unittest.TestCase):
             },
         )()
 
-        response = self.client.get("/RunCompareSync")
+        response = self.client.get("/run_comparison_sync")
         self.assertEqual(response.status_code, 200)
         self.assertIn("Synchronization output", response.text)
         sync_mock.assert_called_once()

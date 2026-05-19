@@ -31,8 +31,8 @@ class DeviceServiceTests(unittest.TestCase):
         self.assertEqual(ds.format_status("offline"), "Disabled")
         self.assertEqual(ds.format_status("other"), "other")
         self.assertEqual(ds.format_mac("AA:BB:CC:DD:EE:FF"), "aabb.ccdd.eeff")
-        self.assertEqual(ds.format_port_type("SNMP"), "2")
         self.assertEqual(ds.uniform_port_type("2"), "SNMP")
+        self.assertEqual(ds.uniform_port_type("SNMP"), "SNMP")
 
     def test_map_port_type_device_and_uniform_output_text(self):
         """Port type mapping and output text normalization should update list values."""

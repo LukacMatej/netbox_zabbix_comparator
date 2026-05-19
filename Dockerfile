@@ -15,6 +15,6 @@ ADD server.py /
 ADD app/ /app
 ADD templates/ /templates
 
-EXPOSE 7010
+EXPOSE 7000
 
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "7010"]
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "7000"]
