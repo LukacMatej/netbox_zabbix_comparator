@@ -255,12 +255,12 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     hostgroupids = find_zabbix_hostgroup_ids(hostgroup_source)
     template_source = zb_device.templates if zb_device.templates else nb_device.templates
 
-    interface_id = device_service.find_hostinterface_id(hostid)
-    templateids = [find_template_ids(template) for template in template_source if template]
+    interface_ids: list[int] = device_service.find_hostinterface_ids(hostid)
+    templateids: list[int] = [find_template_ids(template) for template in template_source if template]
     update_data_zabbix = zb_device.update_data_zabbix(
         name=nb_device.name,
         hostid=hostid,
-        interface_id=interface_id,
+        interface_ids=interface_ids,
         hostgroupids=hostgroupids,
         templateids=templateids,
         include_interfaces=False,
@@ -291,7 +291,8 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             zb_device.name,
             clear_response.status_code,
         )
-    interface_update_data_zabbix = zb_device.update_interface_data_zabbix(interface_id)
+
+    interface_update_data_zabbix = zb_device.update_interface_data_zabbix(interface_ids)
     log.logger.info(interface_update_data_zabbix)
     interface_response: requests.Response = requests.post(
         zabbix_ip + "/api_jsonrpc.php",
@@ -342,45 +343,6 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             zb_device.name,
             response.status_code,
         )
-
-
-
-
-# def create_netbox_device(device: device_model, sync_output: sync_output_model):
-#     """Creates a device in Netbox based on the provided device model.
-#     Args:
-#         device (device_model): The device model to create in Netbox.
-#     """
-#     log.logger.info("Creating device %s in Netbox.", device.name)
-#     netbox_ip = os.environ.get("NETBOX_IP")
-#     netbox_key = os.environ.get("NETBOX_KEY")
-#     headers = {
-#         "Authorization": f"Token {netbox_key}",
-#         "Content-Type": "application/json",
-#         "Accept": "application/json",
-#     }
-#     data_netbox = device.create_data_netbox()
-#     response = requests.post(
-#         netbox_ip + "api/dcim/devices/",
-#         headers=headers,
-#         timeout=REQUEST_TIMEOUT,
-#         json=data_netbox,
-#     )
-#     if response.status_code == 201:
-#         sync_output.add_netbox_output(f"Device {device.name} created successfully in Netbox.")
-#         log.logger.info("Device %s created successfully in Netbox.", device.name)
-#     else:
-#         sync_output.add_netbox_output(
-#             f"Failed to create device {device.name} in Netbox: {response.text}"
-#         )
-#         log.logger.error(
-#             "Failed to create device %s in Netbox: %s | Request Body: %s | Data: %s",
-#             device.name,
-#             response.text,
-#             response.request.body,
-#             data_netbox,
-#         )
-
 
 def create_zabbix_device(device: device_model, sync_output: sync_output_model):
     """Creates a device in Zabbix based on the provided device model.
@@ -573,27 +535,19 @@ def sync_netbox_zabbix_devices(
         netbox_devices (list[device_model]): List of devices from Netbox.
         zabbix_devices (list[device_model]): List of devices from Zabbix.
     """
-    sync_output = sync_output_model()
+    sync_output: sync_output_model = sync_output_model()
     log.logger.info("Starting synchronization of Netbox and Zabbix devices.")
     for netbox_device in netbox_devices:
-        if not any(zabbix_device.name == netbox_device.name for zabbix_device in zabbix_devices):
-            log.logger.info(
-                "Device %s found in Netbox but not in Zabbix, creating in Zabbix.",
-                netbox_device.name,
-            )
-            create_zabbix_device(netbox_device, sync_output)
-
-    # for zabbix_device in zabbix_devices:
-    #     if not any(
-    #         netbox_device.name == zabbix_device.name
-    #         for netbox_device in netbox_devices
-    #     ):
-    #         log.logger.info(
-    #             "Device %s found in Zabbix but not in Netbox, creating in Netbox.",
-    #             zabbix_device.name,
-    #         )
-    #         create_netbox_device(zabbix_device,sync_output)
-
+        log.logger.info(
+            "Device %s found in Netbox but not in Zabbix, creating in Zabbix.",
+            netbox_device.name,
+        )
+        create_zabbix_device(netbox_device, sync_output)
+    device_service.map_port_type_device(netbox_devices, zabbix_devices,numbered=True)
+    for diffrence in differences:
+        device_service.map_port_type_device(
+            [diffrence.nb_device], [diffrence.zb_device],numbered=True
+        )
     for difference in differences:
         log.logger.info(
             "Applying differences for device %s and %s.",

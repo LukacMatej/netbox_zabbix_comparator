@@ -80,21 +80,21 @@ class DeviceServiceTests(unittest.TestCase):
 
     @patch("app.device.service.device_service.requests.post")
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb", "ZABBIX_KEY": "k"}, clear=False)
-    def test_find_hostinterface_id_success(self, post_mock):
-        """Host interface lookup should return parsed interface ID on success."""
+    def test_find_hostinterface_ids_success(self, post_mock):
+        """Host interface lookup should return parsed interface IDs on success."""
         response = Mock()
         response.json.return_value = {"result": [{"interfaceid": "55"}]}
         response.raise_for_status.return_value = None
         post_mock.return_value = response
 
-        self.assertEqual(ds.find_hostinterface_id("10"), 55)
+        self.assertEqual(ds.find_hostinterface_ids("10"), [55])
 
     @patch("app.device.service.device_service.requests.post")
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb", "ZABBIX_KEY": "k"}, clear=False)
-    def test_find_hostinterface_id_request_error(self, post_mock):
-        """Host interface lookup should return -1 on request exception."""
+    def test_find_hostinterface_ids_request_error(self, post_mock):
+        """Host interface lookup should return empty list on request exception."""
         post_mock.side_effect = requests.exceptions.RequestException("network")
-        self.assertEqual(ds.find_hostinterface_id("10"), -1)
+        self.assertEqual(ds.find_hostinterface_ids("10"), [])
 
     @patch("app.device.service.device_service.requests.get")
     @patch.dict("os.environ", {"NETBOX_IP": "http://nb", "NETBOX_KEY": "k"}, clear=False)
