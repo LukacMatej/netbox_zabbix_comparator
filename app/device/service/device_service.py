@@ -46,6 +46,8 @@ from __future__ import annotations
 import copy
 import re
 import os
+from typing import Any
+
 import requests
 from app.device.models.device_model import Device as device_model
 from app.device.models.interface_model import Interface as interface_model
@@ -466,14 +468,16 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                     or device.get("custom_fields", {}).get("zabbix_templates")
                 ):
                     custom_fields = device.get("custom_fields") or {}
-                    if custom_fields.get("zabbix_templates") != None:
-                        device_templates: list[str] = custom_fields.get("zabbix_templates")
+                    custom_templates = custom_fields.get("zabbix_templates")
+                    if isinstance(custom_templates, list):
+                        device_templates: list[str] = [str(template) for template in custom_templates]
                         log.logger.info("Device %s has Zabbix templates from custom fields: %s", device["name"], device_templates)
                     elif device.get("role") and device_role_map[device.get("role", {}).get("name")] and device.get("role", {}).get("name") in device_role_map:
-                        device_templates = device_role_map[device.get("role", {}).get("name")]
+                        device_templates = [str(template) for template in device_role_map[device.get("role", {}).get("name")]]
                         log.logger.info("Device %s has Zabbix templates from device role %s: %s", device["name"], device.get("role", {}).get("name"), device_templates)
                     else:
-                        device_templates = device["config_context"]["zabbix"]["templates"] if device["config_context"] else ""
+                        config_templates = device["config_context"]["zabbix"]["templates"] if device["config_context"] else []
+                        device_templates = [str(template) for template in config_templates] if isinstance(config_templates, list) else []
                         log.logger.info("Device %s has Zabbix templates from config context: %s", device["name"], device_templates)
                     log.logger.info(
                         "Device %s has Zabbix templates: %s",
@@ -686,19 +690,24 @@ def uniform_output_text(
             display_zabbix_devices,
         ]:
             for device in device_list:
-                if isinstance(device.hostgroup, list):
-                    device.hostgroup = (
-                        ", ".join(group["name"] for group in device.hostgroup)
-                        if device.hostgroup
-                        else ""
-                    )
+                display_device: Any = device
+                if isinstance(display_device.hostgroup, list):
+                    hostgroup_names: list[str] = []
+                    for group in display_device.hostgroup:
+                        if isinstance(group, dict) and "name" in group:
+                            hostgroup_names.append(str(group["name"]))
+                        elif isinstance(group, str):
+                            hostgroup_names.append(group)
+                        elif group:
+                            hostgroup_names.append(str(group))
+                    display_device.hostgroup = ", ".join(hostgroup_names)
                 else:
-                    device.hostgroup = device.hostgroup if device.hostgroup else ""
-                if isinstance(device.templates, list):
-                    device.templates = (
-                        ", ".join(str(template) for template in sorted(device.templates))
-                        if device.templates
-                        else ""
+                    display_device.hostgroup = display_device.hostgroup if display_device.hostgroup else ""
+                if isinstance(display_device.templates, list):
+                    display_device.templates = (
+                        ", ".join(str(template) for template in sorted(display_device.templates))
+                        if display_device.templates
+                        else []
                     )
         return display_differences, display_netbox_devices, display_zabbix_devices
     except (TypeError, AttributeError, KeyError) as e:

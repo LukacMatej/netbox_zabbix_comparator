@@ -102,7 +102,7 @@ def check_device_model(
     nb_device: device_model,
     zb_device: device_model,
     device_fields: list[str],
-) -> tuple[bool, str | None]:
+) -> tuple[bool, str | None, list[str] | None, list[str] | None]:
     """
     Check if two device models are identical based on specified fields.
     Args:
@@ -110,9 +110,9 @@ def check_device_model(
         zb_device (device_model): Device model from Zabbix.
         device_fields (list[str]): List of field names to compare between devices.
     Returns:
-        tuple[bool, str | None]: A tuple containing a boolean indicating if the
-            devices are identical and a string with the name of the differing
-            field or None if they are identical.
+        tuple[bool, str | None, list[str] | None, list[str] | None]: A tuple containing a boolean indicating if the
+            devices are identical and strings with the name of the differing
+            field and their values or None if they are identical.
     """
     for field in device_fields:
         nb_value = getattr(nb_device, field)

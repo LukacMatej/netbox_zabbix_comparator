@@ -1,7 +1,9 @@
-"""Tests for Flask routes and parser initialization in `server.py`."""
+"""Tests for FastAPI routes and parser initialization in `server.py`."""
 
 import unittest
 from unittest.mock import patch
+
+from fastapi.testclient import TestClient
 
 import server
 from app.device.models.device_model import Device
@@ -25,29 +27,25 @@ class ServerRoutesTests(unittest.TestCase):
     """Route-level tests for compare and synchronization endpoints."""
 
     def setUp(self) -> None:
-        """Create Flask test client."""
-        self.client = server.app.test_client()
+        """Create FastAPI test client."""
+        self.client = TestClient(server.app)
 
-    @patch("server.render_template", return_value="ok")
-    def test_root_route(self, _render):
+    def test_root_route(self):
         """Root route returns success and renders template."""
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data.decode(), "ok")
+        self.assertIn("NetBox and Zabbix", response.text)
 
-    @patch("server.test_connection", return_value=("Connection successful.", 200))
     @patch("server.ct.compare", return_value=Exception("boom"))
-    def test_run_compare_error(self, _compare, _test_conn):
+    def test_run_compare_error(self, _compare):
         """Compare route returns 500 when compare service raises error output."""
         response = self.client.get("/RunCompare")
         self.assertEqual(response.status_code, 500)
-        self.assertIn("boom", response.data.decode())
+        self.assertIn("boom", response.text)
 
-    @patch("server.test_connection", return_value=("Connection successful.", 200))
-    @patch("server.render_template", return_value="compare")
     @patch("server.ds.uniform_output_text")
     @patch("server.ct.compare")
-    def test_run_compare_success(self, compare_mock, uniform_mock, _render, _test_conn):
+    def test_run_compare_success(self, compare_mock, uniform_mock):
         """Compare route returns rendered output for successful comparison."""
         nb = _device("nb")
         zb = _device("zb")
@@ -56,25 +54,31 @@ class ServerRoutesTests(unittest.TestCase):
 
         response = self.client.get("/RunCompare")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data.decode(), "compare")
+        self.assertIn("Differences", response.text)
         uniform_mock.assert_called_once()
 
-    @patch("server.test_connection", return_value=("Connection successful.", 200))
-    @patch("server.render_template", return_value="compare_sync")
     @patch("server.ds.uniform_output_text")
     @patch("server.ss.sync_netbox_zabbix_devices")
     @patch("server.ct.compare")
-    def test_run_compare_sync_success(self, compare_mock, sync_mock, uniform_mock, _render, _test_conn):
+    def test_run_compare_sync_success(self, compare_mock, sync_mock, uniform_mock):
         """Sync route renders result and triggers synchronization service."""
         nb = _device("nb")
         zb = _device("zb")
         diff = DeviceDifference(nb, zb, (["name"], ["status"]))
         compare_mock.return_value = ([diff], [nb], [zb])
-        sync_mock.return_value = "sync-ok"
+        sync_mock.return_value = type(
+            "SyncOutputStub",
+            (),
+            {
+                "synchronization_output_zabbix": ["zabbix"],
+                "synchronization_output_differences": ["differences"],
+                "synchronization_output_netbox": ["netbox"],
+            },
+        )()
 
         response = self.client.get("/RunCompareSync")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data.decode(), "compare_sync")
+        self.assertIn("Synchronization output", response.text)
         sync_mock.assert_called_once()
         uniform_mock.assert_called_once()
 

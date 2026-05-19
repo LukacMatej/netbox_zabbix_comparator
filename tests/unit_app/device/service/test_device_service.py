@@ -49,6 +49,35 @@ class DeviceServiceTests(unittest.TestCase):
         self.assertEqual(display_nb[0].hostgroup, "HG")
         self.assertEqual(display_nb[0].templates, "T1")
 
+    def test_uniform_output_text_handles_string_hostgroups(self):
+        """Hostgroup lists made of strings should be rendered without errors."""
+        nb = [
+            Device(
+                name="nb",
+                interfaces=[Interface("eth0", [Address("10.0.0.1", "nb.local")], "aa", "1")],
+                hostgroup=["HG-A", "HG-B"],
+                description="desc",
+                templates=["T1"],
+                status="Active",
+            )
+        ]
+        zb = [
+            Device(
+                name="zb",
+                interfaces=[Interface("eth0", [Address("10.0.0.1", "zb.local")], "aa", "1")],
+                hostgroup=[{"name": "HG-A"}, {"name": "HG-B"}],
+                description="desc",
+                templates=["T1"],
+                status="Active",
+            )
+        ]
+        diff = [DeviceDifference(nb[0], zb[0], ([], []))]
+
+        _, display_nb, display_zb = ds.uniform_output_text(diff, nb, zb)
+
+        self.assertEqual(display_nb[0].hostgroup, "HG-A, HG-B")
+        self.assertEqual(display_zb[0].hostgroup, "HG-A, HG-B")
+
     @patch("app.device.service.device_service.requests.post")
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb", "ZABBIX_KEY": "k"}, clear=False)
     def test_find_hostinterface_id_success(self, post_mock):
