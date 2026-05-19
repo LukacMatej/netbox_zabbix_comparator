@@ -601,7 +601,7 @@ def compare(
         return Exception(zb_device_list)
     log.logger.debug("Zabbix Devices:")
     log.logger.debug(ds.print_devices(zb_device_list))
-    ds.map_port_type_device(nb_device_list, zb_device_list)
+    # ds.map_port_type_device(nb_device_list, zb_device_list)
     different_devices: tuple[
         list[device_difference_model], list[device_model], list[device_model]
     ] = compare_devices(nb_device_list, zb_device_list)

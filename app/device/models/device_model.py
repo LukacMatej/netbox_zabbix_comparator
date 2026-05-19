@@ -137,13 +137,13 @@ class Device:
                 "params": {"interfaceid": interface_id},
                 "id": 1,
             }
-        interface = self.interfaces[0]
+        interface: InterfaceModel = self.interfaces[0]
         return {
             "jsonrpc": "2.0",
             "method": "hostinterface.update",
             "params": {
                 "interfaceid": interface_id,
-                "type": map_port_type(interface.port_type),
+                "type": interface.port_type,
                 "main": 1,
                 "useip": 1,
                 "ip": (
@@ -240,21 +240,21 @@ def format_nb_status(status: str) -> str:
     return status_map.get(status, "offline")
 
 
-def map_port_type(port_type: str) -> str:
-    """Maps the port type to a Netbox compatible format."""
-    if isinstance(port_type, list):
-        port_type = port_type[0] if port_type else ""
-    port_type_map: dict[str, str] = {
-        "Agent": "1",
-        "SNMP": "2",
-        "IPMI": "3",
-        "JMX": "4",
-        "1": "1",
-        "2": "2",
-        "3": "3",
-        "4": "4",
-    }
-    return port_type_map.get(port_type, "1")
+# def map_port_type(port_type: str) -> str:
+#     """Maps the port type to a Netbox compatible format."""
+#     if isinstance(port_type, list):
+#         port_type = port_type[0] if port_type else ""
+#     port_type_map: dict[str, str] = {
+#         "Agent": "1",
+#         "SNMP": "2",
+#         "IPMI": "3",
+#         "JMX": "4",
+#         "1": "1",
+#         "2": "2",
+#         "3": "3",
+#         "4": "4",
+#     }
+#     return port_type_map.get(port_type, "1")
 
 
 def normalize_status(status: str) -> str:
@@ -290,7 +290,7 @@ def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
         if interface.port_type in ("1", "Agent"):
             result.append(
                 {
-                    "type": map_port_type(interface.port_type),
+                    "type": interface.port_type,
                     "main": 1 if index == 0 else 0,
                     "useip": 1,
                     "ip": (
@@ -305,7 +305,7 @@ def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
         elif interface.port_type in ("2", "SNMP"):
             result.append(
                 {
-                    "type": map_port_type(interface.port_type),
+                    "type": interface.port_type,
                     "main": 1 if index == 0 else 0,
                     "useip": 1,
                     "ip": (
@@ -321,7 +321,7 @@ def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
         else:
             result.append(
                 {
-                    "type": map_port_type(interface.port_type),
+                    "type": interface.port_type,
                     "main": 1 if index == 0 else 0,
                     "useip": 1,
                     "ip": (
@@ -343,7 +343,7 @@ def dict_interfaces_zb_id(interfaces: list[InterfaceModel], interface_id) -> lis
     for index, interface in enumerate(interfaces):
         result.append(
             {
-                "type": map_port_type(interface.port_type),
+                "type": interface.port_type,
                 "interfaceid": interface_id,
                 "main": 1 if index == 0 else 0,
                 "useip": 1,

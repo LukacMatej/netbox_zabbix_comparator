@@ -484,6 +484,14 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                         device["name"],
                         device_templates,
                     )
+                    interfaces = device.get("interfaces", [])
+                    primary_ip_interface = find_primary_ip_interface(
+                        interfaces,
+                        device.get("primary_ip4", {}).get("address", "")
+                        )
+                    port_types = custom_fields.get("zabbix_port_type") or (
+                        device["config_context"]["zabbix"]["port_type"] if device["config_context"] else ""
+                    )
                     device_list.append(
                         device_model(
                             name=device["name"],
@@ -495,37 +503,26 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                             status=format_status(device["status"]),
                             interfaces=[
                                 interface_model(
-                                    name=interface["name"],
-                                    mac_address=(
-                                        format_mac(interface["mac_addresses"][0]["mac_address"])
-                                        if interface["mac_addresses"]
-                                        else ""
-                                    ),
-                                    port_type=(
-                                        device["config_context"]["zabbix"]["port_type"]
-                                        if device["config_context"]
-                                        else ""
-                                    ),
+                                    name=primary_ip_interface["name"] if primary_ip_interface else "",
+                                    mac_address=(format_mac(primary_ip_interface["mac_addresses"][0]["mac_address"])
+                                        if primary_ip_interface and "mac_addresses" in primary_ip_interface and primary_ip_interface["mac_addresses"]
+                                        else ""),
+                                    port_type=port_type,
                                     addresses=[
                                         address_model(
-                                            address=(
-                                                str(device["primary_ip4"]["address"]).split(
-                                                    "/", maxsplit=1
-                                                )[0]
-                                                if device["primary_ip4"]
+                                            address=(str(device["primary_ip4"]["address"]).split("/", maxsplit=1)[0]
+                                                if device.get("primary_ip4") and device["primary_ip4"].get("address")
                                                 else ""
                                             ),
-                                            dns_name=(
-                                                device["primary_ip4"]["dns_name"]
-                                                if device["primary_ip4"]
+                                            dns_name=(device["primary_ip4"]["dns_name"]
+                                                if device.get("primary_ip4") and device["primary_ip4"].get("dns_name")
                                                 else ""
                                             ),
                                         )
-                                    ],
+                                    ]
                                 )
-                                for interface in device["interfaces"]
-                                if interface["ip_addresses"]
-                            ],
+                                for port_type in port_types if port_types
+                                ]
                         )
                     )
                 else:
@@ -537,6 +534,28 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
     except requests.exceptions.RequestException as e:
         return f"Request failed: {e}"
 
+def find_primary_ip_interface(interfaces: list[dict[str, Any]], primary_ip: str) -> dict[str, Any] | None:
+    """
+    Find the interface that has the primary IP address assigned.
+    Args:
+      interfaces (list[dict]): A list of interface dictionaries, each containing
+        interface details including IP addresses.
+      primary_ip (str): The primary IP address to match against the interfaces.
+    Returns:
+      dict: The interface dictionary that contains the primary IP address, or None if not found.
+    """
+    primary_interface: dict[str, Any] | None = None
+    for interface in interfaces:
+        for ip in interface.get("ip_addresses", []):
+            if ip.get("address") == primary_ip:
+                primary_interface = {
+                    "name": interface["name"],
+                    "mac_addresses": interface["mac_addresses"][0]["mac_address"] if interface.get("mac_addresses") else "",
+                    "address": ip["address"],
+                    "dns_name": ip["dns_name"],
+                }
+                break
+    return primary_interface
 
 def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
     """
