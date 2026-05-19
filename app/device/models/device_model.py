@@ -73,7 +73,7 @@ class Device:
     def update_data_zabbix(
         self,
         hostid,
-        interface_id,
+        interface_ids,
         hostgroupids,
         templateids,
         name,
@@ -103,11 +103,12 @@ class Device:
             "status": 0 if self.status == "Active" else 1,
         }
         if include_interfaces:
-            params["interfaces"] = (
+            params["interfaces"] = ([
                 dict_interfaces_zb_id(self.interfaces, interface_id=interface_id)
                 if self.interfaces
                 else []
-            )
+            ] for interface_id in interface_ids
+                                    )
 
         return {
             "jsonrpc": "2.0",
@@ -128,33 +129,31 @@ class Device:
             "id": 1,
         }
 
-    def update_interface_data_zabbix(self, interface_id) -> dict:
+    def update_interface_data_zabbix(self, interface_ids) -> dict:
         """Creates a dictionary representation for Zabbix host interface update."""
-        if not self.interfaces:
-            return {
-                "jsonrpc": "2.0",
-                "method": "hostinterface.update",
-                "params": {"interfaceid": interface_id},
-                "id": 1,
-            }
-        interface = self.interfaces[0]
+
+        params = []
+        for index, interface_id in enumerate(interface_ids):
+            params.append(
+                {
+                    "interfaceid": interface_id,
+                    "type": self.interfaces[index].port_type,
+                    "main": _is_main_interface(self.interfaces, index),
+                    "useip": 1,
+                    "ip": (
+                        str(self.interfaces[index].addresses[0].address).split("/", maxsplit=1)[0]
+                        if self.interfaces[index].addresses
+                        else ""
+                    ),
+                    "dns": self.interfaces[index].addresses[0].dns_name if self.interfaces[index].addresses else "",
+                    "port": 161,
+                    "details": {"version": 3},
+                }
+            )
         return {
             "jsonrpc": "2.0",
             "method": "hostinterface.update",
-            "params": {
-                "interfaceid": interface_id,
-                "type": map_port_type(interface.port_type),
-                "main": 1,
-                "useip": 1,
-                "ip": (
-                    str(interface.addresses[0].address).split("/", maxsplit=1)[0]
-                    if interface.addresses
-                    else ""
-                ),
-                "dns": interface.addresses[0].dns_name if interface.addresses else "",
-                "port": 161,
-                "details": {"version": 3},
-            },
+            "params": params,
             "id": 1,
         }
 
@@ -240,21 +239,21 @@ def format_nb_status(status: str) -> str:
     return status_map.get(status, "offline")
 
 
-def map_port_type(port_type: str) -> str:
-    """Maps the port type to a Netbox compatible format."""
-    if isinstance(port_type, list):
-        port_type = port_type[0] if port_type else ""
-    port_type_map: dict[str, str] = {
-        "Agent": "1",
-        "SNMP": "2",
-        "IPMI": "3",
-        "JMX": "4",
-        "1": "1",
-        "2": "2",
-        "3": "3",
-        "4": "4",
-    }
-    return port_type_map.get(port_type, "1")
+# def map_port_type(port_type: str) -> str:
+#     """Maps the port type to a Netbox compatible format."""
+#     if isinstance(port_type, list):
+#         port_type = port_type[0] if port_type else ""
+#     port_type_map: dict[str, str] = {
+#         "Agent": "1",
+#         "SNMP": "2",
+#         "IPMI": "3",
+#         "JMX": "4",
+#         "1": "1",
+#         "2": "2",
+#         "3": "3",
+#         "4": "4",
+#     }
+#     return port_type_map.get(port_type, "1")
 
 
 def normalize_status(status: str) -> str:
@@ -283,6 +282,15 @@ def normalize_status(status: str) -> str:
     return "Inactive"
 
 
+def _is_main_interface(interfaces: list[InterfaceModel], index: int) -> int:
+    """Mark the first interface for each monitoring type as the default."""
+    port_type = interfaces[index].port_type
+    for previous_index in range(index):
+        if interfaces[previous_index].port_type == port_type:
+            return 0
+    return 1
+
+
 def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
     """Converts a list of InterfaceModel objects to a list of dictionaries."""
     result = []
@@ -290,8 +298,8 @@ def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
         if interface.port_type in ("1", "Agent"):
             result.append(
                 {
-                    "type": map_port_type(interface.port_type),
-                    "main": 1 if index == 0 else 0,
+                    "type": interface.port_type,
+                    "main": _is_main_interface(interfaces, index),
                     "useip": 1,
                     "ip": (
                         str(interface.addresses[0].address).split("/", maxsplit=1)[0]
@@ -305,8 +313,8 @@ def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
         elif interface.port_type in ("2", "SNMP"):
             result.append(
                 {
-                    "type": map_port_type(interface.port_type),
-                    "main": 1 if index == 0 else 0,
+                    "type": interface.port_type,
+                    "main": _is_main_interface(interfaces, index),
                     "useip": 1,
                     "ip": (
                         str(interface.addresses[0].address).split("/", maxsplit=1)[0]
@@ -321,8 +329,8 @@ def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
         else:
             result.append(
                 {
-                    "type": map_port_type(interface.port_type),
-                    "main": 1 if index == 0 else 0,
+                    "type": interface.port_type,
+                    "main": _is_main_interface(interfaces, index),
                     "useip": 1,
                     "ip": (
                         str(interface.addresses[0].address).split("/", maxsplit=1)[0]
@@ -343,9 +351,9 @@ def dict_interfaces_zb_id(interfaces: list[InterfaceModel], interface_id) -> lis
     for index, interface in enumerate(interfaces):
         result.append(
             {
-                "type": map_port_type(interface.port_type),
+                "type": interface.port_type,
                 "interfaceid": interface_id,
-                "main": 1 if index == 0 else 0,
+                "main": _is_main_interface(interfaces, index),
                 "useip": 1,
                 "ip": (
                     str(interface.addresses[0].address).split("/", maxsplit=1)[0]

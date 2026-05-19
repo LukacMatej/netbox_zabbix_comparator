@@ -44,3 +44,11 @@ class DeviceDifference:
             f"DeviceDifference(nb_device={self.nb_device}, "
             f"zb_device={self.zb_device}, differences={self.differences})"
         )
+
+    def get_nb_devices(self) -> DeviceModel:
+        """Returns the NetBox device model."""
+        return self.nb_device
+
+    def get_zb_devices(self) -> DeviceModel:
+        """Returns the Zabbix device model."""
+        return self.zb_device

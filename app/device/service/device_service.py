@@ -56,14 +56,13 @@ from app.device.models.difference_model import DeviceDifference as difference_mo
 from app.logger import logger_conf as log
 
 
-def find_hostinterface_id(hostid: str) -> int:
+def find_hostinterface_ids(hostid: str) -> list[int]:
     """
-    Finds the interface ID for a given Zabbix host ID and interface name.
+    Finds the interface IDs for a given Zabbix host ID.
     Args:
       hostid (str): The Zabbix host ID.
-      interface_name (str): The name (DNS or IP) of the interface to find.
     Returns:
-      int: The interface ID if found, otherwise -1.
+      list[int]: A list of interface IDs if found, otherwise an empty list.
     """
     zb_url = os.environ.get("ZABBIX_IP")
     zb_key = os.environ.get("ZABBIX_KEY")
@@ -86,12 +85,12 @@ def find_hostinterface_id(hostid: str) -> int:
         result = response.json()
         if "error" in result:
             log.logger.error("Error in Zabbix API response: %s", result["error"])
-            return -1
+            return []
         interface = result.get("result", [])
-        return int(interface[0]["interfaceid"]) if interface else -1
+        return [int(iface["interfaceid"]) for iface in interface]
     except requests.exceptions.RequestException as e:
-        log.logger.error("Failed to find Zabbix interface ID for hostid %s: %s", hostid, e)
-    return -1
+        log.logger.error("Failed to find Zabbix interface IDs for hostid %s: %s", hostid, e)
+    return []
 
 
 def find_nb_site_id(site_name: str) -> int:
@@ -484,6 +483,14 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                         device["name"],
                         device_templates,
                     )
+                    interfaces = device.get("interfaces", [])
+                    primary_ip_interface = find_primary_ip_interface(
+                        interfaces,
+                        device["primary_ip4"]["address"] if device.get("primary_ip4") and device["primary_ip4"].get("address") else "",
+                        )
+                    port_types = custom_fields.get("zabbix_port_type") or (
+                        device["config_context"]["zabbix"]["port_type"] if device["config_context"] else ""
+                    )
                     device_list.append(
                         device_model(
                             name=device["name"],
@@ -495,37 +502,26 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                             status=format_status(device["status"]),
                             interfaces=[
                                 interface_model(
-                                    name=interface["name"],
-                                    mac_address=(
-                                        format_mac(interface["mac_addresses"][0]["mac_address"])
-                                        if interface["mac_addresses"]
-                                        else ""
-                                    ),
-                                    port_type=(
-                                        device["config_context"]["zabbix"]["port_type"]
-                                        if device["config_context"]
-                                        else ""
-                                    ),
+                                    name=primary_ip_interface["name"] if primary_ip_interface else "",
+                                    mac_address=(format_mac(primary_ip_interface["mac_addresses"][0]["mac_address"])
+                                        if primary_ip_interface and "mac_addresses" in primary_ip_interface and primary_ip_interface["mac_addresses"]
+                                        else ""),
+                                    port_type=port_type,
                                     addresses=[
                                         address_model(
-                                            address=(
-                                                str(device["primary_ip4"]["address"]).split(
-                                                    "/", maxsplit=1
-                                                )[0]
-                                                if device["primary_ip4"]
+                                            address=(str(device["primary_ip4"]["address"]).split("/", maxsplit=1)[0]
+                                                if device.get("primary_ip4") and device["primary_ip4"].get("address")
                                                 else ""
                                             ),
-                                            dns_name=(
-                                                device["primary_ip4"]["dns_name"]
-                                                if device["primary_ip4"]
+                                            dns_name=(device["primary_ip4"]["dns_name"]
+                                                if device.get("primary_ip4") and device["primary_ip4"].get("dns_name")
                                                 else ""
                                             ),
                                         )
-                                    ],
+                                    ]
                                 )
-                                for interface in device["interfaces"]
-                                if interface["ip_addresses"]
-                            ],
+                                for port_type in port_types if port_types
+                                ]
                         )
                     )
                 else:
@@ -537,6 +533,28 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
     except requests.exceptions.RequestException as e:
         return f"Request failed: {e}"
 
+def find_primary_ip_interface(interfaces: list[dict[str, Any]], primary_ip: str) -> dict[str, Any] | None:
+    """
+    Find the interface that has the primary IP address assigned.
+    Args:
+      interfaces (list[dict]): A list of interface dictionaries, each containing
+        interface details including IP addresses.
+      primary_ip (str): The primary IP address to match against the interfaces.
+    Returns:
+      dict: The interface dictionary that contains the primary IP address, or None if not found.
+    """
+    primary_interface: dict[str, Any] | None = None
+    for interface in interfaces:
+        for ip in interface.get("ip_addresses", []):
+            if ip.get("address") == primary_ip:
+                primary_interface = {
+                    "name": interface["name"],
+                    "mac_addresses": interface.get("mac_addresses", []) if interface.get("mac_addresses") else [],
+                    "address": ip["address"],
+                    "dns_name": ip["dns_name"],
+                }
+                break
+    return primary_interface
 
 def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
     """
@@ -623,31 +641,43 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
     return zb_device_list
 
 
-def uniform_port_type(port_type: str) -> str:
+def uniform_port_type(port_type: str, numbered: bool = False) -> str:
     """Uniforms the port type to a human readable format."""
     if isinstance(port_type, list):
         port_type = port_type[0] if port_type else ""
-    port_type_map: dict[str, str] = {
-        "1": "Agent",
-        "2": "SNMP",
-        "3": "IPMI",
-        "4": "JMX",
-        "Agent": "Agent",
-        "SNMP": "SNMP",
-        "IPMI": "IPMI",
-        "JMX": "JMX",
-    }
+    if numbered:
+        port_type_map: dict[str, str] = {
+            "1": "1",
+            "2": "2",
+            "3": "3",
+            "4": "4",
+            "Agent": "1",
+            "SNMP": "2",
+            "IPMI": "3",
+            "JMX": "4",
+        }
+    else:
+        port_type_map: dict[str, str] = {
+            "1": "Agent",
+            "2": "SNMP",
+            "3": "IPMI",
+            "4": "JMX",
+            "Agent": "Agent",
+            "SNMP": "SNMP",
+            "IPMI": "IPMI",
+            "JMX": "JMX",
+        }
     return port_type_map.get(port_type, port_type)
 
 
-def map_port_type_device(nb_devices: list[device_model], zb_devices: list[device_model]) -> None:
+def map_port_type_device(nb_devices: list[device_model], zb_devices: list[device_model], numbered: bool = False) -> None:
     """Map interface port types in NetBox/Zabbix lists to a uniform format."""
     for device in nb_devices:
         for interface in device.interfaces:
-            interface.port_type = uniform_port_type(interface.port_type)
+            interface.port_type = uniform_port_type(interface.port_type, numbered)
     for device in zb_devices:
         for interface in device.interfaces:
-            interface.port_type = uniform_port_type(interface.port_type)
+            interface.port_type = uniform_port_type(interface.port_type, numbered)
 
 
 def uniform_output_text(

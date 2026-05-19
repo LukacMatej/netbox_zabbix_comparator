@@ -181,15 +181,17 @@ def run_compare_sync(request: Request) -> Response:
     log.logger.debug(ds.print_differences(differences))
     log.logger.debug(ds.print_devices(netbox_devices))
     log.logger.debug(ds.print_devices(zabbix_devices))
-    sync_output: sync_output_model = ss.sync_netbox_zabbix_devices(
-        netbox_devices=netbox_devices, zabbix_devices=zabbix_devices, differences=differences
-    )
-    log.logger.debug("Synchronization Output: %s", sync_output)
-    formatted_output_result = ds.uniform_output_text(
+    formatted_output_result: tuple[list[DeviceDifference], list[Device], list[Device]] = ds.uniform_output_text(
         differences,
         netbox_devices,
         zabbix_devices,
     )
+    ds.map_port_type_device(netbox_devices, zabbix_devices,numbered=True)
+    sync_output: sync_output_model = ss.sync_netbox_zabbix_devices(
+        netbox_devices=netbox_devices, zabbix_devices=zabbix_devices, differences=differences
+    )
+    log.logger.debug("Synchronization Output: %s", sync_output)
+
     if (
         isinstance(formatted_output_result, tuple)
         and len(formatted_output_result) == 3
