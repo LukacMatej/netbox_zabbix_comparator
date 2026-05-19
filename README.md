@@ -53,7 +53,7 @@ Custom Field Choices napojit na Custom Field s jménem zabbix_hostgroups s multi
 
 ### REST API
 
-- Ovládní přes burger menu
+- Ovládní přes hamburger menu
 - Compare
   - Spuštění porovnání zařízení v netboxu a zabbixu
 - Synchonize
