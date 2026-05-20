@@ -1,6 +1,7 @@
 """Unit tests for device service API helpers and formatters."""
 
 import unittest
+import json
 from unittest.mock import Mock, patch
 import requests
 
@@ -83,7 +84,7 @@ class DeviceServiceTests(unittest.TestCase):
     def test_find_hostinterface_ids_success(self, post_mock):
         """Host interface lookup should return parsed interface IDs on success."""
         response = Mock()
-        response.json.return_value = {"result": [{"interfaceid": "55"}]}
+        response.text = json.dumps({"result": [{"interfaceid": "55"}]})
         response.raise_for_status.return_value = None
         post_mock.return_value = response
 
@@ -101,7 +102,7 @@ class DeviceServiceTests(unittest.TestCase):
     def test_find_nb_identifiers(self, get_mock):
         """NetBox site/type/role helper lookups should return resource IDs."""
         response = Mock(status_code=200)
-        response.json.return_value = {"count": 1, "results": [{"id": 7}]}
+        response.text = json.dumps({"count": 1, "results": [{"id": 7}]})
         get_mock.return_value = response
 
         self.assertEqual(ds.find_nb_site_id("S1"), 7)
@@ -113,7 +114,7 @@ class DeviceServiceTests(unittest.TestCase):
         """NetBox device retrieval should map API JSON into device models."""
         response = Mock(status_code=200)
         response.request = Mock(method="POST", url="http://nb/graphql", headers={}, body="{}")
-        response.json.return_value = {
+        response.text = json.dumps({
             "data": {
                 "device_list": [
                     {
@@ -121,6 +122,7 @@ class DeviceServiceTests(unittest.TestCase):
                         "description": "d",
                         "status": "active",
                         "config_context": {"zabbix": {"templates": ["tpl"], "port_type": "SNMP"}},
+                        "custom_fields": {"zabbix_hostgroups": None, "zabbix_templates": None, "zabbix_port_type": None},
                         "primary_ip4": {"address": "10.0.0.1/24", "dns_name": "sw1.local"},
                         "interfaces": [
                             {
@@ -131,10 +133,12 @@ class DeviceServiceTests(unittest.TestCase):
                                 ],
                             }
                         ],
+                        "role": None,
                     }
-                ]
+                ],
+                "device_role_list": []
             }
-        }
+        })
         post_mock.return_value = response
 
         result = ds.get_nb_devices("k", "http://nb/graphql")
@@ -158,7 +162,7 @@ class DeviceServiceTests(unittest.TestCase):
         """Zabbix device retrieval should parse successful host payload."""
         response = Mock()
         response.raise_for_status.return_value = None
-        response.json.return_value = {
+        response.text = json.dumps({
             "result": [
                 {
                     "host": "zb1",
@@ -169,7 +173,7 @@ class DeviceServiceTests(unittest.TestCase):
                     "interfaces": [{"dns": "zb1.local", "ip": "10.0.0.2", "type": "2"}],
                 }
             ]
-        }
+        })
         post_mock.return_value = response
 
         result = ds.get_zb_devices("k", "http://zb")
@@ -181,7 +185,7 @@ class DeviceServiceTests(unittest.TestCase):
         """Zabbix device retrieval should return error string on API error field."""
         response = Mock()
         response.raise_for_status.return_value = None
-        response.json.return_value = {"error": "bad"}
+        response.text = json.dumps({"error": "bad"})
         post_mock.return_value = response
 
         result = ds.get_zb_devices("k", "http://zb")
