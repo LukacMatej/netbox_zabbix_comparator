@@ -355,7 +355,6 @@ def print_device(device: device_model) -> str:
     return txt_builder
 
 
-# pylint: disable=too-many-locals
 def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
     """
     Fetch devices from Netbox API and return a list of device models.
@@ -436,74 +435,88 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
             response.request.headers,
             response.request.body,
         )
-        device_list: list[device_model] = []
         if response.status_code != 200:
             log.logger.error("Failed to fetch devices from Netbox: %s", response.text)
             return f"Failed to fetch devices from Netbox: {response.text}"
-        if response.status_code == 200:
-            data = json.loads(response.text)
-            log.logger.debug(data)
-            device_role_map: dict[str, list[str]] = get_device_role_map(
-                data.get("data", {}).get("device_role_list", []))
-            device_role_port_type_map: dict[str, list[str]] = get_device_role_port_type_map(
-                data.get("data", {}).get("device_role_list", []))
-            for device in data.get("data", {}).get("device_list", []):
-                if (
-                    (device.get("config_context")
-                    and "zabbix" in device.get("config_context", {})
-                    and "templates" in device.get("config_context", {}).get("zabbix", {})
-                    and "port_type" in device.get("config_context", {}).get("zabbix", {}))
-                    or device.get("custom_fields", {}).get("zabbix_templates")
-                ):
-                    custom_fields = device.get("custom_fields") or {}
-                    custom_templates = custom_fields.get("zabbix_templates")
-                    device_templates: list[str] | str = get_nb_templates(
-                        device,
-                        custom_templates,
-                        device_role_map
-                        )
-                    interfaces = device.get("interfaces", [])
-                    primary_ip_interface = find_primary_ip_interface(
-                        interfaces,
-                        device["primary_ip4"]["address"] if device.get("primary_ip4") and device["primary_ip4"].get("address") else "",
-                        )
-                    port_types = get_port_types(
-                        custom_fields,
-                        device,
-                        device_role_port_type_map
-                    )
-                    primary_ip, primary_dns = get_primary_ip_info(device)
-                    mac_address = get_mac_address(primary_ip_interface)
-                    device_list.append(
-                        device_model(
-                            name=device["name"],
-                            hostgroup=custom_fields.get("zabbix_hostgroups", ""),
-                            description=device["description"],
-                            templates=(
-                                sorted(device_templates) if isinstance(device_templates, list) else device_templates
-                            ),
-                            status=format_status(device["status"]),
-                            interfaces=[
-                                interface_model(
-                                    name=primary_ip_interface["name"] if primary_ip_interface else "",
-                                    mac_address=mac_address,
-                                    port_type=port_type,
-                                    addresses=[
-                                        address_model(
-                                            address=primary_ip,
-                                            dns_name=primary_dns,
-                                        )
-                                    ]
-                                )
-                                for port_type in port_types if port_types
-                                ]
-                        )
-                    )
-                else:
+
+        data = json.loads(response.text)
+        log.logger.debug(data)
+
+        # Extract JSON structure with validation
+        try:
+            response_data = data["data"]
+            device_role_list = response_data["device_role_list"]
+            devices = response_data["device_list"]
+        except KeyError as e:
+            log.logger.error("Missing expected key in Netbox response: %s", e)
+            return f"Invalid Netbox API response structure: {e}"
+
+        device_role_map = get_device_role_map(device_role_list)
+        device_role_port_type_map = get_device_role_port_type_map(device_role_list)
+        device_list: list[device_model] = []
+
+        for device in devices:
+            try:
+                config_context = device["config_context"] if isinstance(device["config_context"], dict) else {}
+                custom_fields = device["custom_fields"] if device["custom_fields"] else {}
+
+                # Check if device has required Zabbix configuration
+                has_zabbix_config = (
+                    (config_context and "zabbix" in config_context
+                     and "templates" in config_context["zabbix"]
+                     and "port_type" in config_context["zabbix"])
+                    or custom_fields["zabbix_templates"]
+                )
+
+                if not has_zabbix_config:
                     log.logger.warning(
                         "Device %s skipped due to missing Zabbix configuration context or custom fields.",
                         device["name"],
                     )
+                    continue
+
+                custom_templates = custom_fields["zabbix_templates"]
+                device_templates = get_nb_templates(device, custom_templates, device_role_map)
+                interfaces = device["interfaces"]
+
+                primary_ip_str = ""
+                if device["primary_ip4"]:
+                    primary_ip_str = device["primary_ip4"]["address"]
+
+                primary_ip_interface = find_primary_ip_interface(interfaces, primary_ip_str)
+                port_types = get_port_types(custom_fields, device, device_role_port_type_map)
+                primary_ip, primary_dns = get_primary_ip_info(device)
+                mac_address = get_mac_address(primary_ip_interface)
+
+                device_list.append(
+                    device_model(
+                        name=device["name"],
+                        hostgroup=custom_fields["zabbix_hostgroups"] if custom_fields["zabbix_hostgroups"] else "",
+                        description=device["description"],
+                        templates=(
+                            sorted(device_templates) if isinstance(device_templates, list) else device_templates
+                        ),
+                        status=format_status(device["status"]),
+                        interfaces=[
+                            interface_model(
+                                name=primary_ip_interface["name"] if primary_ip_interface else "",
+                                mac_address=mac_address,
+                                port_type=port_type,
+                                addresses=[
+                                    address_model(
+                                        address=primary_ip,
+                                        dns_name=primary_dns,
+                                    )
+                                ]
+                            )
+                            for port_type in port_types if port_types
+                        ]
+                    )
+                )
+            except (KeyError, TypeError) as e:
+                log.logger.error("Error processing device: %s", e)
+                continue
+
         return device_list
     except requests.exceptions.RequestException as e:
         return f"Request failed: {e}"
@@ -522,15 +535,15 @@ def get_port_types(
     Returns:
         list[str] | str: List of port types or empty list.
     """
-    if custom_fields.get("zabbix_port_type"):
+    if custom_fields["zabbix_port_type"]:
         return custom_fields["zabbix_port_type"]
 
-    role_name = device.get("role", {}).get("name")
+    role_name = device["role"]["name"] if device["role"] else None
     if role_name and role_name in device_role_port_type_map:
         return device_role_port_type_map[role_name]
 
-    config_context = device.get("config_context", {})
-    return config_context.get("zabbix", {}).get("port_type", [])
+    config_context = device["config_context"] if device["config_context"] else {}
+    return config_context["zabbix"]["port_type"] if "zabbix" in config_context else []
 
 
 def get_mac_address(primary_ip_interface: dict[str, Any] | None) -> str:
@@ -544,9 +557,9 @@ def get_mac_address(primary_ip_interface: dict[str, Any] | None) -> str:
     if not primary_ip_interface:
         return ""
 
-    mac_addresses = primary_ip_interface.get("mac_addresses", [])
+    mac_addresses = primary_ip_interface["mac_addresses"] if primary_ip_interface["mac_addresses"] else []
     if mac_addresses and isinstance(mac_addresses, list) and len(mac_addresses) > 0:
-        mac_addr = mac_addresses[0].get("mac_address", "")
+        mac_addr = mac_addresses[0]["mac_address"]
         return format_mac(mac_addr) if mac_addr else ""
 
     return ""
@@ -560,12 +573,12 @@ def get_primary_ip_info(device: dict[str, Any]) -> tuple[str, str]:
     Returns:
         tuple: (ip_address, dns_name)
     """
-    primary_ip4 = device.get("primary_ip4")
+    primary_ip4 = device["primary_ip4"]
     if not primary_ip4:
         return "", ""
 
-    address = primary_ip4.get("address", "")
-    dns_name = primary_ip4.get("dns_name", "")
+    address = primary_ip4["address"] if primary_ip4["address"] else ""
+    dns_name = primary_ip4["dns_name"] if primary_ip4["dns_name"] else ""
 
     # Extract IP from CIDR notation
     ip_address = address.split("/")[0] if address else ""
@@ -586,11 +599,11 @@ def get_nb_templates(device: Any, custom_templates: list[str] | None, device_rol
     device_templates: list[str] = []
     try:
         if isinstance(custom_templates, list):
-            device_templates: list[str] = [str(template) for template in custom_templates]
+            device_templates = [str(template) for template in custom_templates]
             log.logger.info("Device %s has Zabbix templates from custom fields: %s", device["name"], device_templates)
-        elif device.get("role") and device_role_map[device.get("role", {}).get("name")] and device.get("role", {}).get("name") in device_role_map:
-            device_templates = [str(template) for template in device_role_map[device.get("role", {}).get("name")]]
-            log.logger.info("Device %s has Zabbix templates from device role %s: %s", device["name"], device.get("role", {}).get("name"), device_templates)
+        elif device["role"] and device["role"]["name"] in device_role_map:
+            device_templates = [str(template) for template in device_role_map[device["role"]["name"]]]
+            log.logger.info("Device %s has Zabbix templates from device role %s: %s", device["name"], device["role"]["name"], device_templates)
         else:
             config_templates = device["config_context"]["zabbix"]["templates"] if device["config_context"] else []
             device_templates = [str(template) for template in config_templates] if isinstance(config_templates, list) else []
@@ -610,14 +623,18 @@ def get_device_role_map(device_role_list: list[dict[str, Any]]) -> dict[str, lis
     """
     device_role_map: dict[str, list[str]] = {}
     for device_role in device_role_list:
-        role_name = device_role.get("name")
-        custom_fields = device_role.get("custom_fields", {})
-        zabbix_templates = custom_fields.get("zabbix_templates", [])
-        if role_name and isinstance(zabbix_templates, list):
-            device_role_map[role_name] = [str(template) for template in zabbix_templates]
-            log.logger.info("Device role %s has Zabbix templates: %s", role_name, device_role_map[role_name])
-        else:
-            log.logger.info("Device role %s does not have Zabbix templates defined.", role_name)
+        try:
+            role_name = device_role["name"]
+            custom_fields = device_role["custom_fields"] if device_role["custom_fields"] else {}
+            zabbix_templates = custom_fields["zabbix_templates"] if custom_fields["zabbix_templates"] else []
+            if role_name and isinstance(zabbix_templates, list):
+                device_role_map[role_name] = [str(template) for template in zabbix_templates]
+                log.logger.info("Device role %s has Zabbix templates: %s", role_name, device_role_map[role_name])
+            else:
+                log.logger.info("Device role %s does not have Zabbix templates defined.", role_name)
+        except KeyError as e:
+            log.logger.warning("Missing key in device role data: %s", e)
+            continue
     return device_role_map
 
 def get_device_role_port_type_map(device_role_list: list[dict[str, Any]]) -> dict[str, list[str]]:
@@ -630,14 +647,18 @@ def get_device_role_port_type_map(device_role_list: list[dict[str, Any]]) -> dic
     """
     device_role_port_type_map: dict[str, list[str]] = {}
     for device_role in device_role_list:
-        role_name = device_role.get("name")
-        custom_fields = device_role.get("custom_fields", {})
-        zabbix_port_types = custom_fields.get("zabbix_port_type", [])
-        if role_name and isinstance(zabbix_port_types, list):
-            device_role_port_type_map[role_name] = [str(port_type) for port_type in zabbix_port_types]
-            log.logger.info("Device role %s has Zabbix port types: %s", role_name, device_role_port_type_map[role_name])
-        else:
-            log.logger.info("Device role %s does not have Zabbix port types defined.", role_name)
+        try:
+            role_name = device_role["name"]
+            custom_fields = device_role["custom_fields"] if device_role["custom_fields"] else {}
+            zabbix_port_types = custom_fields["zabbix_port_type"] if custom_fields["zabbix_port_type"] else []
+            if role_name and isinstance(zabbix_port_types, list):
+                device_role_port_type_map[role_name] = [str(port_type) for port_type in zabbix_port_types]
+                log.logger.info("Device role %s has Zabbix port types: %s", role_name, device_role_port_type_map[role_name])
+            else:
+                log.logger.info("Device role %s does not have Zabbix port types defined.", role_name)
+        except KeyError as e:
+            log.logger.warning("Missing key in device role data: %s", e)
+            continue
     return device_role_port_type_map
 
 def find_primary_ip_interface(interfaces: list[dict[str, Any]], primary_ip: str) -> dict[str, Any] | None:
@@ -652,11 +673,11 @@ def find_primary_ip_interface(interfaces: list[dict[str, Any]], primary_ip: str)
     """
     primary_interface: dict[str, Any] | None = None
     for interface in interfaces:
-        for ip in interface.get("ip_addresses", []):
-            if ip.get("address") == primary_ip:
+        for ip in interface["ip_addresses"]:
+            if ip["address"] == primary_ip:
                 primary_interface = {
                     "name": interface["name"],
-                    "mac_addresses": interface.get("mac_addresses", []) if interface.get("mac_addresses") else [],
+                    "mac_addresses": interface["mac_addresses"] if interface["mac_addresses"] else [],
                     "address": ip["address"],
                     "dns_name": ip["dns_name"],
                 }

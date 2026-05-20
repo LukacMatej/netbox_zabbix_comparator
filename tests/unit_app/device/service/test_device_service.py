@@ -122,6 +122,7 @@ class DeviceServiceTests(unittest.TestCase):
                         "description": "d",
                         "status": "active",
                         "config_context": {"zabbix": {"templates": ["tpl"], "port_type": "SNMP"}},
+                        "custom_fields": {"zabbix_hostgroups": None, "zabbix_templates": None, "zabbix_port_type": None},
                         "primary_ip4": {"address": "10.0.0.1/24", "dns_name": "sw1.local"},
                         "interfaces": [
                             {
@@ -132,8 +133,10 @@ class DeviceServiceTests(unittest.TestCase):
                                 ],
                             }
                         ],
+                        "role": None,
                     }
-                ]
+                ],
+                "device_role_list": []
             }
         })
         post_mock.return_value = response
