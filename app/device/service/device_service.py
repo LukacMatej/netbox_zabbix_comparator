@@ -535,14 +535,14 @@ def get_port_types(
     Returns:
         list[str] | str: List of port types or empty list.
     """
-    if custom_fields["zabbix_port_type"]:
+    if custom_fields["zabbix_port_type"] and len(custom_fields["zabbix_port_type"]) > 0:
         return custom_fields["zabbix_port_type"]
 
     role_name = device["role"]["name"] if device["role"] else None
-    if role_name and role_name in device_role_port_type_map:
+    if role_name and role_name in device_role_port_type_map and len(device_role_port_type_map[role_name]) > 0:
         return device_role_port_type_map[role_name]
 
-    config_context = device["config_context"] if device["config_context"] else {}
+    config_context = device["config_context"] if isinstance(device["config_context"], dict) else {}
     return config_context["zabbix"]["port_type"] if "zabbix" in config_context else []
 
 
@@ -598,14 +598,15 @@ def get_nb_templates(device: Any, custom_templates: list[str] | None, device_rol
     """
     device_templates: list[str] = []
     try:
-        if isinstance(custom_templates, list):
+        if isinstance(custom_templates, list) and len(custom_templates) > 0:
             device_templates = [str(template) for template in custom_templates]
             log.logger.info("Device %s has Zabbix templates from custom fields: %s", device["name"], device_templates)
-        elif device["role"] and device["role"]["name"] in device_role_map:
+        elif device["role"] and device["role"]["name"] in device_role_map and len(device_role_map[device["role"]["name"]]) > 0:
             device_templates = [str(template) for template in device_role_map[device["role"]["name"]]]
             log.logger.info("Device %s has Zabbix templates from device role %s: %s", device["name"], device["role"]["name"], device_templates)
         else:
-            config_templates = device["config_context"]["zabbix"]["templates"] if device["config_context"] else []
+            config_context = device["config_context"] if isinstance(device["config_context"], dict) else {}
+            config_templates = config_context["zabbix"]["templates"] if "zabbix" in config_context else []
             device_templates = [str(template) for template in config_templates] if isinstance(config_templates, list) else []
             log.logger.info("Device %s has Zabbix templates from config context: %s", device["name"], device_templates)
     except KeyError as e:
