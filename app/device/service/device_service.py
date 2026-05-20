@@ -46,9 +46,9 @@ from __future__ import annotations
 import copy
 import re
 import os
-from typing import Any
-
+import json
 import requests
+from typing import Any
 from app.device.models.device_model import Device as device_model
 from app.device.models.interface_model import Interface as interface_model
 from app.device.models.address_model import Address as address_model
@@ -82,8 +82,8 @@ def find_hostinterface_ids(hostid: str) -> list[int]:
             f"{zb_url}/api_jsonrpc.php", headers=headers, json=payload, timeout=30
         )
         response.raise_for_status()
-        log.logger.debug("Response from Zabbix API: %s", response.json())
-        result = response.json()
+        result = json.loads(response.text)
+        log.logger.debug("Response from Zabbix API: %s", result)
         if "error" in result:
             log.logger.error("Error in Zabbix API response: %s", result["error"])
             return []
@@ -113,7 +113,7 @@ def find_nb_site_id(site_name: str) -> int:
         f"{nb_ip}/api/dcim/sites/?name={site_name}", headers=headers, timeout=30
     )
     if response.status_code == 200:
-        data = response.json()
+        data = json.loads(response.text)
         if data["count"] > 0:
             site_id = data["results"][0]["id"]
             log.logger.info("Found Netbox site ID: %s for %s.", site_id, site_name)
@@ -141,7 +141,7 @@ def find_nb_device_type_id(device_type: str) -> int:
         f"{nb_ip}/api/dcim/device-types/?model={device_type}", headers=headers, timeout=30
     )
     if response.status_code == 200:
-        data = response.json()
+        data = json.loads(response.text)
         if data["count"] > 0:
             device_type_id = data["results"][0]["id"]
             log.logger.info("Found Netbox device type ID: %s for %s.", device_type_id, device_type)
@@ -169,7 +169,7 @@ def find_nb_device_role_id(device_role: str) -> int:
         f"{nb_ip}/api/dcim/device-roles/?name={device_role}", headers=headers, timeout=30
     )
     if response.status_code == 200:
-        data = response.json()
+        data = json.loads(response.text)
         if data["count"] > 0:
             device_role_id = data["results"][0]["id"]
             log.logger.info("Found Netbox device role ID: %s for %s.", device_role_id, device_role)
@@ -441,7 +441,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
             log.logger.error("Failed to fetch devices from Netbox: %s", response.text)
             return f"Failed to fetch devices from Netbox: {response.text}"
         if response.status_code == 200:
-            data = response.json()
+            data = json.loads(response.text)
             log.logger.debug(data)
             device_role_map: dict[str, list[str]] = get_device_role_map(
                 data.get("data", {}).get("device_role_list", []))
@@ -710,7 +710,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
         response: requests.Response = requests.post(ip, headers=headers, json=payload, timeout=30)
         log.logger.debug(response)
         response.raise_for_status()
-        result = response.json()
+        result = json.loads(response.text)
         if "error" in result:
             log.logger.error("Error in Zabbix API response: %s", result["error"])
             return f"Error in Zabbix API response: {result['error']}"
