@@ -1,28 +1,47 @@
-# Porovnání a synchonizace devices Netboxu a Zabbixu
+# Porovnání a synchronizace devices Netboxu a Zabbixu
 
-### Spuštění dockeru
+Aplikace slouží k synchronizaci konfigurace zařízení (devices) mezi Netboxem a Zabbixem s možností porovnání a automatického vytváření/aktualizace zařízení v Zabbixu na základě konfigurace v Netboxu.
 
-docker run -d -p `<port:port>` -e LISTEN_ADDRESS=`<IP adresa>` -e HTTP_PORT=`<port>` -e ZABBIX_DEFAULT_HOSTGROUP=`<název defaultní hostgroupy>` -e NETBOX_IP=`<IP Adresa Netboxu s />` -e NETBOX_KEY=`<Netbox API klíč>` -e ZABBIX_IP=`<IP Adresa Zabbixu s />` -e ZABBIX_KEY=`<Zabbix API klíč>`netbox-zabbix
+## Spuštění dockeru
 
-### Důležité věci na nastavení pro správný chod porovnání
-
-Priorita výběru templates je určena body - 1. nejvyšší priorita
-
-Stačí splnit jeden bod:
-
-##### 1. Device Custom Field
-
-Nastavit Custom Field zabbix_templates na devices s výběrem Custom Field Choices zabbix_templates
-
-##### 2. Device role Custom Field
-
-Nastavit Custom Field zabbix_templates na device roles s výběrem Custom Field Choices zabbix_templates
-
-##### 3. Device Roles Config Context
-
-V netboxu je možné nastavit dědičnej config context pro device role, který se zobrazí na každém zařízení s tou rolí
-
+```bash
+docker run -d \
+  -p <port>:<port> \
+  -e LISTEN_ADDRESS=<IP adresa> \
+  -e HTTP_PORT=<port> \
+  -e ZABBIX_DEFAULT_HOSTGROUP=<název defaultní hostgroupy> \
+  -e NETBOX_IP=<IP Adresa Netboxu s http:/> \
+  -e NETBOX_KEY=<Netbox API klíč> \
+  -e ZABBIX_IP=<IP Adresa Zabbixu s http:/> \
+  -e ZABBIX_KEY=<Zabbix API klíč> \
+  netbox-zabbix
 ```
+
+## Nastavení pro správný chod aplikace
+
+### Priorita výběru Templates a Port Types
+
+Systém používá hierarchickou prioritu při výběru Templates a Port Types. Aplikace hledá hodnoty v tomto pořadí (1 = nejvyšší priorita):
+
+#### 1. Device Custom Fields (nejvyšší priorita)
+
+Nastavit Custom Fields na individuální zařízení:
+
+- `zabbix_templates` - seznam Zabbix šablon pro konkrétní zařízení
+- `zabbix_port_type` - typ portu pro konkrétní zařízení
+
+#### 2. Device Role Custom Fields
+
+Nastavit Custom Fields na device role s výběrem Custom Field Choices:
+
+- `zabbix_templates` - seznam šablon pro všechna zařízení s tímto rolem
+- `zabbix_port_type` - typ portu pro všechna zařízení s tímto rolem
+
+#### 3. Device Config Context (nejnižší priorita)
+
+V Netboxu lze nastavit dědičný config context pro device role, který se automaticky aplikuje na všechna zařízení s danou rolí:
+
+```json
 {
     "zabbix": {
         "port_type": [
@@ -30,34 +49,52 @@ V netboxu je možné nastavit dědičnej config context pro device role, který 
         ],
         "templates": [
             "Template1",
-	    "Template2"
+            "Template2"
         ]
     }
 }
 ```
 
-Templates
+**Důležité:** Pokud vyšší priorita neobsahuje hodnoty (je prázdná nebo None), systém automaticky přejde k nižší prioritě.
 
-* Templaty, které se budou aplikovat na zařízení v Zabbixu, v zabbixu musí existovat předem.
+### Templates
 
-Port Type
+* Šablony, které se budou aplikovat na zařízení v Zabbixu
+* V Zabbixu musí existovat předem
+* Podporuje více šablon najednou
 
-* Upřesnění typu portu pro zabbix
-* Agent, SNMP, JMX, IPMI
+### Port Type
 
-Potřeba nastavit primární IP adresu v Netboxu, podle které bude fungovat v Zabbixu
+* Specifikuje typ portu pro komunikaci s Zabbixem
+* Podporované typy: Agent, SNMP, JMX, IPMI
 
-Pro přidávání netbox zařízení do hostgroups v zabbixu je připraven netbox script, který synchronizuje Custom Field Choices s jménem zabbix_hostgroups s hostgroups v zabbixu, včetně defaultní hostgroup v zabbixu "Netbox" pro kontrolu všech zařízení vytvořených synchronizací.
+### Primární IP adresa
 
-Custom Field Choices napojit na Custom Field s jménem zabbix_hostgroups s multi-select na DCIM > DEVICE
+* Povinné nastavení v Netboxu pro správný chod
+* Používá se jako adresa pro připojení zařízení v Zabbixu
+* Vybírá se z `primary_ip4` na zařízení
 
-### REST API
+### Zabbix Host Groups
 
-- Ovládní přes hamburger menu
-- Compare
-  - Spuštění porovnání zařízení v netboxu a zabbixu
-- Synchonize
-  - Spuštění synchronizace, synchronizace je jedním směrem, z netboxu do zabbixu
-  - Pokud zařízení exisutuje jen v Netboxu, vytvoří se i v zabixu
-  - Pokud zařízení existuje v Netboxu a Zabbixu a jsou stejné, tak se nic nestane
-  - Pokud zařízení existuje v Netboxu a Zabbixu, ale jejich hodnoty se liší, tak se přepíšou hodnoty z Netboxu do Zabbixu
+Je připraven Netbox script, který synchronizuje Custom Field Choices s názvem `zabbix_hostgroups` s host groups v Zabbixu:
+
+- Custom Field Choices napojit na Custom Field s názvem `zabbix_hostgroups`
+- Nastavit jako multi-select na DCIM > DEVICE
+- Defaultní host group v Zabbixu je nastavena na "Netbox" pro kontrolu všech zařízení vytvořených synchronizací
+
+## REST API
+
+Ovládání přes hamburger menu:
+
+### Compare
+
+- Spuštění porovnání zařízení v Netboxu a Zabbixu
+- Zobrazí rozdíly a shody v konfiguraci
+
+### Synchronize
+
+- Spuštění jednosměrné synchronizace z Netboxu do Zabbixu
+- Možné scénáře:
+  - Zařízení existuje jen v Netboxu → vytvoří se v Zabbixu
+  - Zařízení existuje v obou → hodnoty z Netboxu přepíšou hodnoty v Zabbixu (pokud se liší)
+  - Zařízení je identické → se nic nestane

@@ -509,7 +509,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                                     )
                                 ]
                             )
-                            for port_type in port_types if port_types
+                            for port_type in sorted(port_types) if port_types
                         ]
                     )
                 )
@@ -739,6 +739,8 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
         log.logger.debug(result)
         for host in result["result"]:
             try:
+                # Sort interfaces by port_type for consistent ordering
+                sorted_interfaces = sorted(host["interfaces"], key=lambda x: x["type"])
                 zb_device_list.append(
                     device_model(
                         name=host["host"],
@@ -757,7 +759,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
                                     )
                                 ],
                             )
-                            for interface in host["interfaces"]
+                            for interface in sorted_interfaces
                         ],
                     )
                 )
