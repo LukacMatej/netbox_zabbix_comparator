@@ -265,32 +265,32 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         templateids=templateids,
         include_interfaces=False,
     )
-    clear_templateids = [find_template_ids(template) for template in old_templateids if template]
-    clear_templates_data = zb_device.clear_templates_data_zabbix(hostid, templateids=clear_templateids)
-    log.logger.info(clear_templates_data)
-    clear_response: requests.Response = requests.post(
-        zabbix_ip + "/api_jsonrpc.php",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT,
-        json=clear_templates_data,
-    )
-    clear_response_json = clear_response.json()
-    if "error" in clear_response_json:
-        sync_output.add_difference_output(
-            f"Error clearing templates for device {zb_device.name} in Zabbix: {clear_response_json['error']['data']}"
-        )
-        log.logger.error(
-            "Error clearing templates for device %s in Zabbix: %s with response status %s.",
-            zb_device.name,
-            clear_response_json["error"],
-            clear_response.status_code,
-        )
-    else:
-        log.logger.info(
-            "Templates cleared for device %s in Zabbix with response status %s.",
-            zb_device.name,
-            clear_response.status_code,
-        )
+    # clear_templateids = [find_template_ids(template) for template in old_templateids if template]
+    # clear_templates_data = zb_device.clear_templates_data_zabbix(hostid, templateids=clear_templateids)
+    # log.logger.info(clear_templates_data)
+    # clear_response: requests.Response = requests.post(
+    #     zabbix_ip + "/api_jsonrpc.php",
+    #     headers=headers,
+    #     timeout=REQUEST_TIMEOUT,
+    #     json=clear_templates_data,
+    # )
+    # clear_response_json = clear_response.json()
+    # if "error" in clear_response_json:
+    #     sync_output.add_difference_output(
+    #         f"Error clearing templates for device {zb_device.name} in Zabbix: {clear_response_json['error']['data']}"
+    #     )
+    #     log.logger.error(
+    #         "Error clearing templates for device %s in Zabbix: %s with response status %s.",
+    #         zb_device.name,
+    #         clear_response_json["error"],
+    #         clear_response.status_code,
+    #     )
+    # else:
+    #     log.logger.info(
+    #         "Templates cleared for device %s in Zabbix with response status %s.",
+    #         zb_device.name,
+    #         clear_response.status_code,
+    #     )
 
     interface_update_data_zabbix = zb_device.update_interface_data_zabbix(interface_ids)
     log.logger.info(interface_update_data_zabbix)
