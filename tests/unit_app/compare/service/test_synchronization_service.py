@@ -159,46 +159,47 @@ class SynchronizationServiceTests(unittest.TestCase):
         "app.compare.service.synchronization_service.find_zabbix_hostgroup_ids", return_value=[24]
     )
     @patch("app.compare.service.synchronization_service.requests.post")
-    # def test_apply_differences_splits_host_and_interface_update(
-    #     self, post_mock, _hostgroup_mock, _template_mock, interface_ids_mock
-    # ):
-    #     """Host basic fields and interfaces should be updated via separate API methods."""
-    #     host_get = Mock(status_code=200)
-    #     host_get.json.return_value = {"result": [{"hostid": "9001"}]}
+    def test_apply_differences_splits_host_and_interface_update(
+        self, post_mock, _hostgroup_mock, _template_mock, interface_ids_mock
+    ):
+        """Host basic fields and interfaces should be updated via separate API methods."""
+        host_get = Mock(status_code=200)
+        host_get.json.return_value = {"result": [{"hostid": "9001"}]}
 
-    #     clear_templates = Mock(status_code=200)
-    #     clear_templates.json.return_value = {"result": {"hostids": ["9001"]}}
+        # clear_templates = Mock(status_code=200)
+        # clear_templates.json.return_value = {"result": {"hostids": ["9001"]}}
 
-    #     interface_update = Mock(status_code=200)
-    #     interface_update.json.return_value = {"result": {"interfaceids": ["77"]}}
+        interface_update = Mock(status_code=200)
+        interface_update.json.return_value = {"result": {"interfaceids": ["77"]}}
 
-    #     host_update = Mock(status_code=200)
-    #     host_update.json.return_value = {"result": {"hostids": ["9001"]}}
+        host_update = Mock(status_code=200)
+        host_update.json.return_value = {"result": {"hostids": ["9001"]}}
 
-    #     post_mock.side_effect = [host_get, clear_templates, interface_update, host_update]
-    #     interface_ids_mock.return_value = [77]
+        # post_mock.side_effect = [host_get, clear_templates, interface_update, host_update]
+        post_mock.side_effect = [host_get, interface_update, host_update]
+        interface_ids_mock.return_value = [77]
 
-    #     nb = _device("nb", "10.0.0.1", "nb.local")
-    #     zb = _device("zb", "10.0.0.2", "zb.local")
-    #     diff = DeviceDifference(nb, zb, (["name", "address", "port_type"], []))
-    #     out = SyncOutput()
+        nb = _device("nb", "10.0.0.1", "nb.local")
+        zb = _device("zb", "10.0.0.2", "zb.local")
+        diff = DeviceDifference(nb, zb, (["name", "address", "port_type"], []))
+        out = SyncOutput()
 
-    #     ss.apply_differences(diff, out)
+        ss.apply_differences(diff, out)
 
-    #     self.assertEqual(post_mock.call_count, 4)
-    #     clear_templates_payload = post_mock.call_args_list[1].kwargs["json"]
-    #     interface_update_payload = post_mock.call_args_list[2].kwargs["json"]
-    #     host_update_payload = post_mock.call_args_list[3].kwargs["json"]
+        self.assertEqual(post_mock.call_count, 3)
+        # clear_templates_payload = post_mock.call_args_list[1].kwargs["json"]
+        interface_update_payload = post_mock.call_args_list[1].kwargs["json"]
+        host_update_payload = post_mock.call_args_list[2].kwargs["json"]
 
-    #     self.assertEqual(clear_templates_payload["method"], "host.update")
-    #     self.assertIn("templates_clear", clear_templates_payload["params"])
-    #     self.assertEqual(host_update_payload["method"], "host.update")
-    #     self.assertNotIn("interfaces", host_update_payload["params"])
-    #     self.assertEqual(interface_update_payload["method"], "hostinterface.update")
-    #     self.assertEqual(interface_update_payload["params"][0]["interfaceid"], 77)
-    #     self.assertTrue(
-    #         any("updated successfully" in item for item in out.synchronization_output_differences)
-    #     )
+        # self.assertEqual(clear_templates_payload["method"], "host.update")
+        # self.assertIn("templates_clear", clear_templates_payload["params"])
+        self.assertEqual(host_update_payload["method"], "host.update")
+        self.assertNotIn("interfaces", host_update_payload["params"])
+        self.assertEqual(interface_update_payload["method"], "hostinterface.update")
+        self.assertEqual(interface_update_payload["params"][0]["interfaceid"], 77)
+        self.assertTrue(
+            any("updated successfully" in item for item in out.synchronization_output_differences)
+        )
 
     @patch("app.compare.service.synchronization_service.apply_differences")
     @patch("app.compare.service.synchronization_service.create_zabbix_device")
