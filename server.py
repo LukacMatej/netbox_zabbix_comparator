@@ -45,6 +45,7 @@ from app.device.service import device_service as ds
 from app.device.models.difference_model import DeviceDifference
 from app.device.models.device_model import Device
 from app.logger import logger_conf as log
+from app.compare.service import synchronization_service as synchronize
 
 
 app = FastAPI(title="NetBox Zabbix Compare")
@@ -222,6 +223,24 @@ def run_compare_sync(request: Request) -> Response:
         },
         status_code=200,
     )
+
+# @app.post("/update_device")
+# async def update_device(request: Request):
+#     data = await request.json()
+#     log.logger.info(data)
+#     sync_output : sync_output_model = sync_output_model()
+#     if data.get("event") == "create":
+#         result = synchronize.create_zabbix_device(data, sync_output)
+#     elif data.get("event") == "update":
+#         result = synchronize.update_zabbix_device(data, sync_output)
+#     elif data.get("event") == "delete":
+#         result = synchronize.delete_zabbix_device(data, sync_output)
+#     else:
+#         return {"valid": False, "message": "Invalid event type"}
+#     if isinstance(result, Exception):
+#         log.logger.error("Error synchronizing device: %s", result)
+#         return {"valid": False, "message": str(result)}
+#     return {"valid": True, "message": "Approved"}
 
 def test_connection() -> tuple[str, int]:
     """
