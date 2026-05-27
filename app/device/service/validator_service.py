@@ -419,20 +419,25 @@ def can_update_device(data: dict):  # pylint: disable=too-many-return-statements
         )
         return {"valid": True, "message": "No custom fields to validate"}
 
+    # Check if port type is being changed (this must be validated first)
+    new_port_type = custom_fields.get("zabbix_port_type")
+
     # Check if update contains templates or hostgroups
     has_templates = custom_fields.get("zabbix_templates") is not None
     has_hostgroups = custom_fields.get("zabbix_hostgroups") is not None
-    if has_templates or has_hostgroups:
+
+    # If port type is NOT being changed but templates/hostgroups are, allow it
+    if not new_port_type and (has_templates or has_hostgroups):
         log.logger.info(
-            "Device %s: Update contains templates=%s or hostgroups=%s (always allowed)",
+            "Device %s: Update contains templates=%s or hostgroups=%s, "
+            "but NO port type change (always allowed)",
             device_name,
             has_templates,
             has_hostgroups,
         )
         return {"valid": True, "message": "Update contains templates or hostgroups"}
 
-    # Check if port type is being changed
-    new_port_type = custom_fields.get("zabbix_port_type")
+    # If no port type change AND no templates/hostgroups, nothing to validate
     if not new_port_type:
         log.logger.info(
             "Device %s: No port type change in update",
@@ -441,9 +446,11 @@ def can_update_device(data: dict):  # pylint: disable=too-many-return-statements
         return {"valid": True, "message": "No port type change in update"}
 
     log.logger.debug(
-        "Device %s: Validating port type change to %s",
+        "Device %s: Validating port type change to %s (templates=%s, hostgroups=%s)",
         device_name,
         new_port_type,
+        has_templates,
+        has_hostgroups,
     )
 
     # Find the corresponding Zabbix host

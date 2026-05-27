@@ -512,6 +512,62 @@ class CanUpdateDeviceTests(unittest.TestCase):
         self.assertFalse(result["valid"])
         self.assertIn("incompatible", result["message"].lower())
 
+    def test_port_type_change_with_templates_and_hostgroups_still_validates(self):
+        """Port type change should be validated even when templates/hostgroups also change.
+
+        This tests the scenario where an update includes:
+        - zabbix_port_type change
+        - zabbix_templates update
+        - zabbix_hostgroups update
+
+        The validator should still validate the port_type change, not skip it
+        just because templates/hostgroups are also present.
+        """
+        data = {
+            "data": {
+                "name": "apc",
+                "custom_fields": {
+                    "zabbix_port_type": "SNMP",
+                    "zabbix_templates": ["ICMP Ping"],
+                    "zabbix_hostgroups": ["Netbox"],
+                },
+            }
+        }
+        # Simulate apc device with bound items that prevent port type change
+        zabbix_host_result = {
+            "hostid": "10001",
+            "interfaces": [{"type": "1", "interfaceid": "1"}],
+            "selectItems": [
+                {
+                    "itemid": "100",
+                    "name": "System object ID",
+                    "type": str(ItemTypes.ZABBIX_AGENT.value),
+                    "interfaceid": "1",  # Item is bound to interface
+                }
+            ],
+        }
+
+        with patch(
+            "app.device.service.validator_service.query_zabbix_for_host",
+            return_value=zabbix_host_result,
+        ):
+            with patch(
+                "app.device.service.validator_service.find_zabbix_host",
+                return_value=vs.DeviceModelValidator(
+                    "10001",
+                    ["10"],
+                    ["100"],
+                    zabbix_host_result["interfaces"],
+                    zabbix_host_result["selectItems"],
+                ),
+            ):
+                result = vs.can_update_device(data)
+
+        # Port type change should still be validated and rejected
+        # even though templates/hostgroups are also being updated
+        self.assertFalse(result["valid"])
+        self.assertIn("incompatible", result["message"].lower())
+
 
 if __name__ == "__main__":
     unittest.main()
