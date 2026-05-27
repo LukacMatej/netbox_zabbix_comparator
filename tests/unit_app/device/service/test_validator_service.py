@@ -163,7 +163,7 @@ class CheckItemsDependencyTests(unittest.TestCase):
 
     def test_returns_true_when_no_items(self):
         """Should return True (safe) when host has no items."""
-        host = {"interfaces": [{"type": "1"}], "selectItems": []}
+        host = {"interfaces": [{"type": "1"}], "items": []}
 
         result = vs.check_items_dependency(host, {})
 
@@ -173,7 +173,7 @@ class CheckItemsDependencyTests(unittest.TestCase):
         """Should return True (safe) when all items are interface-independent."""
         host = {
             "interfaces": [{"type": "1"}],
-            "selectItems": [
+            "items": [
                 {"type": str(ItemTypes.ZABBIX_TRAPPER.value), "interfaceid": "1"},
                 {"type": str(ItemTypes.CALCULATED.value)},
             ],
@@ -187,7 +187,7 @@ class CheckItemsDependencyTests(unittest.TestCase):
         """Should return False (unsafe) when SNMP item exists but no SNMP interface."""
         host = {
             "interfaces": [{"type": "1"}],  # Only Agent interface
-            "selectItems": [
+            "items": [
                 {"type": str(ItemTypes.SNMP_AGENT.value), "interfaceid": "1"},
             ],
         }
@@ -200,7 +200,7 @@ class CheckItemsDependencyTests(unittest.TestCase):
         """Should return False (unsafe) when IPMI item exists but no IPMI interface."""
         host = {
             "interfaces": [{"type": "2"}],  # Only SNMP interface
-            "selectItems": [
+            "items": [
                 {"type": str(ItemTypes.IPMI_AGENT.value), "interfaceid": "1"},
             ],
         }
@@ -213,7 +213,7 @@ class CheckItemsDependencyTests(unittest.TestCase):
         """Should return True (safe) when required interface type is available."""
         host = {
             "interfaces": [{"type": "1"}, {"type": "4"}],  # Agent and JMX
-            "selectItems": [
+            "items": [
                 {"type": str(ItemTypes.JMX_AGENT.value), "interfaceid": "1"},
             ],
         }
@@ -226,7 +226,7 @@ class CheckItemsDependencyTests(unittest.TestCase):
         """Should return True (safe) when item doesn't have interfaceid bound."""
         host = {
             "interfaces": [{"type": "2"}],  # Only SNMP interface
-            "selectItems": [
+            "items": [
                 {"type": str(ItemTypes.ZABBIX_AGENT.value)},  # No interfaceid
             ],
         }
@@ -239,7 +239,7 @@ class CheckItemsDependencyTests(unittest.TestCase):
         """Should handle mixed items with and without dependencies correctly."""
         host = {
             "interfaces": [{"type": "1"}],  # Only Agent interface
-            "selectItems": [
+            "items": [
                 {"type": str(ItemTypes.ZABBIX_AGENT.value), "interfaceid": "1"},
                 {"type": str(ItemTypes.CALCULATED.value)},  # No interface needed
                 {"type": str(ItemTypes.DEPENDENT_ITEM.value)},  # No interface needed
@@ -277,7 +277,7 @@ class FindZabbixHostTests(unittest.TestCase):
         zabbix_result = {
             "hostid": "10001",
             "interfaces": [{"type": "1"}],
-            "selectItems": [{"type": str(ItemTypes.SNMP_AGENT.value), "interfaceid": "1"}],
+            "items": [{"type": str(ItemTypes.SNMP_AGENT.value), "interfaceid": "1"}],
         }
 
         with patch("app.device.service.validator_service.query_zabbix_for_host", return_value=zabbix_result):
@@ -293,7 +293,7 @@ class FindZabbixHostTests(unittest.TestCase):
             "groups": [{"groupid": "10"}, {"groupid": "20"}],
             "parentTemplates": [{"templateid": "100"}],
             "interfaces": [{"type": "1", "interfaceid": "1"}],
-            "selectItems": [{"type": "0", "interfaceid": "1"}],
+            "items": [{"type": "0", "interfaceid": "1"}],
         }
 
         with patch("app.device.service.validator_service.query_zabbix_for_host", return_value=zabbix_result):
@@ -483,7 +483,7 @@ class CanUpdateDeviceTests(unittest.TestCase):
         zabbix_host_result = {
             "hostid": "10001",
             "interfaces": [{"type": "1", "interfaceid": "1"}],
-            "selectItems": [
+            "items": [
                 {
                     "itemid": "100",
                     "name": "System object ID",
@@ -504,7 +504,7 @@ class CanUpdateDeviceTests(unittest.TestCase):
                     ["10"],
                     ["100"],
                     zabbix_host_result["interfaces"],
-                    zabbix_host_result["selectItems"],
+                    zabbix_host_result["items"],
                 ),
             ):
                 result = vs.can_update_device(data)
@@ -537,7 +537,7 @@ class CanUpdateDeviceTests(unittest.TestCase):
         zabbix_host_result = {
             "hostid": "10001",
             "interfaces": [{"type": "1", "interfaceid": "1"}],
-            "selectItems": [
+            "items": [
                 {
                     "itemid": "100",
                     "name": "System object ID",
@@ -558,7 +558,7 @@ class CanUpdateDeviceTests(unittest.TestCase):
                     ["10"],
                     ["100"],
                     zabbix_host_result["interfaces"],
-                    zabbix_host_result["selectItems"],
+                    zabbix_host_result["items"],
                 ),
             ):
                 result = vs.can_update_device(data)
@@ -639,7 +639,7 @@ class CanUpdateDeviceTests(unittest.TestCase):
             with patch("app.device.service.validator_service.query_zabbix_for_host") as mock_query:
                 mock_query.return_value = {
                     "interfaces": [{"type": "3"}],
-                    "selectItems": [
+                    "items": [
                         {"type": str(ItemTypes.ZABBIX_TRAPPER.value)},
                         {"type": str(ItemTypes.SIMPLE_CHECK.value)},
                     ],
@@ -678,7 +678,7 @@ class CanUpdateDeviceTests(unittest.TestCase):
             with patch("app.device.service.validator_service.query_zabbix_for_host") as mock_query:
                 mock_query.return_value = {
                     "interfaces": [{"type": "1"}],
-                    "selectItems": [
+                    "items": [
                         {"type": str(ItemTypes.SNMP_AGENT.value), "interfaceid": "2", "name": "SNMP Item", "itemid": "123"},
                     ],
                 }

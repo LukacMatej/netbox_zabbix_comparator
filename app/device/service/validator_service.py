@@ -132,7 +132,7 @@ def query_zabbix_for_host(device_name: str) -> dict | None:
                 device_name,
                 host_data.get("hostid"),
                 len(host_data.get("interfaces", [])),
-                len(host_data.get("selectItems", [])),
+                len(host_data.get("items", [])),
             )
             return host_data
 
@@ -166,7 +166,7 @@ def check_items_dependency(zabbix_host_result: dict, data: dict) -> bool:  # pyl
     current_interface_types = {interface.get("type") for interface in interfaces}
 
     # Get items associated with the host
-    items = zabbix_host_result.get("selectItems", [])
+    items = zabbix_host_result.get("items", [])
     if not items:
         return True  # No items to check
 
@@ -309,7 +309,7 @@ def check_new_port_type_compatibility(
 
     # Critical check: Zabbix API constraint
     # Cannot change interface type if ANY items are bound to ANY interface
-    items = zabbix_host_result.get("selectItems", [])
+    items = zabbix_host_result.get("items", [])
     log.logger.debug(
         "Checking %d items for interface bindings with new port types: %s",
         len(items),
@@ -392,7 +392,7 @@ def find_zabbix_host(data: dict) -> DeviceModelValidator | None:
         "Found Zabbix host %s with %d interfaces and %d items",
         device_name,
         len(zabbix_host_result.get("interfaces", [])),
-        len(zabbix_host_result.get("selectItems", [])),
+        len(zabbix_host_result.get("items", [])),
     )
 
     if not check_items_dependency(zabbix_host_result, data):
@@ -419,7 +419,7 @@ def find_zabbix_host(data: dict) -> DeviceModelValidator | None:
 
     # Get interfaces and items
     interfaces = zabbix_host_result.get("interfaces", [])
-    items = zabbix_host_result.get("selectItems", [])
+    items = zabbix_host_result.get("items", [])
 
     return DeviceModelValidator(hostid, groupids, templateids, interfaces, items)
 
