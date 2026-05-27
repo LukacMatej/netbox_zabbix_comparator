@@ -294,39 +294,34 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
 
     interface_update_data_zabbix = zb_device.update_interface_data_zabbix(interface_ids)
     log.logger.info(interface_update_data_zabbix)
-    update_fields_interface: list[str] = interface_model.get_interface_fields()
-    if any(field in different_fields for field in update_fields_interface):
-        interface_response: requests.Response = requests.post(
-            zabbix_ip + "/api_jsonrpc.php",
-            headers=headers,
-            timeout=REQUEST_TIMEOUT,
-            json=interface_update_data_zabbix,
+    interface_response: requests.Response = requests.post(
+        zabbix_ip + "/api_jsonrpc.php",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
+        json=interface_update_data_zabbix,
+    )
+    interface_response_json = interface_response.json()
+    if "error" not in interface_response_json:
+        sync_output.add_difference_output(
+            f"Interface for device {zb_device.name} updated successfully in Zabbix."
         )
-        interface_response_json = interface_response.json()
-        if "error" not in interface_response_json:
-            sync_output.add_difference_output(
-                f"Interface for device {zb_device.name} updated successfully in Zabbix."
-            )
-            log.logger.info(
-                "Interface for device %s updated successfully in Zabbix with response status %s.",
-                zb_device.name,
-                interface_response.status_code,
-            )
-        else:
-            sync_output.add_difference_output(
-                f"Failed to update interface for device {zb_device.name} in Zabbix: {interface_response.text}"
-            )
-            log.logger.error(
-                "Failed to update interface for device %s in Zabbix: %s with response status %s.",
-                zb_device.name,
-                interface_response.text,
-                interface_response.status_code,
-            )
+        log.logger.info(
+            "Interface for device %s updated successfully in Zabbix with response status %s.",
+            zb_device.name,
+            interface_response.status_code,
+        )
+    else:
+        sync_output.add_difference_output(
+            f"Failed to update interface for device {zb_device.name} in Zabbix: {interface_response.text}"
+        )
+        log.logger.error(
+            "Failed to update interface for device %s in Zabbix: %s with response status %s.",
+            zb_device.name,
+            interface_response.text,
+            interface_response.status_code,
+        )
 
     log.logger.info(update_data_zabbix)
-    update_fields_host: list[str] = device_model.get_device_fields()
-    if not any(field in update_fields_host for field in differences.differences[0]):
-        return
     response: requests.Response = requests.post(
         zabbix_ip + "/api_jsonrpc.php",
         headers=headers,
