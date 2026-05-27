@@ -62,6 +62,7 @@ V Netboxu lze nastavit dědičný config context pro device role, který se auto
 * Šablony, které se budou aplikovat na zařízení v Zabbixu
 * V Zabbixu musí existovat předem
 * Podporuje více šablon najednou
+* Je připraven Netbox script, který synchronizuje Custom Field Choices s názvem `zabbix_templates` s templates v Zabbixu, obdobný návod viz Zabbix hostgroups
 
 ### Port Type
 
@@ -81,6 +82,27 @@ Je připraven Netbox script, který synchronizuje Custom Field Choices s názvem
 - Custom Field Choices napojit na Custom Field s názvem `zabbix_hostgroups`
 - Nastavit jako multi-select na DCIM > DEVICE
 - Defaultní host group v Zabbixu je nastavena na "Netbox" pro kontrolu všech zařízení vytvořených synchronizací
+
+### Custom Validation
+
+Zabbix má mnoho závislostí ve vazbě Port Type - Templates, z toho důvodu byl vytvořen custom validation config, který komunikuje s zabbixem a řeší závislosti.
+
+* Custom validátor volá endpoint jen v případě editace custom fields pro zabbix, viz výše
+
+##### Postup:
+
+* Vložit `device_zabbix_validator.py` do root složky netboxu
+* V `configuraton/extra.py` vložit
+  ```python
+
+  CUSTOM_VALIDATORS = {
+      'dcim.device': (
+          'device_zabbix_validator.ZabbixCustomFieldValidator',
+      )
+  }
+  ```
+
+Custom validátor volá API endpoint porovnávače /validate_update (port 7000, potřeba upravit pokud se používá jiný)
 
 ## REST API
 
