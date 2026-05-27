@@ -230,10 +230,9 @@ def run_compare_sync(request: Request) -> Response:
 async def validate_update(request: Request):
     data = await request.json()
     log.logger.info(data)
-    data_json: dict = json.loads(data)
     sync_output : sync_output_model = sync_output_model()
     if data.get("event") == "update":
-        result = validator.can_update_device(data_json)
+        result = validator.can_update_device(data)
     else:
         return {"valid": False, "message": "Invalid event type"}
     if isinstance(result, Exception):

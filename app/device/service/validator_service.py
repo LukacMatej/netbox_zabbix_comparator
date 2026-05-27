@@ -120,7 +120,7 @@ def query_zabbix_for_host(device_name: str) -> dict | None:
         )
     return None
 
-def check_items_dependency(zabbix_host_result: dict, data: dict = None) -> bool:  # pylint: disable=unused-argument
+def check_items_dependency(zabbix_host_result: dict, data: dict) -> bool:  # pylint: disable=unused-argument
     """Check if items are dependent on the current interface types.
 
     Args:
@@ -183,6 +183,78 @@ def check_items_dependency(zabbix_host_result: dict, data: dict = None) -> bool:
 
     return True  # Safe to update
 
+def check_new_port_type_compatibility(
+    zabbix_host_result: dict,
+    new_port_type: str,
+) -> bool:
+    """Check if new port type is compatible with existing items.
+
+    Validates that changing to a new port type won't break items that
+    require specific interface types.
+
+    Args:
+        zabbix_host_result (dict): The Zabbix host with current config.
+        new_port_type (str): The new port type to validate.
+
+    Returns:
+        bool: True if port type change is safe, False if it breaks items.
+    """
+    if not zabbix_host_result:
+        return True
+
+    # Port type to interface type mapping
+    port_type_mapping: dict[str, str] = {
+        "Agent": "1",
+        "SNMP": "2",
+        "IPMI": "3",
+        "JMX": "4",
+        "1": "1",
+        "2": "2",
+        "3": "3",
+        "4": "4",
+    }
+
+    mapped_port_type: str | None = port_type_mapping.get(str(new_port_type))
+    if not mapped_port_type:
+        return False  # Invalid port type
+
+    # Item type to required interface mapping
+    item_type_to_interface_mapping = {
+        ItemTypes.ZABBIX_AGENT.value: "1",
+        ItemTypes.ZABBIX_AGENT_ACTIVE.value: "1",
+        ItemTypes.SNMP_AGENT.value: "2",
+        ItemTypes.SNMP_TRAP.value: "2",
+        ItemTypes.IPMI_AGENT.value: "3",
+        ItemTypes.JMX_AGENT.value: "4",
+        ItemTypes.SSH_AGENT.value: "1",
+        ItemTypes.TELNET_AGENT.value: "1",
+        ItemTypes.HTTP_AGENT.value: "1",
+        ItemTypes.ZABBIX_TRAPPER.value: None,
+        ItemTypes.SIMPLE_CHECK.value: None,
+        ItemTypes.ZABBIX_INTERNAL.value: None,
+        ItemTypes.WEB_ITEM.value: None,
+        ItemTypes.EXTERNAL_CHECK.value: None,
+        ItemTypes.DATABASE_MONITOR.value: None,
+        ItemTypes.CALCULATED.value: None,
+        ItemTypes.DEPENDENT_ITEM.value: None,
+        ItemTypes.SCRIPT.value: None,
+        ItemTypes.BROWSER.value: None,
+    }
+
+    # Check each item to ensure new port type is compatible
+    items = zabbix_host_result.get("selectItems", [])
+    for item in items:
+        item_type = int(item.get("type", 0))
+        required_interface_type = item_type_to_interface_mapping.get(item_type)
+
+        # If item requires a specific interface and it's bound
+        if required_interface_type is not None and item.get("interfaceid"):
+            # If item requires different interface than new port type
+            if required_interface_type != mapped_port_type:
+                return False  # Changing port type would break this item
+
+    return True  # Safe to change port type
+
 def find_zabbix_host(data: dict) -> DeviceModelValidator | None:
     """Find the corresponding Zabbix host based on the provided data.
 
@@ -226,7 +298,7 @@ def find_zabbix_host(data: dict) -> DeviceModelValidator | None:
 
     return DeviceModelValidator(hostid, groupids, templateids, interfaces, items)
 
-def can_update_device(data: dict):
+def can_update_device(data: dict):  # pylint: disable=too-many-return-statements
     """Check if device update is allowed.
 
     Validates port type changes against existing Zabbix configuration.
@@ -244,25 +316,27 @@ def can_update_device(data: dict):
     if not custom_fields:
         return {"valid": True, "message": "No custom fields to validate"}
 
-    # 3. Check if update contains templates or hostgroups
+    # Check if update contains templates or hostgroups
     has_templates = custom_fields.get("zabbix_templates") is not None
     has_hostgroups = custom_fields.get("zabbix_hostgroups") is not None
-
     if has_templates or has_hostgroups:
         return {"valid": True, "message": "Update contains templates or hostgroups"}
 
-    # 4. Check if port type is being changed
+    # Check if port type is being changed
     new_port_type = custom_fields.get("zabbix_port_type")
     if not new_port_type:
         return {"valid": True, "message": "No port type change in update"}
 
-    # 5. Find the corresponding Zabbix host
+    # Find the corresponding Zabbix host
     zabbix_host: DeviceModelValidator | None = find_zabbix_host(data)
     if not zabbix_host:
         return {"valid": True, "message": "Zabbix host not found"}
 
-    # 6. Check if port type is different from current interfaces
-    current_interface_types = zabbix_host.get_interface_types()
+    # Get raw Zabbix host result for detailed item checking
+    device_name = data.get("data", {}).get("name")
+    zabbix_host_result: dict | None = (
+        query_zabbix_for_host(device_name) if device_name else None
+    )
 
     # Map port type strings to Zabbix interface type numbers
     # Agent = 1, SNMP = 2, IPMI = 3, JMX = 4
@@ -274,15 +348,23 @@ def can_update_device(data: dict):
         "1": "1",
         "2": "2",
         "3": "3",
-        "4": "4"
+        "4": "4",
     }
-
     mapped_port_type: str | None = port_type_mapping.get(str(new_port_type))
 
-    # If port type is not changing, allow update
+    # Check if port type is different from current interfaces
+    current_interface_types = zabbix_host.get_interface_types()
     if mapped_port_type in current_interface_types:
         return {"valid": True, "message": "Port type not changing"}
 
-    # 7. Port type is changing, but no dependent items exist
-    # (already validated in check_items_dependency called from find_zabbix_host)
+    # Port type is changing - check compatibility with existing items
+    if (
+        zabbix_host_result
+        and not check_new_port_type_compatibility(zabbix_host_result, new_port_type)
+    ):
+        return {
+            "valid": False,
+            "message": "New port type incompatible with existing items",
+        }
+
     return {"valid": True, "message": "Port type change is safe"}
