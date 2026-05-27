@@ -146,107 +146,50 @@ class QueryZabbixForHostTests(unittest.TestCase):
         self.assertIsNone(result)
 
 
-class CheckItemsDependencyTests(unittest.TestCase):
-    """Tests for check_items_dependency function."""
+class CheckNewPortTypeCompatibilityTests(unittest.TestCase):
+    """Tests for check_new_port_type_compatibility function."""
 
     def test_returns_true_when_no_host_result(self):
-        """Should return True (safe) when no host result provided."""
-        result = vs.check_items_dependency(None, {})
+        """Should return True when no host result is provided."""
+        result = vs.check_new_port_type_compatibility(None, ["Agent"])
 
         self.assertTrue(result)
 
-    def test_returns_true_when_not_dict(self):
-        """Should return True (safe) when host result is not a dict."""
-        result = vs.check_items_dependency("string", {})
-
-        self.assertTrue(result)
-
-    def test_returns_true_when_no_items(self):
-        """Should return True (safe) when host has no items."""
-        host = {"interfaces": [{"type": "1"}], "items": []}
-
-        result = vs.check_items_dependency(host, {})
-
-        self.assertTrue(result)
-
-    def test_returns_true_when_items_dont_require_interface(self):
-        """Should return True (safe) when all items are interface-independent."""
+    def test_returns_true_when_items_do_not_require_interfaces(self):
+        """Should return True when all existing items are interface-independent."""
         host = {
-            "interfaces": [{"type": "1"}],
             "items": [
-                {"type": str(ItemTypes.ZABBIX_TRAPPER.value), "interfaceid": "1"},
+                {"type": str(ItemTypes.ZABBIX_TRAPPER.value)},
                 {"type": str(ItemTypes.CALCULATED.value)},
             ],
         }
 
-        result = vs.check_items_dependency(host, {})
+        result = vs.check_new_port_type_compatibility(host, ["SNMP"])
 
         self.assertTrue(result)
 
-    def test_returns_false_when_snmp_item_bound_but_no_snmp_interface(self):
-        """Should return False (unsafe) when SNMP item exists but no SNMP interface."""
+    def test_returns_false_when_required_interface_missing_from_new_port_types(self):
+        """Should return False when an existing item needs an interface not in the new types."""
         host = {
-            "interfaces": [{"type": "1"}],  # Only Agent interface
             "items": [
-                {"type": str(ItemTypes.SNMP_AGENT.value), "interfaceid": "1"},
+                {"type": str(ItemTypes.SNMP_AGENT.value), "name": "SNMP Item"},
             ],
         }
 
-        result = vs.check_items_dependency(host, {})
+        result = vs.check_new_port_type_compatibility(host, ["Agent"])
 
         self.assertFalse(result)
 
-    def test_returns_false_when_ipmi_item_bound_but_no_ipmi_interface(self):
-        """Should return False (unsafe) when IPMI item exists but no IPMI interface."""
+    def test_returns_true_when_all_required_interfaces_are_present(self):
+        """Should return True when the new port types include every required interface."""
         host = {
-            "interfaces": [{"type": "2"}],  # Only SNMP interface
             "items": [
-                {"type": str(ItemTypes.IPMI_AGENT.value), "interfaceid": "1"},
+                {"type": str(ItemTypes.JMX_AGENT.value), "name": "JMX Item"},
+                {"type": str(ItemTypes.ZABBIX_AGENT.value), "name": "Agent Item"},
             ],
         }
 
-        result = vs.check_items_dependency(host, {})
-
-        self.assertFalse(result)
-
-    def test_returns_true_when_jmx_item_and_jmx_interface_present(self):
-        """Should return True (safe) when required interface type is available."""
-        host = {
-            "interfaces": [{"type": "1"}, {"type": "4"}],  # Agent and JMX
-            "items": [
-                {"type": str(ItemTypes.JMX_AGENT.value), "interfaceid": "1"},
-            ],
-        }
-
-        result = vs.check_items_dependency(host, {})
-
-        self.assertTrue(result)
-
-    def test_returns_true_when_agent_item_no_interfaceid(self):
-        """Should return True (safe) when item doesn't have interfaceid bound."""
-        host = {
-            "interfaces": [{"type": "2"}],  # Only SNMP interface
-            "items": [
-                {"type": str(ItemTypes.ZABBIX_AGENT.value)},  # No interfaceid
-            ],
-        }
-
-        result = vs.check_items_dependency(host, {})
-
-        self.assertTrue(result)
-
-    def test_mixed_items_with_dependencies(self):
-        """Should handle mixed items with and without dependencies correctly."""
-        host = {
-            "interfaces": [{"type": "1"}],  # Only Agent interface
-            "items": [
-                {"type": str(ItemTypes.ZABBIX_AGENT.value), "interfaceid": "1"},
-                {"type": str(ItemTypes.CALCULATED.value)},  # No interface needed
-                {"type": str(ItemTypes.DEPENDENT_ITEM.value)},  # No interface needed
-            ],
-        }
-
-        result = vs.check_items_dependency(host, {})
+        result = vs.check_new_port_type_compatibility(host, ["Agent", "JMX"])
 
         self.assertTrue(result)
 
@@ -260,7 +203,7 @@ class FindZabbixHostTests(unittest.TestCase):
 
         result = vs.find_zabbix_host(data)
 
-        self.assertIsNone(result)
+        self.assertEqual(result, (None, None))
 
     def test_returns_none_when_query_fails(self):
         """Should return None when query_zabbix_for_host returns None."""
@@ -269,10 +212,10 @@ class FindZabbixHostTests(unittest.TestCase):
         with patch("app.device.service.validator_service.query_zabbix_for_host", return_value=None):
             result = vs.find_zabbix_host(data)
 
-        self.assertIsNone(result)
+        self.assertEqual(result, (None, None))
 
-    def test_returns_none_when_items_depend_on_old_port(self):
-        """Should return None when check_items_dependency returns False."""
+    def test_returns_validator_when_host_found(self):
+        """Should return the validator even when items exist on the host."""
         data = {"data": {"name": "test-host"}}
         zabbix_result = {
             "hostid": "10001",
@@ -283,7 +226,9 @@ class FindZabbixHostTests(unittest.TestCase):
         with patch("app.device.service.validator_service.query_zabbix_for_host", return_value=zabbix_result):
             result = vs.find_zabbix_host(data)
 
-        self.assertIsNone(result)
+        self.assertIsInstance(result, tuple)
+        self.assertIsInstance(result[0], vs.DeviceModelValidator)
+        self.assertEqual(result[1], zabbix_result)
 
     def test_returns_validator_on_success(self):
         """Should return DeviceModelValidator instance on success."""
@@ -297,14 +242,20 @@ class FindZabbixHostTests(unittest.TestCase):
         }
 
         with patch("app.device.service.validator_service.query_zabbix_for_host", return_value=zabbix_result):
-            result = vs.find_zabbix_host(data)
+            result: tuple[vs.DeviceModelValidator | None, dict | None] = vs.find_zabbix_host(data)
 
-        self.assertIsInstance(result, vs.DeviceModelValidator)
-        self.assertEqual(result.hostid, "10001")
-        self.assertEqual(result.groupids, ["10", "20"])
-        self.assertEqual(result.templateids, ["100"])
-        self.assertEqual(len(result.interfaces), 1)
-        self.assertEqual(len(result.items), 1)
+        device_model: vs.DeviceModelValidator | None = result[0]
+        zabbix_data: dict | None = result[1]
+        self.assertIsNotNone(result)
+        self.assertIsInstance(result, tuple)
+        self.assertIsInstance(device_model, vs.DeviceModelValidator)
+        self.assertIsInstance(zabbix_data, dict)
+        self.assertEqual(device_model.hostid, "10001")
+        self.assertEqual(device_model.groupids, ["10", "20"])
+        self.assertEqual(device_model.templateids, ["100"])
+        self.assertEqual(device_model.interfaces, [{"type": "1", "interfaceid": "1"}])
+        self.assertEqual(device_model.items, [{"type": "0", "interfaceid": "1"}])
+        self.assertEqual(zabbix_data, zabbix_result)
 
 
 class CanUpdateDeviceTests(unittest.TestCase):
@@ -372,7 +323,7 @@ class CanUpdateDeviceTests(unittest.TestCase):
             }
         }
 
-        with patch("app.device.service.validator_service.find_zabbix_host", return_value=None):
+        with patch("app.device.service.validator_service.find_zabbix_host", return_value=(None, None)):
             result = vs.can_update_device(data)
 
         self.assertTrue(result["valid"])
@@ -394,7 +345,9 @@ class CanUpdateDeviceTests(unittest.TestCase):
             [],
         )
 
-        with patch("app.device.service.validator_service.find_zabbix_host", return_value=validator):
+        with patch(
+            "app.device.service.validator_service.find_zabbix_host", return_value=(validator, {"items": validator.items})
+        ):
             result = vs.can_update_device(data)
 
         self.assertTrue(result["valid"])
@@ -419,7 +372,9 @@ class CanUpdateDeviceTests(unittest.TestCase):
             ],
         )
 
-        with patch("app.device.service.validator_service.find_zabbix_host", return_value=validator):
+        with patch(
+            "app.device.service.validator_service.find_zabbix_host", return_value=(validator, {"items": validator.items})
+        ):
             result = vs.can_update_device(data)
 
         self.assertTrue(result["valid"])
@@ -441,7 +396,9 @@ class CanUpdateDeviceTests(unittest.TestCase):
             [],
         )
 
-        with patch("app.device.service.validator_service.find_zabbix_host", return_value=validator):
+        with patch(
+            "app.device.service.validator_service.find_zabbix_host", return_value=(validator, {"items": validator.items})
+        ):
             result = vs.can_update_device(data)
 
         self.assertTrue(result["valid"])
@@ -462,109 +419,40 @@ class CanUpdateDeviceTests(unittest.TestCase):
             [],
         )
 
-        with patch("app.device.service.validator_service.find_zabbix_host", return_value=validator):
+        with patch(
+            "app.device.service.validator_service.find_zabbix_host", return_value=(validator, {"items": validator.items})
+        ):
             result = vs.can_update_device(data)
 
         self.assertTrue(result["valid"])
 
-    def test_returns_invalid_when_items_bound_to_interface(self):
-        """Should return invalid when trying to change port type with bound items.
-
-        Zabbix API constraint: Cannot change interface type if ANY items are
-        linked to that interface (items with interfaceid).
-        """
+    def test_returns_invalid_when_new_port_types_do_not_cover_existing_item_interfaces(self):
+        """Should return invalid when existing items need interfaces not in the new port types."""
         data = {
             "data": {
                 "name": "apc",
-                "custom_fields": {"zabbix_port_type": "SNMP"},
+                "custom_fields": {"zabbix_port_type": "Agent"},
             }
         }
-        # Simulate the apc device with a bound item
-        zabbix_host_result = {
-            "hostid": "10001",
-            "interfaces": [{"type": "1", "interfaceid": "1"}],
-            "items": [
+        validator = vs.DeviceModelValidator(
+            "10001",
+            ["10"],
+            ["100"],
+            [{"type": "1"}, {"type": "2"}],
+            [
                 {
                     "itemid": "100",
-                    "name": "System object ID",
-                    "type": str(ItemTypes.ZABBIX_AGENT.value),
-                    "interfaceid": "1",  # Item is bound to interface
+                    "name": "SNMP Item",
+                    "type": str(ItemTypes.SNMP_AGENT.value),
                 }
             ],
-        }
+        )
 
         with patch(
-            "app.device.service.validator_service.query_zabbix_for_host",
-            return_value=zabbix_host_result,
+            "app.device.service.validator_service.find_zabbix_host", return_value=(validator, {"items": validator.items})
         ):
-            with patch(
-                "app.device.service.validator_service.find_zabbix_host",
-                return_value=vs.DeviceModelValidator(
-                    "10001",
-                    ["10"],
-                    ["100"],
-                    zabbix_host_result["interfaces"],
-                    zabbix_host_result["items"],
-                ),
-            ):
-                result = vs.can_update_device(data)
+            result = vs.can_update_device(data)
 
-        self.assertFalse(result["valid"])
-        self.assertIn("incompatible", result["message"].lower())
-
-    def test_port_type_change_with_templates_and_hostgroups_still_validates(self):
-        """Port type change should be validated even when templates/hostgroups also change.
-
-        This tests the scenario where an update includes:
-        - zabbix_port_type change
-        - zabbix_templates update
-        - zabbix_hostgroups update
-
-        The validator should still validate the port_type change, not skip it
-        just because templates/hostgroups are also present.
-        """
-        data = {
-            "data": {
-                "name": "apc",
-                "custom_fields": {
-                    "zabbix_port_type": "SNMP",
-                    "zabbix_templates": ["ICMP Ping"],
-                    "zabbix_hostgroups": ["Netbox"],
-                },
-            }
-        }
-        # Simulate apc device with bound items that prevent port type change
-        zabbix_host_result = {
-            "hostid": "10001",
-            "interfaces": [{"type": "1", "interfaceid": "1"}],
-            "items": [
-                {
-                    "itemid": "100",
-                    "name": "System object ID",
-                    "type": str(ItemTypes.ZABBIX_AGENT.value),
-                    "interfaceid": "1",  # Item is bound to interface
-                }
-            ],
-        }
-
-        with patch(
-            "app.device.service.validator_service.query_zabbix_for_host",
-            return_value=zabbix_host_result,
-        ):
-            with patch(
-                "app.device.service.validator_service.find_zabbix_host",
-                return_value=vs.DeviceModelValidator(
-                    "10001",
-                    ["10"],
-                    ["100"],
-                    zabbix_host_result["interfaces"],
-                    zabbix_host_result["items"],
-                ),
-            ):
-                result = vs.can_update_device(data)
-
-        # Port type change should still be validated and rejected
-        # even though templates/hostgroups are also being updated
         self.assertFalse(result["valid"])
         self.assertIn("incompatible", result["message"].lower())
 
@@ -590,7 +478,9 @@ class CanUpdateDeviceTests(unittest.TestCase):
             ],
         )
 
-        with patch("app.device.service.validator_service.find_zabbix_host", return_value=validator):
+        with patch(
+            "app.device.service.validator_service.find_zabbix_host", return_value=(validator, {"items": validator.items})
+        ):
             result = vs.can_update_device(data)
 
         # Should extract '2' from ['2'] and validate it as SNMP port type change
@@ -616,7 +506,7 @@ class CanUpdateDeviceTests(unittest.TestCase):
         """Should validate all port types when list has multiple items.
 
         When Netbox sends multiple port types like ['1', '2'], we should validate
-        that both are compatible with existing items.
+        that atleast one of the existing interfaces matches each required type.
         """
         data = {
             "data": {
@@ -628,23 +518,17 @@ class CanUpdateDeviceTests(unittest.TestCase):
             "10001",
             ["10"],
             ["100"],
-            [{"type": "3"}],  # Only IPMI interface exists (neither 1 nor 2)
-            [  # Items that are interface-independent
+            [{"type": "3"}],  # Only IPMI interface exists
+            [
                 {"type": str(ItemTypes.ZABBIX_TRAPPER.value)},
                 {"type": str(ItemTypes.SIMPLE_CHECK.value)},
             ],
         )
 
-        with patch("app.device.service.validator_service.find_zabbix_host", return_value=validator):
-            with patch("app.device.service.validator_service.query_zabbix_for_host") as mock_query:
-                mock_query.return_value = {
-                    "interfaces": [{"type": "3"}],
-                    "items": [
-                        {"type": str(ItemTypes.ZABBIX_TRAPPER.value)},
-                        {"type": str(ItemTypes.SIMPLE_CHECK.value)},
-                    ],
-                }
-                result = vs.can_update_device(data)
+        with patch(
+            "app.device.service.validator_service.find_zabbix_host", return_value=(validator, {"items": validator.items})
+        ):
+            result = vs.can_update_device(data)
 
         # Should validate both port types and report success for all
         self.assertTrue(result["valid"])
@@ -668,23 +552,18 @@ class CanUpdateDeviceTests(unittest.TestCase):
             "10001",
             ["10"],
             ["100"],
-            [{"type": "1"}],  # Only Agent interface currently
-            [  # Has SNMP items that require interface 2
-                {"type": str(ItemTypes.SNMP_AGENT.value), "interfaceid": "2"},
+            [{"type": "1"}, {"type": "2"}],
+            [
+                {"type": str(ItemTypes.ZABBIX_AGENT.value), "name": "Agent Item"},
             ],
         )
 
-        with patch("app.device.service.validator_service.find_zabbix_host", return_value=validator):
-            with patch("app.device.service.validator_service.query_zabbix_for_host") as mock_query:
-                mock_query.return_value = {
-                    "interfaces": [{"type": "1"}],
-                    "items": [
-                        {"type": str(ItemTypes.SNMP_AGENT.value), "interfaceid": "2", "name": "SNMP Item", "itemid": "123"},
-                    ],
-                }
-                result = vs.can_update_device(data)
+        with patch(
+            "app.device.service.validator_service.find_zabbix_host", return_value=(validator, {"items": validator.items})
+        ):
+            result = vs.can_update_device(data)
 
-        # Should reject because interface 2 has bound items
+        # Should reject because the new types do not include interface 1
         self.assertFalse(result["valid"])
         self.assertIn("incompatible", result["message"].lower())
 

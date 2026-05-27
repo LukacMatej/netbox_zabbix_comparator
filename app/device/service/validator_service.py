@@ -167,104 +167,23 @@ def query_zabbix_for_host(device_name: str) -> dict | None:
         )
         return None
 
-def check_items_dependency(zabbix_host_result: dict, data: dict) -> bool:  # pylint: disable=unused-argument
-    """Check if items are dependent on the current interface types.
-
-    Args:
-        zabbix_host_result (dict): The Zabbix host object containing host details.
-        data (dict): The input data (unused, kept for backward compatibility).
-
-    Returns:
-        bool: True if items are not dependent on the old port type (safe to update).
-              False if items depend on the old port type (unsafe).
-    """
-    if not zabbix_host_result or not isinstance(zabbix_host_result, dict):
-        return True  # Safe to update if no host data available
-
-    # Get current interface types on the host
-    interfaces = zabbix_host_result.get("interfaces", [])
-    current_interface_types = {interface.get("type") for interface in interfaces}
-
-    # Get items associated with the host
-    items = zabbix_host_result.get("items", [])
-    if not items:
-        return True  # No items to check
-
-    # Map item types to required interface types
-    # Based on Zabbix documentation, certain item types require specific interface types
-    item_type_to_interface_mapping = {
-        ItemTypes.ZABBIX_AGENT.value: "1",  # Agent
-        ItemTypes.ZABBIX_AGENT_ACTIVE.value: "1",  # Agent (active)
-        ItemTypes.SNMP_AGENT.value: "2",  # SNMP
-        ItemTypes.SNMP_TRAP.value: "2",  # SNMP Trap
-        ItemTypes.IPMI_AGENT.value: "3",  # IPMI
-        ItemTypes.JMX_AGENT.value: "4",  # JMX
-        ItemTypes.SSH_AGENT.value: "1",  # SSH uses Agent interface
-        ItemTypes.TELNET_AGENT.value: "1",  # Telnet uses Agent interface
-        ItemTypes.HTTP_AGENT.value: "1",  # HTTP Agent uses Agent interface
-        # Item types that don't require specific interfaces
-        ItemTypes.ZABBIX_TRAPPER.value: None,
-        ItemTypes.SIMPLE_CHECK.value: None,
-        ItemTypes.ZABBIX_INTERNAL.value: None,
-        ItemTypes.WEB_ITEM.value: None,
-        ItemTypes.EXTERNAL_CHECK.value: None,
-        ItemTypes.DATABASE_MONITOR.value: None,
-        ItemTypes.CALCULATED.value: None,
-        ItemTypes.DEPENDENT_ITEM.value: None,
-        ItemTypes.SCRIPT.value: None,
-        ItemTypes.BROWSER.value: None,
-    }
-
-    # Check each item and its interface dependency
-    log.logger.debug(
-        "Checking %d items against current interface types: %s",
-        len(items),
-        current_interface_types,
-    )
-
-    for item in items:
-        item_type = int(item.get("type", 0))
-        required_interface_type = item_type_to_interface_mapping.get(item_type)
-
-        # If item type requires a specific interface
-        if required_interface_type is not None:
-            # Check if item has an interfaceid (is bound to interface)
-            if item.get("interfaceid"):
-                # If required interface not in current config, unsafe to update
-                if required_interface_type not in current_interface_types:
-                    log.logger.warning(
-                        "Item '%s' (type %s) requires interface %s but only %s available",
-                        item.get("name", "unknown"),
-                        item_type,
-                        required_interface_type,
-                        current_interface_types,
-                    )
-                    return False  # Unsafe to update
-
-    log.logger.debug("All items have required interfaces available")
-    return True  # Safe to update
-
 def check_new_port_type_compatibility(
     zabbix_host_result: dict,
     new_port_types: list[str],
 ) -> bool:
-    """Check if new port types are compatible with existing items.
+    """Check if new port types can satisfy the host's existing items.
 
-    Validates that the new port types won't break items that require specific
-    interface types. Each item can depend on only ONE interface type. When
-    changing interfaces, all required interface types must be present in the
-    new port types list.
-
-    Also checks if any items are bound to any interface - Zabbix API doesn't
-    allow changing interface type if ANY items are linked to that interface.
+    The validation is based on the current items in Zabbix. If an existing
+    item requires a specific interface type, that interface must be present in
+    the new port types list.
 
     Args:
         zabbix_host_result (dict): The Zabbix host with current config.
         new_port_types (list[str]): List of new port types to validate.
 
     Returns:
-        bool: True if port type changes are safe, False if items would break
-              or if interface has bound items preventing type change.
+        bool: True if the new port types satisfy all required item interfaces,
+              False otherwise.
     """
     if not zabbix_host_result:
         return True
@@ -323,58 +242,27 @@ def check_new_port_type_compatibility(
         ItemTypes.BROWSER.value: None,
     }
 
-    # Get current interface types on the host
-    interfaces = zabbix_host_result.get("interfaces", [])
-    current_interface_types = {interface.get("type") for interface in interfaces}
-
-    # Critical check: Zabbix API constraint
-    # Cannot change interface type if ANY items are bound to ANY interface
+    # Check existing items against the requested port types
     items = zabbix_host_result.get("items", [])
     log.logger.debug(
-        "Checking %d items for interface bindings with new port types: %s",
+        "Checking %d items against new port types: %s",
         len(items),
         new_port_types,
     )
-
-    for item in items:
-        # If ANY item has an interfaceid (is bound to an interface),
-        # we cannot change interface types
-        if item.get("interfaceid"):
-            log.logger.error(
-                "Cannot change interface type: Item '%s' (itemid=%s, type=%s) "
-                "is bound to interface %s. "
-                "Zabbix API does not allow changing interface type with bound items.",
-                item.get("name", "unknown"),
-                item.get("itemid", "unknown"),
-                item.get("type", "unknown"),
-                item.get("interfaceid"),
-            )
-            return False  # Unsafe: interface has bound items
-
-    # If no bound items, check if new port types cover all item requirements
-    # Each item depends on only ONE interface type - ensure all required types are covered
     for item in items:
         item_type = int(item.get("type", 0))
         required_interface_type = item_type_to_interface_mapping.get(item_type)
 
-        # If item requires a specific interface
-        if required_interface_type is not None:
-            # Check if required interface is in current config
-            if required_interface_type in current_interface_types:
-                # Item is currently using this interface type
-                # New port types must include this interface type to avoid breaking the item
-                if required_interface_type not in mapped_port_types:
-                    log.logger.warning(
-                        "Item '%s' (type=%s) requires interface %s, "
-                        "but new port types %s provide interfaces %s. "
-                        "This would break the item.",
-                        item.get("name", "unknown"),
-                        item_type,
-                        required_interface_type,
-                        new_port_types,
-                        mapped_port_types,
-                    )
-                    return False
+        if required_interface_type is not None and required_interface_type not in mapped_port_types:
+            log.logger.warning(
+                "Item '%s' (type=%s) requires interface %s, but new port types %s only provide %s",
+                item.get("name", "unknown"),
+                item_type,
+                required_interface_type,
+                new_port_types,
+                mapped_port_types,
+            )
+            return False
 
     log.logger.debug(
         "Port type compatibility check passed for %d new port types (interfaces: %s)",
@@ -383,7 +271,7 @@ def check_new_port_type_compatibility(
     )
     return True  # Safe to change port types
 
-def find_zabbix_host(data: dict) -> DeviceModelValidator | None:
+def find_zabbix_host(data: dict) -> tuple[DeviceModelValidator | None, dict | None]:
     """Find the corresponding Zabbix host based on the provided data.
 
     Args:
@@ -391,13 +279,12 @@ def find_zabbix_host(data: dict) -> DeviceModelValidator | None:
             custom fields for identifying the Zabbix host.
 
     Returns:
-        DeviceModelValidator | None: Instance of DeviceModelValidator if found,
-            None otherwise.
+        tuple[DeviceModelValidator | None, dict | None]: Tuple containing the DeviceModelValidator instance if found and the Zabbix host result, or (None, None) otherwise.
     """
     device_name = data.get("data", {}).get("name")
     if not device_name:
         log.logger.warning("No device name found in update data")
-        return None
+        return None, None
 
     log.logger.debug("Looking up Zabbix host for device: %s", device_name)
     zabbix_host_result: dict | None = query_zabbix_for_host(device_name)
@@ -406,7 +293,7 @@ def find_zabbix_host(data: dict) -> DeviceModelValidator | None:
             "Zabbix host not found for device: %s",
             device_name,
         )
-        return None
+        return None, None
 
     log.logger.debug(
         "Found Zabbix host %s with %d interfaces and %d items",
@@ -414,13 +301,6 @@ def find_zabbix_host(data: dict) -> DeviceModelValidator | None:
         len(zabbix_host_result.get("interfaces", [])),
         len(zabbix_host_result.get("items", [])),
     )
-
-    if not check_items_dependency(zabbix_host_result, data):
-        log.logger.warning(
-            "Items have dependency on old port type for device: %s",
-            device_name,
-        )
-        return None
 
     # Extract necessary fields from Zabbix response
     hostid = zabbix_host_result.get("hostid", "")
@@ -441,7 +321,7 @@ def find_zabbix_host(data: dict) -> DeviceModelValidator | None:
     interfaces = zabbix_host_result.get("interfaces", [])
     items = zabbix_host_result.get("items", [])
 
-    return DeviceModelValidator(hostid, groupids, templateids, interfaces, items)
+    return DeviceModelValidator(hostid, groupids, templateids, interfaces, items), zabbix_host_result
 
 def can_update_device(data: dict):  # pylint: disable=too-many-return-statements
     """Check if device update is allowed.
@@ -525,18 +405,16 @@ def can_update_device(data: dict):  # pylint: disable=too-many-return-statements
     )
 
     # Find the corresponding Zabbix host
-    zabbix_host: DeviceModelValidator | None = find_zabbix_host(data)
+    zabbix_host: DeviceModelValidator | None
+    zabbix_host_result: dict | None
+    result: tuple[DeviceModelValidator | None, dict | None] = find_zabbix_host(data)
+    zabbix_host, zabbix_host_result = result
     if not zabbix_host:
         log.logger.info(
             "Device %s: Zabbix host not found (allowing update)",
             device_name,
         )
         return {"valid": True, "message": "Zabbix host not found"}
-
-    # Get raw Zabbix host result for detailed item checking
-    zabbix_host_result: dict | None = (
-        query_zabbix_for_host(device_name) if device_name else None
-    )
 
     # Port type to interface type mapping
     port_type_mapping: dict[str, str] = {
@@ -566,7 +444,7 @@ def can_update_device(data: dict):  # pylint: disable=too-many-return-statements
             mapped_new_interface_types.add(mapped)
 
     # Check if all new port types are already present (no actual change)
-    if mapped_new_interface_types.issubset(current_interface_types):
+    if mapped_new_interface_types == current_interface_types:
         log.logger.info(
             "Device %s: Port types not changing (interfaces %s already present)",
             device_name,
@@ -583,10 +461,7 @@ def can_update_device(data: dict):  # pylint: disable=too-many-return-statements
         new_port_types,
     )
 
-    if (
-        zabbix_host_result
-        and not check_new_port_type_compatibility(zabbix_host_result, new_port_types)
-    ):
+    if zabbix_host_result and not check_new_port_type_compatibility(zabbix_host_result, new_port_types):
         log.logger.warning(
             "Device %s: Port type(s) %s are incompatible with existing items",
             device_name,
