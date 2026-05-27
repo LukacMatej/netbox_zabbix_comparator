@@ -250,7 +250,14 @@ def check_new_port_type_compatibility(
         new_port_types,
     )
     for item in items:
+        linked_interface_id = item.get("interfaceid")
         item_type = int(item.get("type", 0))
+        log.logger.info(
+            "Validating item '%s' (type=%d, interfaceid=%s)",
+            item.get("name", "unknown"),
+            item_type,
+            linked_interface_id,
+        )
         required_interface_type = item_type_to_interface_mapping.get(item_type)
 
         if required_interface_type is not None and required_interface_type not in mapped_port_types:
