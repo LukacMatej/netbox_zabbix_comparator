@@ -10,6 +10,26 @@ import requests
 from app.logger import logger_conf as log
 from app.enums.item_types import ItemTypes
 
+# Port type name mappings
+INTERFACE_TYPE_NAMES = {
+    "1": "Agent",
+    "2": "SNMP",
+    "3": "IPMI",
+    "4": "JMX",
+}
+
+
+def get_port_type_names(interface_types: set[str]) -> list[str]:
+    """Convert interface type numbers to human-readable names.
+
+    Args:
+        interface_types (set[str]): Set of interface type IDs (e.g., {"1", "2"}).
+
+    Returns:
+        list[str]: List of port type names (e.g., ["Agent", "SNMP"]).
+    """
+    return sorted([INTERFACE_TYPE_NAMES.get(iface_type, iface_type) for iface_type in interface_types])
+
 class DeviceModelValidator:
     """
     Validator class representing a Zabbix host with its configuration.
@@ -574,7 +594,7 @@ def can_update_device(data: dict):  # pylint: disable=too-many-return-statements
         )
         return {
             "valid": False,
-            "message": f"Port types {new_port_types} incompatible with existing items",
+            "message": f"Port types {get_port_type_names(mapped_new_interface_types)} incompatible with existing items",
         }
 
     log.logger.info(
