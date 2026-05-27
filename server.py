@@ -237,20 +237,58 @@ async def validate_update(request: Request):
         JSONResponse: Validation result with 'valid' (bool) and 'message' (str).
     """
     data = await request.json()
-    log.logger.info(data)
-    if data.get("event") == "update" or data.get("event") == "updated":
-        result = validator.can_update_device(data)
-    else:
+    event_type = data.get("event", "unknown")
+    device_name = data.get("data", {}).get("name", "unknown")
+
+    log.logger.info(
+        "Validation request received: event=%s, device=%s",
+        event_type,
+        device_name,
+    )
+    log.logger.debug("Full request data: %s", data)
+
+    if event_type not in ["update", "updated"]:
+        log.logger.warning(
+            "Invalid event type: %s (expected 'update' or 'updated')",
+            event_type,
+        )
         return JSONResponse(
             {"valid": False, "message": "Invalid event type"},
             status_code=400,
         )
+
+    try:
+        result = validator.can_update_device(data)
+    except Exception as e:  # pylint: disable=broad-except
+        log.logger.error(
+            "Exception validating device %s: %s",
+            device_name,
+            e,
+            exc_info=True,
+        )
+        return JSONResponse(
+            {"valid": False, "message": str(e)},
+            status_code=500,
+        )
+
     if isinstance(result, Exception):
-        log.logger.error("Error validating device: %s", result)
+        log.logger.error(
+            "Validation error for device %s: %s",
+            device_name,
+            result,
+        )
         return JSONResponse(
             {"valid": False, "message": str(result)},
             status_code=500,
         )
+
+    log.logger.info(
+        "Validation completed: device=%s, valid=%s, message=%s",
+        device_name,
+        result.get("valid"),
+        result.get("message"),
+    )
+
     return JSONResponse(result, status_code=200)
 
 def test_connection() -> tuple[str, int]:

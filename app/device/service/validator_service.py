@@ -74,8 +74,12 @@ def query_zabbix_for_host(device_name: str) -> dict | None:
     zabbix_api_token: str | None = os.environ.get("ZABBIX_KEY")
     zabbix_api_url: str | None = os.environ.get("ZABBIX_URL")
     if not zabbix_api_token or not zabbix_api_url:
+        log.logger.debug("Zabbix API credentials not configured")
         return None
-    headers= {
+
+    log.logger.debug("Querying Zabbix for host: %s", device_name)
+
+    headers = {
         'Content-Type': 'application/json-rpc',
         'Authorization': f'Bearer {zabbix_api_token}'
     }
@@ -87,10 +91,10 @@ def query_zabbix_for_host(device_name: str) -> dict | None:
             "filter": {
                 "host": [device_name]
             },
-        "selectInterfaces": "extend",
-        "selectGroups": "extend",
-        "selectParentTemplates": "extend",
-        "selectItems": "extend"
+            "selectInterfaces": "extend",
+            "selectGroups": "extend",
+            "selectParentTemplates": "extend",
+            "selectItems": "extend"
         },
         "id": 1,
     }
@@ -102,23 +106,38 @@ def query_zabbix_for_host(device_name: str) -> dict | None:
             timeout=5.0
         )
         response.raise_for_status()
-        result = response.json().get("result", [])
         response_json = response.json()
+
         if "error" in response_json:
             log.logger.error(
-                "Error querying Zabbix for host %s: %s",
+                "Zabbix API error for host %s: %s",
                 device_name,
                 response_json["error"],
             )
             return None
-        return result[0] if result else None
+
+        result = response_json.get("result", [])
+        if result:
+            host_data = result[0]
+            log.logger.info(
+                "Found Zabbix host '%s' (hostid=%s) with %d interfaces and %d items",
+                device_name,
+                host_data.get("hostid"),
+                len(host_data.get("interfaces", [])),
+                len(host_data.get("selectItems", [])),
+            )
+            return host_data
+
+        log.logger.debug("No Zabbix host found for: %s", device_name)
+        return None
+
     except requests.RequestException as e:
         log.logger.error(
-            "Error querying Zabbix for host %s: %s",
+            "HTTP error querying Zabbix for host %s: %s",
             device_name,
             e,
         )
-    return None
+        return None
 
 def check_items_dependency(zabbix_host_result: dict, data: dict) -> bool:  # pylint: disable=unused-argument
     """Check if items are dependent on the current interface types.
@@ -169,6 +188,12 @@ def check_items_dependency(zabbix_host_result: dict, data: dict) -> bool:  # pyl
     }
 
     # Check each item and its interface dependency
+    log.logger.debug(
+        "Checking %d items against current interface types: %s",
+        len(items),
+        current_interface_types,
+    )
+
     for item in items:
         item_type = int(item.get("type", 0))
         required_interface_type = item_type_to_interface_mapping.get(item_type)
@@ -179,8 +204,16 @@ def check_items_dependency(zabbix_host_result: dict, data: dict) -> bool:  # pyl
             if item.get("interfaceid"):
                 # If required interface not in current config, unsafe to update
                 if required_interface_type not in current_interface_types:
+                    log.logger.warning(
+                        "Item '%s' (type %s) requires interface %s but only %s available",
+                        item.get("name", "unknown"),
+                        item_type,
+                        required_interface_type,
+                        current_interface_types,
+                    )
                     return False  # Unsafe to update
 
+    log.logger.debug("All items have required interfaces available")
     return True  # Safe to update
 
 def check_new_port_type_compatibility(
@@ -190,14 +223,17 @@ def check_new_port_type_compatibility(
     """Check if new port type is compatible with existing items.
 
     Validates that changing to a new port type won't break items that
-    require specific interface types.
+    require specific interface types. Also checks if any items are bound
+    to any interface - Zabbix API doesn't allow changing interface type
+    if ANY items are linked to that interface.
 
     Args:
         zabbix_host_result (dict): The Zabbix host with current config.
         new_port_type (str): The new port type to validate.
 
     Returns:
-        bool: True if port type change is safe, False if it breaks items.
+        bool: True if port type change is safe, False if items would break
+              or if interface has bound items preventing type change.
     """
     if not zabbix_host_result:
         return True
@@ -241,18 +277,62 @@ def check_new_port_type_compatibility(
         ItemTypes.BROWSER.value: None,
     }
 
-    # Check each item to ensure new port type is compatible
+    # Get current interface types on the host
+    interfaces = zabbix_host_result.get("interfaces", [])
+    current_interface_types = {interface.get("type") for interface in interfaces}
+
+    # Critical check: Zabbix API constraint
+    # Cannot change interface type if ANY items are bound to ANY interface
     items = zabbix_host_result.get("selectItems", [])
+    log.logger.debug(
+        "Checking %d items for interface bindings when changing to port type %s",
+        len(items),
+        new_port_type,
+    )
+
+    for item in items:
+        # If ANY item has an interfaceid (is bound to an interface),
+        # we cannot change interface types
+        if item.get("interfaceid"):
+            log.logger.error(
+                "Cannot change interface type: Item '%s' (itemid=%s, type=%s) "
+                "is bound to interface %s. "
+                "Zabbix API does not allow changing interface type with bound items.",
+                item.get("name", "unknown"),
+                item.get("itemid", "unknown"),
+                item.get("type", "unknown"),
+                item.get("interfaceid"),
+            )
+            return False  # Unsafe: interface has bound items
+
+    # If no bound items, check if new port type is compatible with item requirements
     for item in items:
         item_type = int(item.get("type", 0))
         required_interface_type = item_type_to_interface_mapping.get(item_type)
 
-        # If item requires a specific interface and it's bound
-        if required_interface_type is not None and item.get("interfaceid"):
-            # If item requires different interface than new port type
+        # If item requires a specific interface
+        if required_interface_type is not None:
+            # If required interface not in new port type, incompatible
             if required_interface_type != mapped_port_type:
-                return False  # Changing port type would break this item
+                # But only matters if item was relying on current interfaces
+                if required_interface_type in current_interface_types:
+                    log.logger.warning(
+                        "Item '%s' (type=%s) requires interface %s, "
+                        "but new port type %s provides interface %s. "
+                        "This would break the item.",
+                        item.get("name", "unknown"),
+                        item_type,
+                        required_interface_type,
+                        new_port_type,
+                        mapped_port_type,
+                    )
+                    return False
 
+    log.logger.debug(
+        "Port type compatibility check passed for new port type %s (interface %s)",
+        new_port_type,
+        mapped_port_type,
+    )
     return True  # Safe to change port type
 
 def find_zabbix_host(data: dict) -> DeviceModelValidator | None:
@@ -268,13 +348,30 @@ def find_zabbix_host(data: dict) -> DeviceModelValidator | None:
     """
     device_name = data.get("data", {}).get("name")
     if not device_name:
+        log.logger.warning("No device name found in update data")
         return None
 
+    log.logger.debug("Looking up Zabbix host for device: %s", device_name)
     zabbix_host_result: dict | None = query_zabbix_for_host(device_name)
     if not zabbix_host_result:
+        log.logger.warning(
+            "Zabbix host not found for device: %s",
+            device_name,
+        )
         return None
 
+    log.logger.debug(
+        "Found Zabbix host %s with %d interfaces and %d items",
+        device_name,
+        len(zabbix_host_result.get("interfaces", [])),
+        len(zabbix_host_result.get("selectItems", [])),
+    )
+
     if not check_items_dependency(zabbix_host_result, data):
+        log.logger.warning(
+            "Items have dependency on old port type for device: %s",
+            device_name,
+        )
         return None
 
     # Extract necessary fields from Zabbix response
@@ -311,29 +408,54 @@ def can_update_device(data: dict):  # pylint: disable=too-many-return-statements
     Returns:
         dict: Validation result with 'valid' (bool) and 'message' (str).
     """
+    device_name = data.get("data", {}).get("name", "unknown")
+
     # Extract custom fields from the update data
     custom_fields = data.get("data", {}).get("custom_fields", {})
     if not custom_fields:
+        log.logger.info(
+            "Device %s: No custom fields to validate",
+            device_name,
+        )
         return {"valid": True, "message": "No custom fields to validate"}
 
     # Check if update contains templates or hostgroups
     has_templates = custom_fields.get("zabbix_templates") is not None
     has_hostgroups = custom_fields.get("zabbix_hostgroups") is not None
     if has_templates or has_hostgroups:
+        log.logger.info(
+            "Device %s: Update contains templates=%s or hostgroups=%s (always allowed)",
+            device_name,
+            has_templates,
+            has_hostgroups,
+        )
         return {"valid": True, "message": "Update contains templates or hostgroups"}
 
     # Check if port type is being changed
     new_port_type = custom_fields.get("zabbix_port_type")
     if not new_port_type:
+        log.logger.info(
+            "Device %s: No port type change in update",
+            device_name,
+        )
         return {"valid": True, "message": "No port type change in update"}
+
+    log.logger.debug(
+        "Device %s: Validating port type change to %s",
+        device_name,
+        new_port_type,
+    )
 
     # Find the corresponding Zabbix host
     zabbix_host: DeviceModelValidator | None = find_zabbix_host(data)
     if not zabbix_host:
+        log.logger.info(
+            "Device %s: Zabbix host not found (allowing update)",
+            device_name,
+        )
         return {"valid": True, "message": "Zabbix host not found"}
 
     # Get raw Zabbix host result for detailed item checking
-    device_name = data.get("data", {}).get("name")
     zabbix_host_result: dict | None = (
         query_zabbix_for_host(device_name) if device_name else None
     )
@@ -351,20 +473,54 @@ def can_update_device(data: dict):  # pylint: disable=too-many-return-statements
         "4": "4",
     }
     mapped_port_type: str | None = port_type_mapping.get(str(new_port_type))
+    log.logger.debug(
+        "Device %s: Port type '%s' mapped to interface type '%s'",
+        device_name,
+        new_port_type,
+        mapped_port_type,
+    )
 
     # Check if port type is different from current interfaces
     current_interface_types = zabbix_host.get_interface_types()
+    log.logger.debug(
+        "Device %s: Current interface types: %s",
+        device_name,
+        current_interface_types,
+    )
+
     if mapped_port_type in current_interface_types:
+        log.logger.info(
+            "Device %s: Port type not changing (interface %s already present)",
+            device_name,
+            mapped_port_type,
+        )
         return {"valid": True, "message": "Port type not changing"}
 
     # Port type is changing - check compatibility with existing items
+    log.logger.debug(
+        "Device %s: Port type is changing from %s to %s. Checking item compatibility.",
+        device_name,
+        current_interface_types,
+        mapped_port_type,
+    )
+
     if (
         zabbix_host_result
         and not check_new_port_type_compatibility(zabbix_host_result, new_port_type)
     ):
+        log.logger.warning(
+            "Device %s: Port type change to %s is incompatible with existing items",
+            device_name,
+            new_port_type,
+        )
         return {
             "valid": False,
             "message": "New port type incompatible with existing items",
         }
 
+    log.logger.info(
+        "Device %s: Port type change to %s is safe",
+        device_name,
+        new_port_type,
+    )
     return {"valid": True, "message": "Port type change is safe"}

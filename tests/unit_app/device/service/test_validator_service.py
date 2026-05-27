@@ -467,6 +467,51 @@ class CanUpdateDeviceTests(unittest.TestCase):
 
         self.assertTrue(result["valid"])
 
+    def test_returns_invalid_when_items_bound_to_interface(self):
+        """Should return invalid when trying to change port type with bound items.
+
+        Zabbix API constraint: Cannot change interface type if ANY items are
+        linked to that interface (items with interfaceid).
+        """
+        data = {
+            "data": {
+                "name": "apc",
+                "custom_fields": {"zabbix_port_type": "SNMP"},
+            }
+        }
+        # Simulate the apc device with a bound item
+        zabbix_host_result = {
+            "hostid": "10001",
+            "interfaces": [{"type": "1", "interfaceid": "1"}],
+            "selectItems": [
+                {
+                    "itemid": "100",
+                    "name": "System object ID",
+                    "type": str(ItemTypes.ZABBIX_AGENT.value),
+                    "interfaceid": "1",  # Item is bound to interface
+                }
+            ],
+        }
+
+        with patch(
+            "app.device.service.validator_service.query_zabbix_for_host",
+            return_value=zabbix_host_result,
+        ):
+            with patch(
+                "app.device.service.validator_service.find_zabbix_host",
+                return_value=vs.DeviceModelValidator(
+                    "10001",
+                    ["10"],
+                    ["100"],
+                    zabbix_host_result["interfaces"],
+                    zabbix_host_result["selectItems"],
+                ),
+            ):
+                result = vs.can_update_device(data)
+
+        self.assertFalse(result["valid"])
+        self.assertIn("incompatible", result["message"].lower())
+
 
 if __name__ == "__main__":
     unittest.main()
