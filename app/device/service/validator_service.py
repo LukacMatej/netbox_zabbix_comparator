@@ -1,6 +1,12 @@
-import json
-import requests
+"""Validator service for Zabbix device updates.
+
+This module provides validation functions to ensure device updates are compatible
+with existing Zabbix host configurations, especially for port type changes.
+"""
 import os
+
+import requests
+
 from app.logger import logger_conf as log
 from app.enums.item_types import ItemTypes
 
@@ -17,8 +23,14 @@ class DeviceModelValidator:
         items (list[dict]): List of items (metrics) monitored on the host.
     """
 
-    def __init__(self, hostid: str, groupids: list[str], templateids: list[str],
-                 interfaces: list[dict] | None = None, items: list[dict] | None = None) -> None:
+    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        self,
+        hostid: str,
+        groupids: list[str],
+        templateids: list[str],
+        interfaces: list[dict] | None = None,
+        items: list[dict] | None = None,
+    ) -> None:
         """Initialize a DeviceModelValidator instance.
 
         Args:
@@ -50,18 +62,14 @@ class DeviceModelValidator:
         """
         return {int(item.get("type", 0)) for item in self.items}
 
-
-
-
 def query_zabbix_for_host(device_name: str) -> dict | None:
-    """Queries Zabbix for a host matching the given device name.
-    This function is a placeholder for the actual implementation that would query Zabbix's API to find a host based on the device name.
+    """Query Zabbix for a host matching the given device name.
 
     Args:
         device_name (str): The name of the device to search for in Zabbix.
 
     Returns:
-        str | None: The JSON response from Zabbix or None if no matching host is found.
+        dict | None: The host data from Zabbix or None if not found.
     """
     zabbix_api_token: str | None = os.environ.get("ZABBIX_KEY")
     zabbix_api_url: str | None = os.environ.get("ZABBIX_URL")
@@ -95,25 +103,33 @@ def query_zabbix_for_host(device_name: str) -> dict | None:
         )
         response.raise_for_status()
         result = response.json().get("result", [])
-        if "error" in response.json():
-            log.logger.error(f"Error querying Zabbix for host {device_name}: {response.json()['error']}")
+        response_json = response.json()
+        if "error" in response_json:
+            log.logger.error(
+                "Error querying Zabbix for host %s: %s",
+                device_name,
+                response_json["error"],
+            )
             return None
         return result[0] if result else None
     except requests.RequestException as e:
-        log.logger.error(f"Error querying Zabbix for host {device_name}: {e}")
+        log.logger.error(
+            "Error querying Zabbix for host %s: %s",
+            device_name,
+            e,
+        )
     return None
 
-def check_items_dependency(zabbix_host_result: dict, data: dict) -> bool:
-    """Checks if the items in the Zabbix host are dependent on the old port type.
-    This function checks if items associated with the Zabbix host are linked to a specific
-    interface type that would be affected by changing the port type.
+def check_items_dependency(zabbix_host_result: dict, data: dict = None) -> bool:  # pylint: disable=unused-argument
+    """Check if items are dependent on the current interface types.
 
     Args:
         zabbix_host_result (dict): The Zabbix host object containing host details.
-        data (dict): The input data containing information about the device update.
+        data (dict): The input data (unused, kept for backward compatibility).
 
     Returns:
-        bool: True if items are NOT dependent on the old port type (update is safe), False if items depend on old port type.
+        bool: True if items are not dependent on the old port type (safe to update).
+              False if items depend on the old port type (unsafe).
     """
     if not zabbix_host_result or not isinstance(zabbix_host_result, dict):
         return True  # Safe to update if no host data available
@@ -159,24 +175,24 @@ def check_items_dependency(zabbix_host_result: dict, data: dict) -> bool:
 
         # If item type requires a specific interface
         if required_interface_type is not None:
-            # Check if item has an interfaceid (is bound to a specific interface)
+            # Check if item has an interfaceid (is bound to interface)
             if item.get("interfaceid"):
-                # If the required interface type is not in current interfaces, items depend on current config
+                # If required interface not in current config, unsafe to update
                 if required_interface_type not in current_interface_types:
                     return False  # Unsafe to update
 
     return True  # Safe to update
 
 def find_zabbix_host(data: dict) -> DeviceModelValidator | None:
-    """Finds the corresponding Zabbix host based on the provided data.
-    This function takes a dictionary containing information about a device update and attempts to find the corresponding Zabbix host in Zabbix.
-    It uses the device's name and other relevant details to perform the lookup.
+    """Find the corresponding Zabbix host based on the provided data.
 
     Args:
-        data (dict): A dictionary containing information about the device update, including custom fields and other relevant details for identifying the corresponding Zabbix host.
+        data (dict): Dictionary containing device update information with
+            custom fields for identifying the Zabbix host.
 
     Returns:
-        DeviceModelValidator | None: An instance of the DeviceModelValidator representing the corresponding Zabbix host if found, or None if no matching host is found.
+        DeviceModelValidator | None: Instance of DeviceModelValidator if found,
+            None otherwise.
     """
     device_name = data.get("data", {}).get("name")
     if not device_name:
@@ -198,7 +214,11 @@ def find_zabbix_host(data: dict) -> DeviceModelValidator | None:
 
     # Extract template IDs
     parent_templates = zabbix_host_result.get("parentTemplates", [])
-    templateids = [template.get("templateid") for template in parent_templates if template.get("templateid")]
+    templateids = [
+        template.get("templateid")
+        for template in parent_templates
+        if template.get("templateid")
+    ]
 
     # Get interfaces and items
     interfaces = zabbix_host_result.get("interfaces", [])
@@ -207,21 +227,19 @@ def find_zabbix_host(data: dict) -> DeviceModelValidator | None:
     return DeviceModelValidator(hostid, groupids, templateids, interfaces, items)
 
 def can_update_device(data: dict):
-    """Checks if update is allowed to change zabbix host.
-    If update contains templates or hostgroups, then update is allowed.
-    If update contains different port type than linked zabbix host, then check if data items in zabbix are linked to old port type.
-    If data items are linked to old port type, then update is not allowed, otherwise update is allowed.
+    """Check if device update is allowed.
+
+    Validates port type changes against existing Zabbix configuration.
+    Updates with templates or hostgroups are always allowed.
 
     Args:
-        data (dict): The input data containing information about the device update, including custom fields and other relevant details for validation.
+        data (dict): Input data containing device update information with
+            custom fields for validation.
 
     Returns:
-        dict: A dictionary containing the validation result with keys 'valid' (bool) indicating if the update is allowed, and 'message' (str) providing additional information about the validation outcome.
+        dict: Validation result with 'valid' (bool) and 'message' (str).
     """
-    # 1. Define the fields that are relevant for validation
-    TARGET_FIELDS: set[str] = {"zabbix_port_type", "zabbix_templates", "zabbix_hostgroups"}
-
-    # 2. Extract custom fields from the update data
+    # Extract custom fields from the update data
     custom_fields = data.get("data", {}).get("custom_fields", {})
     if not custom_fields:
         return {"valid": True, "message": "No custom fields to validate"}
