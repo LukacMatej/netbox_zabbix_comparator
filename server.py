@@ -35,6 +35,7 @@ import os
 import sys
 import requests
 import uvicorn
+import json
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
@@ -46,6 +47,7 @@ from app.device.models.difference_model import DeviceDifference
 from app.device.models.device_model import Device
 from app.logger import logger_conf as log
 from app.compare.service import synchronization_service as synchronize
+from app.device.service import validator_service as validator
 
 
 app = FastAPI(title="NetBox Zabbix Compare")
@@ -224,23 +226,20 @@ def run_compare_sync(request: Request) -> Response:
         status_code=200,
     )
 
-# @app.post("/update_device")
-# async def update_device(request: Request):
-#     data = await request.json()
-#     log.logger.info(data)
-#     sync_output : sync_output_model = sync_output_model()
-#     if data.get("event") == "create":
-#         result = synchronize.create_zabbix_device(data, sync_output)
-#     elif data.get("event") == "update":
-#         result = synchronize.update_zabbix_device(data, sync_output)
-#     elif data.get("event") == "delete":
-#         result = synchronize.delete_zabbix_device(data, sync_output)
-#     else:
-#         return {"valid": False, "message": "Invalid event type"}
-#     if isinstance(result, Exception):
-#         log.logger.error("Error synchronizing device: %s", result)
-#         return {"valid": False, "message": str(result)}
-#     return {"valid": True, "message": "Approved"}
+@app.post("/validate_update", response_class=PlainTextResponse)
+async def validate_update(request: Request):
+    data = await request.json()
+    log.logger.info(data)
+    data_json: dict = json.loads(data)
+    sync_output : sync_output_model = sync_output_model()
+    if data.get("event") == "update":
+        result = validator.can_update_device(data_json)
+    else:
+        return {"valid": False, "message": "Invalid event type"}
+    if isinstance(result, Exception):
+        log.logger.error("Error synchronizing device: %s", result)
+        return {"valid": False, "message": str(result)}
+    return {"valid": True, "message": "Approved"}
 
 def test_connection() -> tuple[str, int]:
     """

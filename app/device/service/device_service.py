@@ -78,6 +78,7 @@ def find_hostinterface_ids(hostid: str) -> list[int]:
         "id": 1,
     }
     try:
+        log.logger.info("Finding Zabbix interface IDs for hostid %s.", hostid)
         response = requests.post(
             f"{zb_url}/api_jsonrpc.php", headers=headers, json=payload, timeout=30
         )
@@ -88,6 +89,8 @@ def find_hostinterface_ids(hostid: str) -> list[int]:
             log.logger.error("Error in Zabbix API response: %s", result["error"])
             return []
         interface = result.get("result", [])
+        for iface in interface:
+            log.logger.info("Found Zabbix interface ID: %s for hostid %s.", iface["interfaceid"], hostid)
         return [int(iface["interfaceid"]) for iface in interface]
     except requests.exceptions.RequestException as e:
         log.logger.error("Failed to find Zabbix interface IDs for hostid %s: %s", hostid, e)

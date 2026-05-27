@@ -203,6 +203,11 @@ class Device:
     #                 }
     #         }
     #     }
+    @staticmethod
+    def get_device_fields() -> list[str]:
+        """Returns a list of device fields for comparison."""
+        return list(Device.__annotations__.keys())
+
 
 
 def format_nb_status(status: str) -> str:
