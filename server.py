@@ -37,7 +37,7 @@ import requests
 import uvicorn
 import json
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from app.compare.service import compare_service as ct
 from app.compare.service import synchronization_service as ss
@@ -226,19 +226,32 @@ def run_compare_sync(request: Request) -> Response:
         status_code=200,
     )
 
-@app.post("/validate_update", response_class=PlainTextResponse)
+@app.post("/validate_update")
 async def validate_update(request: Request):
+    """Validate device update against Zabbix configuration.
+
+    Args:
+        request: The incoming request containing device update data.
+
+    Returns:
+        JSONResponse: Validation result with 'valid' (bool) and 'message' (str).
+    """
     data = await request.json()
     log.logger.info(data)
-    sync_output : sync_output_model = sync_output_model()
-    if data.get("event") == "update":
+    if data.get("event") == "update" or data.get("event") == "updated":
         result = validator.can_update_device(data)
     else:
-        return {"valid": False, "message": "Invalid event type"}
+        return JSONResponse(
+            {"valid": False, "message": "Invalid event type"},
+            status_code=400,
+        )
     if isinstance(result, Exception):
-        log.logger.error("Error synchronizing device: %s", result)
-        return {"valid": False, "message": str(result)}
-    return {"valid": True, "message": "Approved"}
+        log.logger.error("Error validating device: %s", result)
+        return JSONResponse(
+            {"valid": False, "message": str(result)},
+            status_code=500,
+        )
+    return JSONResponse(result, status_code=200)
 
 def test_connection() -> tuple[str, int]:
     """
