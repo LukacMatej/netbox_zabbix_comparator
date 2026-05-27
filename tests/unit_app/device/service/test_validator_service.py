@@ -568,6 +568,126 @@ class CanUpdateDeviceTests(unittest.TestCase):
         self.assertFalse(result["valid"])
         self.assertIn("incompatible", result["message"].lower())
 
+    def test_handles_port_type_as_list_from_netbox(self):
+        """Should extract port type from list sent by Netbox custom field.
+
+        Netbox sends custom field values as lists (even single values).
+        This test ensures the validator handles ['2'] correctly.
+        """
+        data = {
+            "data": {
+                "name": "test-host",
+                "custom_fields": {"zabbix_port_type": ["2"]},  # List from Netbox
+            }
+        }
+        validator = vs.DeviceModelValidator(
+            "10001",
+            ["10"],
+            ["100"],
+            [{"type": "1"}],  # Only Agent interface
+            [
+                {"type": str(ItemTypes.ZABBIX_TRAPPER.value)},  # No interface required
+            ],
+        )
+
+        with patch("app.device.service.validator_service.find_zabbix_host", return_value=validator):
+            result = vs.can_update_device(data)
+
+        # Should extract '2' from ['2'] and validate it as SNMP port type change
+        self.assertTrue(result["valid"])
+        self.assertIn("port type", result["message"].lower())
+
+    def test_handles_empty_port_type_list(self):
+        """Should handle empty port type list from Netbox."""
+        data = {
+            "data": {
+                "name": "test-host",
+                "custom_fields": {"zabbix_port_type": []},  # Empty list
+            }
+        }
+
+        result = vs.can_update_device(data)
+
+        # Empty list means no port type change
+        self.assertTrue(result["valid"])
+        self.assertIn("no port type", result["message"].lower())
+
+    def test_handles_multiple_port_types_validates_all(self):
+        """Should validate all port types when list has multiple items.
+
+        When Netbox sends multiple port types like ['1', '2'], we should validate
+        that both are compatible with existing items.
+        """
+        data = {
+            "data": {
+                "name": "test-host",
+                "custom_fields": {"zabbix_port_type": ["1", "2"]},  # Multiple items: Agent and SNMP
+            }
+        }
+        validator = vs.DeviceModelValidator(
+            "10001",
+            ["10"],
+            ["100"],
+            [{"type": "3"}],  # Only IPMI interface exists (neither 1 nor 2)
+            [  # Items that are interface-independent
+                {"type": str(ItemTypes.ZABBIX_TRAPPER.value)},
+                {"type": str(ItemTypes.SIMPLE_CHECK.value)},
+            ],
+        )
+
+        with patch("app.device.service.validator_service.find_zabbix_host", return_value=validator):
+            with patch("app.device.service.validator_service.query_zabbix_for_host") as mock_query:
+                mock_query.return_value = {
+                    "interfaces": [{"type": "3"}],
+                    "selectItems": [
+                        {"type": str(ItemTypes.ZABBIX_TRAPPER.value)},
+                        {"type": str(ItemTypes.SIMPLE_CHECK.value)},
+                    ],
+                }
+                result = vs.can_update_device(data)
+
+        # Should validate both port types and report success for all
+        self.assertTrue(result["valid"])
+        self.assertIn("all", result["message"].lower())
+        self.assertIn("2", result["message"])  # Should mention 2 port types
+
+    def test_rejects_when_one_port_type_incompatible(self):
+        """Should reject if ANY of the port types is incompatible with existing items.
+
+        When validating multiple port types like ['1', '2'], if one (e.g., '2' for SNMP)
+        is incompatible with items requiring interface '1' (Agent), the entire update
+        should be rejected.
+        """
+        data = {
+            "data": {
+                "name": "test-host",
+                "custom_fields": {"zabbix_port_type": ["2", "3"]},  # SNMP and IPMI
+            }
+        }
+        validator = vs.DeviceModelValidator(
+            "10001",
+            ["10"],
+            ["100"],
+            [{"type": "1"}],  # Only Agent interface currently
+            [  # Has SNMP items that require interface 2
+                {"type": str(ItemTypes.SNMP_AGENT.value), "interfaceid": "2"},
+            ],
+        )
+
+        with patch("app.device.service.validator_service.find_zabbix_host", return_value=validator):
+            with patch("app.device.service.validator_service.query_zabbix_for_host") as mock_query:
+                mock_query.return_value = {
+                    "interfaces": [{"type": "1"}],
+                    "selectItems": [
+                        {"type": str(ItemTypes.SNMP_AGENT.value), "interfaceid": "2", "name": "SNMP Item", "itemid": "123"},
+                    ],
+                }
+                result = vs.can_update_device(data)
+
+        # Should reject because interface 2 has bound items
+        self.assertFalse(result["valid"])
+        self.assertIn("incompatible", result["message"].lower())
+
 
 if __name__ == "__main__":
     unittest.main()
