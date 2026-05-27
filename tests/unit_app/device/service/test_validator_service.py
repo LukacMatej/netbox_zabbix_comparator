@@ -82,13 +82,13 @@ class QueryZabbixForHostTests(unittest.TestCase):
 
     @patch.dict("os.environ", {}, clear=True)
     def test_returns_none_when_no_env_variables(self):
-        """Should return None when ZABBIX_KEY or ZABBIX_URL not in environment."""
+        """Should return None when ZABBIX_KEY or ZABBIX_IP not in environment."""
         result = vs.query_zabbix_for_host("test-host")
 
         self.assertIsNone(result)
 
     @patch("app.device.service.validator_service.requests.post")
-    @patch.dict("os.environ", {"ZABBIX_KEY": "key", "ZABBIX_URL": "http://zabbix"})
+    @patch.dict("os.environ", {"ZABBIX_KEY": "key", "ZABBIX_IP": "http://zabbix"})
     def test_returns_first_result_on_success(self, post_mock):
         """Should return the first host result when API call succeeds."""
         response = Mock()
@@ -107,7 +107,7 @@ class QueryZabbixForHostTests(unittest.TestCase):
         self.assertEqual(result["host"], "test-host")
 
     @patch("app.device.service.validator_service.requests.post")
-    @patch.dict("os.environ", {"ZABBIX_KEY": "key", "ZABBIX_URL": "http://zabbix"})
+    @patch.dict("os.environ", {"ZABBIX_KEY": "key", "ZABBIX_IP": "http://zabbix"})
     def test_returns_none_when_empty_result(self, post_mock):
         """Should return None when no hosts found."""
         response = Mock()
@@ -120,7 +120,7 @@ class QueryZabbixForHostTests(unittest.TestCase):
         self.assertIsNone(result)
 
     @patch("app.device.service.validator_service.requests.post")
-    @patch.dict("os.environ", {"ZABBIX_KEY": "key", "ZABBIX_URL": "http://zabbix"})
+    @patch.dict("os.environ", {"ZABBIX_KEY": "key", "ZABBIX_IP": "http://zabbix"})
     def test_returns_none_on_error_in_response(self, post_mock):
         """Should return None when API returns an error."""
         response = Mock()
@@ -136,7 +136,7 @@ class QueryZabbixForHostTests(unittest.TestCase):
         self.assertIsNone(result)
 
     @patch("app.device.service.validator_service.requests.post")
-    @patch.dict("os.environ", {"ZABBIX_KEY": "key", "ZABBIX_URL": "http://zabbix"})
+    @patch.dict("os.environ", {"ZABBIX_KEY": "key", "ZABBIX_IP": "http://zabbix"})
     def test_returns_none_on_request_exception(self, post_mock):
         """Should return None when network request fails."""
         post_mock.side_effect = requests.RequestException("Connection failed")

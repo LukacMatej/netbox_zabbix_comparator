@@ -72,9 +72,13 @@ def query_zabbix_for_host(device_name: str) -> dict | None:
         dict | None: The host data from Zabbix or None if not found.
     """
     zabbix_api_token: str | None = os.environ.get("ZABBIX_KEY")
-    zabbix_api_url: str | None = os.environ.get("ZABBIX_URL")
+    zabbix_api_url: str | None = os.environ.get("ZABBIX_IP")
     if not zabbix_api_token or not zabbix_api_url:
-        log.logger.debug("Zabbix API credentials not configured")
+        log.logger.debug(
+            "Zabbix API credentials not configured (ZABBIX_KEY=%s, ZABBIX_IP=%s)",
+            "set" if zabbix_api_token else "not set",
+            "set" if zabbix_api_url else "not set",
+        )
         return None
 
     log.logger.debug("Querying Zabbix for host: %s", device_name)
@@ -99,8 +103,12 @@ def query_zabbix_for_host(device_name: str) -> dict | None:
         "id": 1,
     }
     try:
-        response = requests.post(
+        log.logger.debug(
+            "Posting to Zabbix API at %s/api_jsonrpc.php",
             zabbix_api_url,
+        )
+        response = requests.post(
+            f"{zabbix_api_url}/api_jsonrpc.php",
             headers=headers,
             json=payload,
             timeout=5.0
