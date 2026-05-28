@@ -27,7 +27,6 @@ import re
 from app.logger import logger_conf as log
 from app.device.service import device_service as ds
 from app.device.models.device_model import Device as device_model
-from app.device.models.interface_model import Interface as interface_model
 from app.device.models.difference_model import DeviceDifference as device_difference_model
 from app.device.models.address_model import Address as address_model
 
@@ -97,43 +96,6 @@ def _normalize_hostgroups(hostgroups) -> list[str]:
                 normalized.append(item)
         return sorted(normalized)
     return []
-
-
-def _normalize_interface_type(port_type: str) -> str:
-    """Normalize interface types to the display format used by the device service."""
-    return ds.uniform_port_type(port_type)
-
-
-def _match_interfaces_by_type(
-    nb_device: device_model,
-    zb_device: device_model,
-) -> tuple[list[tuple[interface_model, interface_model]], list[interface_model], list[interface_model]]:
-    """Pair interfaces by normalized port type and return unmatched interfaces."""
-    matched: list[tuple[interface_model, interface_model]] = []
-    unmatched_nb: list[interface_model] = []
-    unmatched_zb = list(zb_device.interfaces)
-    used_zb_indexes: set[int] = set()
-
-    for nb_interface in nb_device.interfaces:
-        nb_type = _normalize_interface_type(getattr(nb_interface, "port_type", ""))
-        match_index = next(
-            (
-                index
-                for index, zb_interface in enumerate(unmatched_zb)
-                if index not in used_zb_indexes
-                and _normalize_interface_type(getattr(zb_interface, "port_type", "")) == nb_type
-            ),
-            None,
-        )
-        if match_index is None:
-            unmatched_nb.append(nb_interface)
-            continue
-
-        used_zb_indexes.add(match_index)
-        matched.append((nb_interface, unmatched_zb[match_index]))
-
-    unmatched_zb = [interface for index, interface in enumerate(unmatched_zb) if index not in used_zb_indexes]
-    return matched, unmatched_nb, unmatched_zb
 
 
 def check_device_model(
@@ -223,8 +185,7 @@ def _compare_address_fields(
     same: list[str] = []
     fields_counter = 0
     same_count = 0
-    matched_interfaces, unmatched_nb, unmatched_zb = _match_interfaces_by_type(nb_device, zb_device)
-    for nb_interface, zb_interface in matched_interfaces:
+    for nb_interface, zb_interface in zip(nb_device.interfaces, zb_device.interfaces):
         for nb_address, zb_address in zip(nb_interface.addresses, zb_interface.addresses):
             address_fields: list[str] = list(address_model.__annotations__.keys())
             for field in address_fields:
@@ -243,7 +204,6 @@ def _compare_address_fields(
                 else:
                     same_count += 1
                     same.append(field)
-
     return diffs, same, fields_counter, same_count
 
 def _compare_interface_fields(
@@ -259,8 +219,7 @@ def _compare_interface_fields(
     fields_counter = 0
     same_count = 0
     interface_fields = ["port_type"]
-    matched_interfaces, unmatched_nb, unmatched_zb = _match_interfaces_by_type(nb_device, zb_device)
-    for nb_interface, zb_interface in matched_interfaces:
+    for nb_interface, zb_interface in zip(nb_device.interfaces, zb_device.interfaces):
         for field in interface_fields:
             nb_value = getattr(nb_interface, field, "")
             zb_value = getattr(zb_interface, field, "")
@@ -277,17 +236,6 @@ def _compare_interface_fields(
             else:
                 same_count += 1
                 same.append(field)
-
-    for nb_interface in unmatched_nb:
-        diffs.append(
-            f"interface ({_normalize_interface_type(getattr(nb_interface, 'port_type', ''))} missing in zabbix), "
-            "Hodnota v netboxu přepíše hodnotu v zabbixu"
-        )
-    for zb_interface in unmatched_zb:
-        diffs.append(
-            f"interface ({_normalize_interface_type(getattr(zb_interface, 'port_type', ''))} missing in netbox), "
-            "Hodnota v netboxu přepíše hodnotu v zabbixu"
-        )
     return diffs, same, fields_counter, same_count
 
 def find_differences(
@@ -349,7 +297,7 @@ def find_differences(
         found = 0
 
     # If all compared fields were the same, use check_device_model as final check
-    if len(same) == fields_counter and fields_counter > 0 and len(diffs) == 0:
+    if len(same) == fields_counter and fields_counter > 0:
         check_device_model_result = check_device_model(nb_device, zb_device, [
             key
             for key in device_model.__annotations__.keys()
