@@ -215,28 +215,25 @@ class SynchronizationServiceTests(unittest.TestCase):
         "app.compare.service.synchronization_service.find_zabbix_hostgroup_ids", return_value=[24]
     )
     @patch("app.compare.service.synchronization_service.requests.post")
-    def test_apply_differences_adds_missing_agent_interface(
+    def test_apply_differences_deletes_missing_agent_interface(
         self, post_mock, _hostgroup_mock, _template_mock, interface_ids_mock
     ):
-        """An existing SNMP interface should be kept while a missing Agent interface is created."""
+        """A Zabbix-only Agent interface should be deleted when NetBox has only SNMP."""
         host_get = Mock(status_code=200)
         host_get.json.return_value = {"result": [{"hostid": "9001"}]}
 
         host_update = Mock(status_code=200)
         host_update.json.return_value = {"result": {"hostids": ["9001"]}}
 
-        interface_create = Mock(status_code=200)
-        interface_create.json.return_value = {"result": {"interfaceids": ["78"]}}
+        interface_delete = Mock(status_code=200)
+        interface_delete.json.return_value = {"result": {"interfaceids": ["78"]}}
 
-        post_mock.side_effect = [host_get, host_update, interface_create]
-        interface_ids_mock.return_value = [77]
+        post_mock.side_effect = [host_get, host_update, interface_delete]
+        interface_ids_mock.return_value = [77, 78]
 
         nb = Device(
             name="apc",
-            interfaces=[
-                Interface("eth0", [Address("192.168.200.22", "apc.netsystem.local")], "", "Agent"),
-                Interface("eth0", [Address("192.168.200.22", "apc.netsystem.local")], "", "SNMP"),
-            ],
+            interfaces=[Interface("eth0", [Address("192.168.200.22", "apc.netsystem.local")], "", "SNMP")],
             hostgroup=[{"name": "HG"}],
             description="desc",
             templates=["TPL"],
@@ -245,6 +242,7 @@ class SynchronizationServiceTests(unittest.TestCase):
         zb = Device(
             name="apc",
             interfaces=[
+                Interface("eth0", [Address("192.168.200.22", "apc.netsystem.local")], "", "Agent"),
                 Interface("eth0", [Address("192.168.200.22", "apc.netsystem.local")], "", "SNMP"),
             ],
             hostgroup=[{"name": "HG"}],
@@ -258,13 +256,12 @@ class SynchronizationServiceTests(unittest.TestCase):
         ss.apply_differences(diff, out)
 
         self.assertEqual(post_mock.call_count, 3)
-        create_payload = post_mock.call_args_list[1].kwargs["json"]
-        self.assertEqual(create_payload["method"], "hostinterface.create")
-        self.assertEqual(create_payload["params"][0]["type"], "Agent")
-        self.assertEqual(create_payload["params"][0]["hostid"], "9001")
+        delete_payload = post_mock.call_args_list[1].kwargs["json"]
+        self.assertEqual(delete_payload["method"], "hostinterface.delete")
+        self.assertEqual(delete_payload["params"], [77])
         self.assertEqual(post_mock.call_args_list[2].kwargs["json"]["method"], "host.update")
         self.assertTrue(
-            any("created successfully" in item for item in out.synchronization_output_differences)
+            any("deleted successfully" in item for item in out.synchronization_output_differences)
         )
 
     @patch("app.compare.service.synchronization_service.apply_differences")

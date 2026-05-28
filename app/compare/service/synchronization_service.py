@@ -96,6 +96,15 @@ def _build_interface_payload(
     return payload
 
 
+def _build_interface_delete_payload(interfaceid: int) -> dict[str, Any]:
+    return {
+        "jsonrpc": "2.0",
+        "method": "hostinterface.delete",
+        "params": [interfaceid],
+        "id": 1,
+    }
+
+
 def _interfaces_are_equivalent(nb_interface: interface_model, zb_interface: interface_model) -> bool:
     return (
         _normalize_interface_type(nb_interface.port_type)
@@ -340,6 +349,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
 
     update_payloads: list[dict[str, Any]] = []
     create_payloads: list[dict[str, Any]] = []
+    delete_payloads: list[dict[str, Any]] = []
     used_interface_ids: set[int] = set()
 
     for index, nb_interface in enumerate(nb_device.interfaces):
@@ -369,6 +379,11 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
                     interfaceid=interface_id,
                 )
             )
+
+    for interface_id, zb_interface in interface_entries:
+        if interface_id in used_interface_ids:
+            continue
+        delete_payloads.append(_build_interface_delete_payload(interface_id))
 
     if update_payloads:
         interface_update_data_zabbix = {
@@ -439,6 +454,36 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
                 create_response.text,
                 create_response.status_code,
             )
+
+    if delete_payloads:
+        for delete_payload in delete_payloads:
+            log.logger.info(delete_payload)
+            delete_response: requests.Response = requests.post(
+                zabbix_ip + "/api_jsonrpc.php",
+                headers=headers,
+                timeout=REQUEST_TIMEOUT,
+                json=delete_payload,
+            )
+            delete_response_json = delete_response.json()
+            if "error" not in delete_response_json:
+                sync_output.add_difference_output(
+                    f"Interface for device {zb_device.name} deleted successfully in Zabbix."
+                )
+                log.logger.info(
+                    "Interface for device %s deleted successfully in Zabbix with response status %s.",
+                    zb_device.name,
+                    delete_response.status_code,
+                )
+            else:
+                sync_output.add_difference_output(
+                    f"Failed to delete interface for device {zb_device.name} in Zabbix: {delete_response.text}"
+                )
+                log.logger.error(
+                    "Failed to delete interface for device %s in Zabbix: %s with response status %s.",
+                    zb_device.name,
+                    delete_response.text,
+                    delete_response.status_code,
+                )
 
     log.logger.info(update_data_zabbix)
     response: requests.Response = requests.post(
