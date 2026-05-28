@@ -26,6 +26,7 @@ Functions:
 
 """
 
+import copy
 import os
 from typing import Any
 import requests
@@ -38,6 +39,70 @@ from app.device.models.synchonization_output_model import SyncOutput as sync_out
 from app.device.service import device_service
 
 REQUEST_TIMEOUT = 30
+
+
+def _normalize_interface_type(port_type: str) -> str:
+    return device_service.uniform_port_type(port_type)
+
+
+def _interface_address(interface: interface_model) -> str:
+    if interface.addresses:
+        return str(interface.addresses[0].address).split("/", maxsplit=1)[0]
+    return ""
+
+
+def _interface_dns_name(interface: interface_model) -> str:
+    if interface.addresses:
+        return interface.addresses[0].dns_name
+    return ""
+
+
+def _interface_main_flag(interfaces: list[interface_model], index: int) -> int:
+    interface_type = _normalize_interface_type(interfaces[index].port_type)
+    for previous_index in range(index):
+        if _normalize_interface_type(interfaces[previous_index].port_type) == interface_type:
+            return 0
+    return 1
+
+
+def _interface_details(port_type: str) -> dict[str, int] | None:
+    if _normalize_interface_type(port_type) == "SNMP":
+        return {"version": 3}
+    return None
+
+
+def _build_interface_payload(
+    interface: interface_model,
+    interfaces: list[interface_model],
+    index: int,
+    hostid: str | None = None,
+    interfaceid: int | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "type": interface.port_type,
+        "main": _interface_main_flag(interfaces, index),
+        "useip": 1,
+        "ip": _interface_address(interface),
+        "dns": _interface_dns_name(interface),
+        "port": 161,
+    }
+    details = _interface_details(interface.port_type)
+    if details is not None:
+        payload["details"] = details
+    if hostid is not None:
+        payload["hostid"] = hostid
+    if interfaceid is not None:
+        payload["interfaceid"] = interfaceid
+    return payload
+
+
+def _interfaces_are_equivalent(nb_interface: interface_model, zb_interface: interface_model) -> bool:
+    return (
+        _normalize_interface_type(nb_interface.port_type)
+        == _normalize_interface_type(zb_interface.port_type)
+        and _interface_address(nb_interface) == _interface_address(zb_interface)
+        and _interface_dns_name(nb_interface) == _interface_dns_name(zb_interface)
+    )
 
 
 def find_hostgroup_id(hostgroup_name: str) -> int:
@@ -131,6 +196,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     """
     nb_device: device_model = differences.nb_device
     zb_device: device_model = differences.zb_device
+    original_zb_interfaces: list[interface_model] = copy.deepcopy(zb_device.interfaces)
     old_templateids: list[str] = zb_device.templates
     different_fields: list[str] = differences.differences[
         0
@@ -265,61 +331,114 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         templateids=templateids,
         include_interfaces=False,
     )
-    # clear_templateids = [find_template_ids(template) for template in old_templateids if template]
-    # clear_templates_data = zb_device.clear_templates_data_zabbix(hostid, templateids=clear_templateids)
-    # log.logger.info(clear_templates_data)
-    # clear_response: requests.Response = requests.post(
-    #     zabbix_ip + "/api_jsonrpc.php",
-    #     headers=headers,
-    #     timeout=REQUEST_TIMEOUT,
-    #     json=clear_templates_data,
-    # )
-    # clear_response_json = clear_response.json()
-    # if "error" in clear_response_json:
-    #     sync_output.add_difference_output(
-    #         f"Error clearing templates for device {zb_device.name} in Zabbix: {clear_response_json['error']['data']}"
-    #     )
-    #     log.logger.error(
-    #         "Error clearing templates for device %s in Zabbix: %s with response status %s.",
-    #         zb_device.name,
-    #         clear_response_json["error"],
-    #         clear_response.status_code,
-    #     )
-    # else:
-    #     log.logger.info(
-    #         "Templates cleared for device %s in Zabbix with response status %s.",
-    #         zb_device.name,
-    #         clear_response.status_code,
-    #     )
 
-    interface_update_data_zabbix = zb_device.update_interface_data_zabbix(interface_ids)
-    log.logger.info(interface_update_data_zabbix)
-    interface_response: requests.Response = requests.post(
-        zabbix_ip + "/api_jsonrpc.php",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT,
-        json=interface_update_data_zabbix,
-    )
-    interface_response_json = interface_response.json()
-    if "error" not in interface_response_json:
-        sync_output.add_difference_output(
-            f"Interface for device {zb_device.name} updated successfully in Zabbix."
+    interface_entries: list[tuple[int, interface_model]] = list(zip(interface_ids, original_zb_interfaces))
+    existing_interfaces: dict[str, list[tuple[int, interface_model]]] = {}
+    for interface_id, zb_interface in interface_entries:
+        interface_type = _normalize_interface_type(zb_interface.port_type)
+        existing_interfaces.setdefault(interface_type, []).append((interface_id, zb_interface))
+
+    update_payloads: list[dict[str, Any]] = []
+    create_payloads: list[dict[str, Any]] = []
+    used_interface_ids: set[int] = set()
+
+    for index, nb_interface in enumerate(nb_device.interfaces):
+        interface_type = _normalize_interface_type(nb_interface.port_type)
+        matching_interface = next(
+            (
+                candidate
+                for candidate in existing_interfaces.get(interface_type, [])
+                if candidate[0] not in used_interface_ids
+            ),
+            None,
         )
-        log.logger.info(
-            "Interface for device %s updated successfully in Zabbix with response status %s.",
-            zb_device.name,
-            interface_response.status_code,
+        if matching_interface is None:
+            create_payloads.append(
+                _build_interface_payload(nb_interface, nb_device.interfaces, index, hostid=hostid)
+            )
+            continue
+
+        interface_id, zb_interface = matching_interface
+        used_interface_ids.add(interface_id)
+        if not _interfaces_are_equivalent(nb_interface, zb_interface):
+            update_payloads.append(
+                _build_interface_payload(
+                    nb_interface,
+                    nb_device.interfaces,
+                    index,
+                    interfaceid=interface_id,
+                )
+            )
+
+    if update_payloads:
+        interface_update_data_zabbix = {
+            "jsonrpc": "2.0",
+            "method": "hostinterface.update",
+            "params": update_payloads,
+            "id": 1,
+        }
+        log.logger.info(interface_update_data_zabbix)
+        interface_response: requests.Response = requests.post(
+            zabbix_ip + "/api_jsonrpc.php",
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+            json=interface_update_data_zabbix,
         )
-    else:
-        sync_output.add_difference_output(
-            f"Failed to update interface for device {zb_device.name} in Zabbix: {interface_response.text}"
+        interface_response_json = interface_response.json()
+        if "error" not in interface_response_json:
+            sync_output.add_difference_output(
+                f"Interface for device {zb_device.name} updated successfully in Zabbix."
+            )
+            log.logger.info(
+                "Interface for device %s updated successfully in Zabbix with response status %s.",
+                zb_device.name,
+                interface_response.status_code,
+            )
+        else:
+            sync_output.add_difference_output(
+                f"Failed to update interface for device {zb_device.name} in Zabbix: {interface_response.text}"
+            )
+            log.logger.error(
+                "Failed to update interface for device %s in Zabbix: %s with response status %s.",
+                zb_device.name,
+                interface_response.text,
+                interface_response.status_code,
+            )
+
+    if create_payloads:
+        interface_create_data_zabbix = {
+            "jsonrpc": "2.0",
+            "method": "hostinterface.create",
+            "params": create_payloads,
+            "id": 1,
+        }
+        log.logger.info(interface_create_data_zabbix)
+        create_response: requests.Response = requests.post(
+            zabbix_ip + "/api_jsonrpc.php",
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+            json=interface_create_data_zabbix,
         )
-        log.logger.error(
-            "Failed to update interface for device %s in Zabbix: %s with response status %s.",
-            zb_device.name,
-            interface_response.text,
-            interface_response.status_code,
-        )
+        create_response_json = create_response.json()
+        if "error" not in create_response_json:
+            sync_output.add_difference_output(
+                f"Interface for device {zb_device.name} created successfully in Zabbix."
+            )
+            log.logger.info(
+                "Interface for device %s created successfully in Zabbix with response status %s.",
+                zb_device.name,
+                create_response.status_code,
+            )
+        else:
+            sync_output.add_difference_output(
+                f"Failed to create interface for device {zb_device.name} in Zabbix: {create_response.text}"
+            )
+            log.logger.error(
+                "Failed to create interface for device %s in Zabbix: %s with response status %s.",
+                zb_device.name,
+                create_response.text,
+                create_response.status_code,
+            )
 
     log.logger.info(update_data_zabbix)
     response: requests.Response = requests.post(

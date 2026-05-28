@@ -166,39 +166,105 @@ class SynchronizationServiceTests(unittest.TestCase):
         host_get = Mock(status_code=200)
         host_get.json.return_value = {"result": [{"hostid": "9001"}]}
 
-        # clear_templates = Mock(status_code=200)
-        # clear_templates.json.return_value = {"result": {"hostids": ["9001"]}}
+        host_update = Mock(status_code=200)
+        host_update.json.return_value = {"result": {"hostids": ["9001"]}}
 
         interface_update = Mock(status_code=200)
         interface_update.json.return_value = {"result": {"interfaceids": ["77"]}}
 
-        host_update = Mock(status_code=200)
-        host_update.json.return_value = {"result": {"hostids": ["9001"]}}
-
-        # post_mock.side_effect = [host_get, clear_templates, interface_update, host_update]
-        post_mock.side_effect = [host_get, interface_update, host_update]
+        post_mock.side_effect = [host_get, host_update, interface_update]
         interface_ids_mock.return_value = [77]
 
-        nb = _device("nb", "10.0.0.1", "nb.local")
-        zb = _device("zb", "10.0.0.2", "zb.local")
-        diff = DeviceDifference(nb, zb, (["name", "address", "port_type"], []))
+        nb = Device(
+            name="nb",
+            interfaces=[Interface("eth0", [Address("10.0.0.1", "nb.local")], "", "Agent")],
+            hostgroup=[{"name": "HG"}],
+            description="desc",
+            templates=["TPL"],
+            status="Active",
+        )
+        zb = Device(
+            name="zb",
+            interfaces=[Interface("eth0", [Address("10.0.0.2", "zb.local")], "", "Agent")],
+            hostgroup=[{"name": "HG"}],
+            description="desc",
+            templates=["TPL"],
+            status="Active",
+        )
+        diff = DeviceDifference(nb, zb, (["address"], []))
         out = SyncOutput()
 
         ss.apply_differences(diff, out)
 
         self.assertEqual(post_mock.call_count, 3)
-        # clear_templates_payload = post_mock.call_args_list[1].kwargs["json"]
         interface_update_payload = post_mock.call_args_list[1].kwargs["json"]
         host_update_payload = post_mock.call_args_list[2].kwargs["json"]
 
-        # self.assertEqual(clear_templates_payload["method"], "host.update")
-        # self.assertIn("templates_clear", clear_templates_payload["params"])
         self.assertEqual(host_update_payload["method"], "host.update")
         self.assertNotIn("interfaces", host_update_payload["params"])
         self.assertEqual(interface_update_payload["method"], "hostinterface.update")
         self.assertEqual(interface_update_payload["params"][0]["interfaceid"], 77)
         self.assertTrue(
             any("updated successfully" in item for item in out.synchronization_output_differences)
+        )
+
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.device_service.find_hostinterface_ids")
+    @patch("app.compare.service.synchronization_service.find_template_ids", return_value=101)
+    @patch(
+        "app.compare.service.synchronization_service.find_zabbix_hostgroup_ids", return_value=[24]
+    )
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_apply_differences_adds_missing_agent_interface(
+        self, post_mock, _hostgroup_mock, _template_mock, interface_ids_mock
+    ):
+        """An existing SNMP interface should be kept while a missing Agent interface is created."""
+        host_get = Mock(status_code=200)
+        host_get.json.return_value = {"result": [{"hostid": "9001"}]}
+
+        host_update = Mock(status_code=200)
+        host_update.json.return_value = {"result": {"hostids": ["9001"]}}
+
+        interface_create = Mock(status_code=200)
+        interface_create.json.return_value = {"result": {"interfaceids": ["78"]}}
+
+        post_mock.side_effect = [host_get, host_update, interface_create]
+        interface_ids_mock.return_value = [77]
+
+        nb = Device(
+            name="apc",
+            interfaces=[
+                Interface("eth0", [Address("192.168.200.22", "apc.netsystem.local")], "", "Agent"),
+                Interface("eth0", [Address("192.168.200.22", "apc.netsystem.local")], "", "SNMP"),
+            ],
+            hostgroup=[{"name": "HG"}],
+            description="desc",
+            templates=["TPL"],
+            status="Active",
+        )
+        zb = Device(
+            name="apc",
+            interfaces=[
+                Interface("eth0", [Address("192.168.200.22", "apc.netsystem.local")], "", "SNMP"),
+            ],
+            hostgroup=[{"name": "HG"}],
+            description="desc",
+            templates=["TPL"],
+            status="Active",
+        )
+        diff = DeviceDifference(nb, zb, (["port_type"], []))
+        out = SyncOutput()
+
+        ss.apply_differences(diff, out)
+
+        self.assertEqual(post_mock.call_count, 3)
+        create_payload = post_mock.call_args_list[1].kwargs["json"]
+        self.assertEqual(create_payload["method"], "hostinterface.create")
+        self.assertEqual(create_payload["params"][0]["type"], "Agent")
+        self.assertEqual(create_payload["params"][0]["hostid"], "9001")
+        self.assertEqual(post_mock.call_args_list[2].kwargs["json"]["method"], "host.update")
+        self.assertTrue(
+            any("created successfully" in item for item in out.synchronization_output_differences)
         )
 
     @patch("app.compare.service.synchronization_service.apply_differences")
