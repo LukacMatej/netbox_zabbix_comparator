@@ -471,6 +471,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                      and "port_type" in config_context["zabbix"])
                     or custom_fields["zabbix_templates"]
                     or (role_name and role_name in device_role_map and device_role_map[role_name])
+                    or (role_name and role_name in device_role_port_type_map and device_role_port_type_map[role_name])
                 )
 
                 if not has_zabbix_config:
