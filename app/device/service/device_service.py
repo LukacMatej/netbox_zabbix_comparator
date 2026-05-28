@@ -462,6 +462,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
             try:
                 config_context = device["config_context"] if isinstance(device["config_context"], dict) else {}
                 custom_fields = device["custom_fields"] if device["custom_fields"] else {}
+                role_name = device["role"]["name"] if device["role"] else None
 
                 # Check if device has required Zabbix configuration
                 has_zabbix_config = (
@@ -469,6 +470,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                      and "templates" in config_context["zabbix"]
                      and "port_type" in config_context["zabbix"])
                     or custom_fields["zabbix_templates"]
+                    or (role_name and role_name in device_role_map and device_role_map[role_name])
                 )
 
                 if not has_zabbix_config:
