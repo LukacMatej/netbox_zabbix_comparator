@@ -274,11 +274,13 @@ def _compare_interface_fields(
                         same.append(field)
             elif i < len(nb_list):
                 # Only NetBox has this interface
+                fields_counter += 1
                 diffs.append(
                     f"Interface with port_type '{port_type}' missing in Zabbix"
                 )
             else:
                 # Only Zabbix has this interface
+                fields_counter += 1
                 diffs.append(
                     f"Interface with port_type '{port_type}' extra in Zabbix"
                 )
