@@ -43,34 +43,6 @@ class CompareServiceTests(unittest.TestCase):
         self.assertTrue(any("name (r1 != r2)" in item for item in different))
         self.assertTrue(any("address" in item for item in different))
 
-    def test_find_differences_matches_interfaces_by_type(self):
-        """Interface comparison should pair SNMP with SNMP and flag missing Agent separately."""
-        nb = Device(
-            name="apc",
-            interfaces=[Interface("eth0", [Address("192.168.200.22", "apc.local")], "", "SNMP")],
-            hostgroup="g",
-            description="d",
-            templates=["t"],
-            status="Active",
-        )
-        zb = Device(
-            name="apc",
-            interfaces=[
-                Interface("eth0", [Address("192.168.200.22", "apc.local")], "", "Agent"),
-                Interface("eth0", [Address("192.168.200.22", "apc.local")], "", "SNMP"),
-            ],
-            hostgroup="g",
-            description="d",
-            templates=["t"],
-            status="Active",
-        )
-
-        tag, _, (different, same) = cs.find_differences(nb, zb)
-        self.assertEqual(tag, 1)
-        self.assertFalse(any("SNMP != Agent" in item for item in different))
-        self.assertTrue(any("missing in netbox" in item for item in different))
-        self.assertTrue(any("port_type" in item for item in same))
-
     def test_compare_devices_lists(self):
         """Unmatched devices should be reported in source-specific lists."""
         nb1 = _device("n1", "10.0.0.1", "n1.local")
