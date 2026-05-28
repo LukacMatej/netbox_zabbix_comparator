@@ -27,6 +27,7 @@ import re
 from app.logger import logger_conf as log
 from app.device.service import device_service as ds
 from app.device.models.device_model import Device as device_model
+from app.device.models.interface_model import Interface as Interface
 from app.device.models.difference_model import DeviceDifference as device_difference_model
 from app.device.models.address_model import Address as address_model
 
@@ -219,7 +220,9 @@ def _compare_interface_fields(
     fields_counter = 0
     same_count = 0
     interface_fields = ["port_type"]
-    for nb_interface, zb_interface in zip(nb_device.interfaces, zb_device.interfaces):
+    nb_interfaces: list[Interface] = sorted(nb_device.interfaces, key=lambda x: x.port_type) or []
+    zb_interfaces: list[Interface] = sorted(zb_device.interfaces, key=lambda x: x.port_type) or []
+    for nb_interface, zb_interface in zip(nb_interfaces, zb_interfaces):
         for field in interface_fields:
             nb_value = getattr(nb_interface, field, "")
             zb_value = getattr(zb_interface, field, "")
@@ -268,7 +271,7 @@ def find_differences(
     diffs, same, fields_counter, same_count = _compare_device_fields(
         nb_device,
         zb_device,
-        exclude=["description", "status"],
+        exclude=["description", "status", "interfaces"],
     )
 
     # Compare address fields nested in interfaces
