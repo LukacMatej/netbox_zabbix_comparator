@@ -199,17 +199,43 @@ def check_new_port_type_compatibility(
             return False
         mapped_port_types.add(mapped_port_type)
 
+    # 1. Map current Interface IDs to their Interface Types
+    # This is crucial because Zabbix will block deleting an interface if an item is linked to it.
+    existing_interfaces = zabbix_host_result.get("interfaces", [])
+    interface_id_to_type = {
+        iface.get("interfaceid"): iface.get("type")
+        for iface in existing_interfaces if iface.get("interfaceid")
+    }
+
     items = zabbix_host_result.get("items", [])
     for item in items:
         item_type = int(item.get("type", 0))
         item_key = item.get("key_", "")
         item_params = item.get("params", "")
+        linked_interface_id = item.get("interfaceid", "0")
 
-        # Call our 3-phase algorithm
+        # Get the underlying interface requirement logic
         req_interface = get_item_interface_requirement(item_type, item_key, item_params)
 
+        # --- RULE 1: Zabbix API Database Constraint ---
+        # If the item is already hard-linked to an interface ID, what type is it?
+        current_linked_type = interface_id_to_type.get(linked_interface_id)
+
+        # If the item is linked to an interface, and that interface type is NOT in the new payload,
+        # Zabbix will throw a constraint error ("Interface is linked to item...").
+        if linked_interface_id and linked_interface_id != "0" and current_linked_type:
+            if current_linked_type not in mapped_port_types:
+                log.logger.warning(
+                    "Validation Failed: Item '%s' is hard-linked to interface type %s (ID: %s). "
+                    "Removing this interface type will trigger a Zabbix API constraint error.",
+                    item.get("name", "unknown"),
+                    current_linked_type,
+                    linked_interface_id
+                )
+                return False
+
+        # --- RULE 2: Strict Requirement Check (for unlinked/new items) ---
         if isinstance(req_interface, str):
-            # The item strictly requires a specific interface (e.g., SNMP_AGENT needs "2")
             if req_interface not in mapped_port_types:
                 log.logger.warning(
                     "Item '%s' (type=%s) strictly requires interface %s, but new port types %s only provide %s",
@@ -221,8 +247,8 @@ def check_new_port_type_compatibility(
                 )
                 return False
 
+        # --- RULE 3: Loose Requirement Check (for unlinked/new items) ---
         elif req_interface is True:
-            # The item requires AT LEAST ONE interface, but doesn't care which type (e.g. Simple Check)
             if not mapped_port_types:
                 log.logger.warning(
                     "Item '%s' (type=%s) requires an interface, but no port types are provided.",
@@ -232,7 +258,6 @@ def check_new_port_type_compatibility(
                 return False
 
     return True
-
 
 def find_zabbix_host(data: dict) -> tuple[DeviceModelValidator | None, dict | None]:
     """Find the corresponding Zabbix host based on the provided data."""
