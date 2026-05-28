@@ -27,7 +27,7 @@ import re
 from app.logger import logger_conf as log
 from app.device.service import device_service as ds
 from app.device.models.device_model import Device as device_model
-from app.device.models.interface_model import Interface as Interface
+from app.device.models.interface_model import Interface as interface_model
 from app.device.models.difference_model import DeviceDifference as device_difference_model
 from app.device.models.address_model import Address as address_model
 
@@ -224,8 +224,8 @@ def _compare_interface_fields(
     same_count = 0
     interface_fields = ["port_type"]
 
-    nb_interfaces: list[Interface] = nb_device.interfaces or []
-    zb_interfaces: list[Interface] = zb_device.interfaces or []
+    nb_interfaces: list[interface_model] = nb_device.interfaces or []
+    zb_interfaces: list[interface_model] = zb_device.interfaces or []
 
     # Build dictionaries mapping port_type to list of interfaces
     nb_by_port = {}
@@ -588,7 +588,7 @@ def compare_devices(
                 "Matched: %s (NB) <-> %s (ZB) with score %.2f",
                 getattr(nb_dev, "name", ""), getattr(best_match, "name", ""), best_score
             )
-            differences = find_differences(nb_dev, best_match)
+            differences: tuple[int, tuple[device_model, device_model], tuple[list[str], list[str]]] = find_differences(nb_dev, best_match)
             if differences[0] == 1:
                 different_devices.append(
                     device_difference_model(

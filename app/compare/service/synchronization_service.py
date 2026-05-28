@@ -250,6 +250,47 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     )
     log.logger.info("Zabbix Device after update %s", device_service.print_device(zb_device))
 
+    # Handle missing and extra interfaces
+    for field in different_fields:
+        if "missing in Zabbix" in field:
+            # Extract port_type from message: "Interface with port_type 'X' missing in Zabbix"
+            port_type = field.split("'")[1] if "'" in field else ""
+            if port_type:
+                # Find matching interface in NetBox by port_type
+                nb_matching_interfaces = [
+                    iface for iface in nb_device.interfaces
+                    if getattr(iface, "port_type", "") == port_type
+                ]
+                if nb_matching_interfaces:
+                    log.logger.info(
+                        "Adding missing interface with port_type '%s' to Zabbix device %s.",
+                        port_type,
+                        zb_device.name,
+                    )
+                    zb_device.interfaces.extend(nb_matching_interfaces)
+                    sync_output.add_difference_output(
+                        f"Interface with port_type '{port_type}' will be added to {zb_device.name} in Zabbix."
+                    )
+        elif "extra in Zabbix" in field:
+            # Extract port_type from message: "Interface with port_type 'X' extra in Zabbix"
+            port_type = field.split("'")[1] if "'" in field else ""
+            if port_type:
+                # Remove extra interface from Zabbix device model
+                original_count = len(zb_device.interfaces)
+                zb_device.interfaces = [
+                    iface for iface in zb_device.interfaces
+                    if getattr(iface, "port_type", "") != port_type
+                ]
+                if len(zb_device.interfaces) < original_count:
+                    log.logger.info(
+                        "Removed extra interface with port_type '%s' from Zabbix device %s.",
+                        port_type,
+                        zb_device.name,
+                    )
+                    sync_output.add_difference_output(
+                        f"Extra interface with port_type '{port_type}' will be removed from {zb_device.name} in Zabbix."
+                    )
+
     # Prefer updated Zabbix values, but fall back to Netbox if source data is missing.
     hostgroup_source = zb_device.hostgroup if zb_device.hostgroup else nb_device.hostgroup
     hostgroupids = find_zabbix_hostgroup_ids(hostgroup_source)
