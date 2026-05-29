@@ -83,6 +83,8 @@ def get_zabbix_host_interfaces(hostid: str) -> list[dict]:
 
         interfaces = response_json.get("result", [])
         log.logger.info("Retrieved %d interface(s) from Zabbix host %s.", len(interfaces), hostid)
+        for idx, iface in enumerate(interfaces):
+            log.logger.debug("Interface %d: %s", idx, iface)
         return interfaces
     except requests.exceptions.RequestException as e:
         log.logger.error("Exception when fetching interfaces from Zabbix: %s", str(e))
@@ -491,15 +493,17 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             log.logger.info("Extracted port_type for extra interface: %s", port_type)
 
             if port_type:
-                # Collect interfaces to remove by port_type
+                # Collect interfaces to remove by port_type from the device model
                 interfaces_to_remove_by_type = [
                     iface for iface in zb_device.interfaces
                     if getattr(iface, "port_type", "") == port_type
                 ]
-                log.logger.info("Found %d interface(s) in Zabbix with port_type '%s' to remove", len(interfaces_to_remove_by_type), port_type)
+                log.logger.info("Found %d interface(s) in device model with port_type '%s'", len(interfaces_to_remove_by_type), port_type)
+                log.logger.debug("Zabbix interfaces in device model: %s",
+                    [(getattr(iface, "port_type", ""), [addr.address for addr in iface.addresses if iface.addresses]) for iface in zb_device.interfaces])
 
                 if interfaces_to_remove_by_type:
-                    # Match interfaces by IP/DNS to get interface IDs
+                    # Match interfaces from device model by IP/DNS to get interface IDs from Zabbix
                     for iface_to_remove in interfaces_to_remove_by_type:
                         iface_ip = (
                             str(iface_to_remove.addresses[0].address).split("/", maxsplit=1)[0]
@@ -511,22 +515,31 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
                             if iface_to_remove.addresses
                             else ""
                         )
-                        log.logger.info("Looking for interface to remove with IP: %s, DNS: %s", iface_ip, iface_dns)
+                        log.logger.info("Looking for interface to remove with IP: %s, DNS: %s, port_type: %s", iface_ip, iface_dns, port_type)
 
-                        # Match by IP or DNS
+                        # Match by IP or DNS in the Zabbix interface details
                         for zb_iface in zb_interface_details:
-                            if (zb_iface.get("ip") == iface_ip or zb_iface.get("dns") == iface_dns):
+                            zb_iface_ip = zb_iface.get("ip", "")
+                            zb_iface_dns = zb_iface.get("dns", "")
+                            log.logger.debug("Comparing with Zabbix interface - IP: %s, DNS: %s, type: %s", zb_iface_ip, zb_iface_dns, zb_iface.get("type"))
+
+                            if (zb_iface_ip == iface_ip or zb_iface_dns == iface_dns) and zb_iface_ip:
                                 interface_ids_to_remove.append(zb_iface["interfaceid"])
                                 log.logger.info(
-                                    "Found interface ID %s to remove for port_type '%s'.",
+                                    "Found interface ID %s to remove (IP: %s, port_type: '%s')",
                                     zb_iface["interfaceid"],
+                                    zb_iface_ip,
                                     port_type,
                                 )
                                 break
+                else:
+                    log.logger.warning("No interfaces found in device model with port_type '%s'. Available port_types: %s",
+                        port_type,
+                        [getattr(iface, "port_type", "N/A") for iface in zb_device.interfaces])
 
-                    sync_output.add_difference_output(
-                        f"Extra interface with port_type '{port_type}' will be removed from {zb_device.name} in Zabbix."
-                    )
+                sync_output.add_difference_output(
+                    f"Extra interface with port_type '{port_type}' will be removed from {zb_device.name} in Zabbix."
+                )
 
     log.logger.info("Interfaces to add: %d, Interface IDs to remove: %d", len(interfaces_to_add), len(interface_ids_to_remove))
 
