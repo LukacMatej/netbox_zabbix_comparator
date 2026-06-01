@@ -555,10 +555,16 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         include_interfaces=False,
     )
 
-    # Only update interface details if we didn't add or remove interfaces
+# Only update interface details if we didn't add interfaces
     # (newly added interfaces aren't in the device model, so we can't use its data to update them)
-    if not interfaces_to_add and not interface_ids_to_remove:
-        log.logger.info("No interface changes made. Updating interface details from device model.")
+    # Check if there are any interface-related field changes to apply
+    has_interface_field_changes = any(
+        "address" in field or "dns" in field or "port" in field or "Interface" in field
+        for field in different_fields
+    )
+
+    if not interfaces_to_add and has_interface_field_changes:
+        log.logger.info("Interface field changes detected. Updating remaining interface details from device model.")
         interface_update_data_zabbix = zb_device.update_interface_data_zabbix(interface_ids)
         log.logger.info(interface_update_data_zabbix)
         interface_response: requests.Response = requests.post(
@@ -588,8 +594,10 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
                 interface_response.status_code,
             )
     else:
-        log.logger.info("Interface changes were made (added: %d, removed: %d). Skipping interface detail update.",
-            len(interfaces_to_add), len(interface_ids_to_remove))
+        if interfaces_to_add:
+            log.logger.info("New interfaces were added. Skipping interface detail update (added interfaces not in device model).")
+        else:
+            log.logger.info("No interface field changes detected. Skipping interface detail update.")
 
     log.logger.info(update_data_zabbix)
     response: requests.Response = requests.post(
