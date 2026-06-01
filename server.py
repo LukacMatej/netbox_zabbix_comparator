@@ -35,8 +35,9 @@ import os
 import sys
 import requests
 import uvicorn
+import json
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from app.compare.service import compare_service as ct
 from app.compare.service import synchronization_service as ss
@@ -45,6 +46,8 @@ from app.device.service import device_service as ds
 from app.device.models.difference_model import DeviceDifference
 from app.device.models.device_model import Device
 from app.logger import logger_conf as log
+from app.compare.service import synchronization_service as synchronize
+from app.device.service import validator_service as validator
 
 
 app = FastAPI(title="NetBox Zabbix Compare")
@@ -222,6 +225,71 @@ def run_compare_sync(request: Request) -> Response:
         },
         status_code=200,
     )
+
+@app.post("/validate_update")
+async def validate_update(request: Request):
+    """Validate device update against Zabbix configuration.
+
+    Args:
+        request: The incoming request containing device update data.
+
+    Returns:
+        JSONResponse: Validation result with 'valid' (bool) and 'message' (str).
+    """
+    data = await request.json()
+    event_type = data.get("event", "unknown")
+    device_name = data.get("data", {}).get("name", "unknown")
+
+    log.logger.info(
+        "Validation request received: event=%s, device=%s",
+        event_type,
+        device_name,
+    )
+    log.logger.debug("Full request data: %s", data)
+
+    if event_type not in ["update", "updated"]:
+        log.logger.warning(
+            "Invalid event type: %s (expected 'update' or 'updated')",
+            event_type,
+        )
+        return JSONResponse(
+            {"valid": False, "message": "Invalid event type"},
+            status_code=400,
+        )
+
+    try:
+        result = validator.can_update_device(data)
+    except Exception as e:  # pylint: disable=broad-except
+        log.logger.error(
+            "Exception validating device %s: %s",
+            device_name,
+            e,
+            exc_info=True,
+        )
+        return JSONResponse(
+            {"valid": False, "message": str(e)},
+            status_code=500,
+        )
+
+    if isinstance(result, Exception):
+        log.logger.error(
+            "Validation error for device %s: %s",
+            device_name,
+            result,
+        )
+        return JSONResponse(
+            {"valid": False, "message": str(result)},
+            status_code=500,
+        )
+
+    log.logger.info(
+        "Validation completed: device=%s, valid=%s, message=%s",
+        device_name,
+        result.get("valid"),
+        result.get("message"),
+    )
+
+    return JSONResponse(result, status_code=200)
 
 def test_connection() -> tuple[str, int]:
     """

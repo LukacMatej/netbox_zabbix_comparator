@@ -41,3 +41,14 @@ class Interface:
 
     def __str__(self) -> str:
         return f"{self.name} {self.addresses} {self.mac_address} {self.port_type}"
+
+    @staticmethod
+    def get_interface_fields() -> list[str]:
+        """
+        Returns a list of field names for the Interface model.
+        This method provides a list of the attributes that are relevant for comparison
+        or synchronization purposes when working with network interfaces.
+        Returns:
+            list[str]: A list of field names representing the attributes of the Interface model.
+        """
+        return list(Interface.__annotations__.keys())

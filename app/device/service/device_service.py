@@ -78,6 +78,7 @@ def find_hostinterface_ids(hostid: str) -> list[int]:
         "id": 1,
     }
     try:
+        log.logger.info("Finding Zabbix interface IDs for hostid %s.", hostid)
         response = requests.post(
             f"{zb_url}/api_jsonrpc.php", headers=headers, json=payload, timeout=30
         )
@@ -88,6 +89,8 @@ def find_hostinterface_ids(hostid: str) -> list[int]:
             log.logger.error("Error in Zabbix API response: %s", result["error"])
             return []
         interface = result.get("result", [])
+        for iface in interface:
+            log.logger.info("Found Zabbix interface ID: %s for hostid %s.", iface["interfaceid"], hostid)
         return [int(iface["interfaceid"]) for iface in interface]
     except requests.exceptions.RequestException as e:
         log.logger.error("Failed to find Zabbix interface IDs for hostid %s: %s", hostid, e)
@@ -459,6 +462,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
             try:
                 config_context = device["config_context"] if isinstance(device["config_context"], dict) else {}
                 custom_fields = device["custom_fields"] if device["custom_fields"] else {}
+                role_name = device["role"]["name"] if device["role"] else None
 
                 # Check if device has required Zabbix configuration
                 has_zabbix_config = (
@@ -466,6 +470,8 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                      and "templates" in config_context["zabbix"]
                      and "port_type" in config_context["zabbix"])
                     or custom_fields["zabbix_templates"]
+                    or (role_name and role_name in device_role_map and device_role_map[role_name])
+                    or (role_name and role_name in device_role_port_type_map and device_role_port_type_map[role_name])
                 )
 
                 if not has_zabbix_config:

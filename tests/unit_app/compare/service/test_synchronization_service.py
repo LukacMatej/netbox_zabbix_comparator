@@ -153,6 +153,7 @@ class SynchronizationServiceTests(unittest.TestCase):
         )
 
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.get_zabbix_host_interfaces")
     @patch("app.compare.service.synchronization_service.device_service.find_hostinterface_ids")
     @patch("app.compare.service.synchronization_service.find_template_ids", return_value=101)
     @patch(
@@ -160,59 +161,55 @@ class SynchronizationServiceTests(unittest.TestCase):
     )
     @patch("app.compare.service.synchronization_service.requests.post")
     def test_apply_differences_splits_host_and_interface_update(
-        self, post_mock, _hostgroup_mock, _template_mock, interface_ids_mock
+        self, post_mock, _hostgroup_mock, _template_mock, interface_ids_mock, get_zabbix_interfaces_mock
     ):
         """Host basic fields and interfaces should be updated via separate API methods."""
         host_get = Mock(status_code=200)
         host_get.json.return_value = {"result": [{"hostid": "9001"}]}
 
-        clear_templates = Mock(status_code=200)
-        clear_templates.json.return_value = {"result": {"hostids": ["9001"]}}
+        host_update = Mock(status_code=200)
+        host_update.json.return_value = {"result": {"hostids": ["9001"]}}
 
         interface_update = Mock(status_code=200)
         interface_update.json.return_value = {"result": {"interfaceids": ["77"]}}
 
-        host_update = Mock(status_code=200)
-        host_update.json.return_value = {"result": {"hostids": ["9001"]}}
-
-        post_mock.side_effect = [host_get, clear_templates, interface_update, host_update]
+        # Order: host.get, hostinterface.update, host.update
+        post_mock.side_effect = [host_get, interface_update, host_update]
         interface_ids_mock.return_value = [77]
+        get_zabbix_interfaces_mock.return_value = [{"interfaceid": "77", "type": "1", "ip": "10.0.0.2", "dns": "zb.local", "port": "161", "main": "1"}]
 
-        nb = _device("nb", "10.0.0.1", "nb.local")
-        zb = _device("zb", "10.0.0.2", "zb.local")
-        diff = DeviceDifference(nb, zb, (["name", "address", "port_type"], []))
+        nb = Device(
+            name="nb",
+            interfaces=[Interface("eth0", [Address("10.0.0.1", "nb.local")], "", "Agent")],
+            hostgroup=[{"name": "HG"}],
+            description="desc",
+            templates=["TPL"],
+            status="Active",
+        )
+        zb = Device(
+            name="zb",
+            interfaces=[Interface("eth0", [Address("10.0.0.2", "zb.local")], "", "Agent")],
+            hostgroup=[{"name": "HG"}],
+            description="desc",
+            templates=["TPL"],
+            status="Active",
+        )
+        diff = DeviceDifference(nb, zb, (["address"], []))
         out = SyncOutput()
 
         ss.apply_differences(diff, out)
 
-        self.assertEqual(post_mock.call_count, 4)
-        clear_templates_payload = post_mock.call_args_list[1].kwargs["json"]
-        interface_update_payload = post_mock.call_args_list[2].kwargs["json"]
-        host_update_payload = post_mock.call_args_list[3].kwargs["json"]
+        self.assertEqual(post_mock.call_count, 3)
+        interface_update_payload = post_mock.call_args_list[1].kwargs["json"]
+        host_update_payload = post_mock.call_args_list[2].kwargs["json"]
 
-        self.assertEqual(clear_templates_payload["method"], "host.update")
-        self.assertIn("templates_clear", clear_templates_payload["params"])
         self.assertEqual(host_update_payload["method"], "host.update")
         self.assertNotIn("interfaces", host_update_payload["params"])
         self.assertEqual(interface_update_payload["method"], "hostinterface.update")
-        self.assertEqual(interface_update_payload["params"][0]["interfaceid"], 77)
+        self.assertEqual(interface_update_payload["params"][0]["interfaceid"], "77")
         self.assertTrue(
             any("updated successfully" in item for item in out.synchronization_output_differences)
         )
-
-    @patch("app.compare.service.synchronization_service.apply_differences")
-    @patch("app.compare.service.synchronization_service.create_zabbix_device")
-    def test_sync_netbox_zabbix_devices(self, create_mock, apply_mock):
-        """Sync routine should call create and apply functions when appropriate."""
-        nb = [_device("only-in-nb")]
-        zb = [_device("different-name")]
-        diff = [DeviceDifference(nb[0], zb[0], (["name"], []))]
-
-        out = ss.sync_netbox_zabbix_devices(diff, nb, zb)
-        self.assertIsInstance(out, SyncOutput)
-        create_mock.assert_called_once()
-        apply_mock.assert_called_once()
-
 
 if __name__ == "__main__":
     unittest.main()

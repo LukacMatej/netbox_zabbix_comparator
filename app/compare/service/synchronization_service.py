@@ -40,6 +40,207 @@ from app.device.service import device_service
 REQUEST_TIMEOUT = 30
 
 
+def get_zabbix_host_interfaces(hostid: str) -> list[dict]:
+    """Fetches detailed interface information for a Zabbix host.
+    Args:
+        hostid (str): The Zabbix host ID.
+    Returns:
+        list[dict]: List of interface details including interfaceid, type, ip, dns, etc.
+    """
+    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
+    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    if zabbix_ip is None or zabbix_key is None:
+        log.logger.error("Zabbix IP or API key not set in environment variables.")
+        return []
+
+    headers: dict[str, str] = {
+        "Authorization": f"Bearer {zabbix_key}",
+        "Content-Type": "application/json-rpc",
+    }
+
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "hostinterface.get",
+        "params": {
+            "hostids": hostid,
+            "output": ["interfaceid", "type", "ip", "dns", "port", "main"],
+        },
+        "id": 1,
+    }
+
+    try:
+        response: requests.Response = requests.post(
+            zabbix_ip + "/api_jsonrpc.php",
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+            json=payload,
+        )
+        response_json = response.json()
+
+        if "error" in response_json:
+            log.logger.error("Error fetching interfaces from Zabbix: %s", response_json["error"])
+            return []
+
+        interfaces = response_json.get("result", [])
+        log.logger.info("Retrieved %d interface(s) from Zabbix host %s.", len(interfaces), hostid)
+        for idx, iface in enumerate(interfaces):
+            log.logger.debug("Interface %d: %s", idx, iface)
+        return interfaces
+    except requests.exceptions.RequestException as e:
+        log.logger.error("Exception when fetching interfaces from Zabbix: %s", str(e))
+        return []
+
+
+def add_interface_to_zabbix(hostid: str, interfaces: list[interface_model], sync_output: sync_output_model, existing_interfaces: list[dict] = None):
+    """Adds new interfaces to a Zabbix host via API.
+    Args:
+        hostid (str): The Zabbix host ID to add interfaces to.
+        interfaces (list[interface_model]): List of interface models to add.
+        sync_output (sync_output_model): The synchronization output model to log results.
+        existing_interfaces (list[dict]): List of existing interface details from Zabbix (optional). Each dict should contain 'type' and 'main' keys.
+    """
+    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
+    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    if zabbix_ip is None or zabbix_key is None:
+        log.logger.error("Zabbix IP or API key not set in environment variables.")
+        return
+
+    headers: dict[str, str] = {
+        "Authorization": f"Bearer {zabbix_key}",
+        "Content-Type": "application/json-rpc",
+    }
+
+    if existing_interfaces is None:
+        existing_interfaces = []
+
+    # Prepare interface data for creation
+    interface_params = []
+    for index, interface in enumerate(interfaces):
+        # Ensure port_type is in numeric format
+        port_type = device_service.uniform_port_type(interface.port_type, numbered=True)
+
+        # Check if there's already a primary (main=1) interface for this type
+        has_primary_for_type = any(
+            iface.get("type") == port_type and iface.get("main") == "1"
+            for iface in existing_interfaces
+        )
+        # If no primary exists for this type, mark this as main; otherwise mark as secondary
+        is_main = 0 if has_primary_for_type else 1
+        log.logger.debug("Interface type '%s': has_primary=%s, setting main=%d", port_type, has_primary_for_type, is_main)
+
+        interface_data = {
+            "hostid": hostid,
+            "type": port_type if port_type in ("1", "2", "3", "4") else "1",
+            "main": is_main,
+            "useip": 1,
+            "ip": (
+                str(interface.addresses[0].address).split("/", maxsplit=1)[0]
+                if interface.addresses
+                else ""
+            ),
+            "dns": interface.addresses[0].dns_name if interface.addresses else "",
+            "port": 161,
+        }
+        interface_params.append(interface_data)
+
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "hostinterface.create",
+        "params": interface_params,
+        "id": 1,
+    }
+
+    try:
+        log.logger.info("Adding %d interface(s) to Zabbix host %s.", len(interfaces), hostid)
+        response: requests.Response = requests.post(
+            zabbix_ip + "/api_jsonrpc.php",
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+            json=payload,
+        )
+        response_json = response.json()
+
+        if "error" in response_json:
+            error_msg = f"Failed to add interfaces to Zabbix host {hostid}: {response_json['error']}"
+            sync_output.add_difference_output(error_msg)
+            log.logger.error(error_msg)
+            return
+
+        if response.status_code == 200:
+            interfaceids = response_json.get("result", {}).get("interfaceids", [])
+            success_msg = f"Successfully added {len(interfaceids)} interface(s) to Zabbix host {hostid}."
+            sync_output.add_difference_output(success_msg)
+            log.logger.info(success_msg)
+        else:
+            error_msg = f"Unexpected status code {response.status_code} when adding interfaces."
+            sync_output.add_difference_output(error_msg)
+            log.logger.error(error_msg)
+    except requests.exceptions.RequestException as e:
+        error_msg = f"Exception when adding interfaces to Zabbix: {str(e)}"
+        sync_output.add_difference_output(error_msg)
+        log.logger.error(error_msg)
+
+
+def remove_interface_from_zabbix(hostid: str, interface_ids: list[int], sync_output: sync_output_model):
+    """Removes interfaces from a Zabbix host via API.
+    Args:
+        hostid (str): The Zabbix host ID (for logging purposes).
+        interface_ids (list[int]): List of interface IDs to remove.
+        sync_output (sync_output_model): The synchronization output model to log results.
+    """
+    if not interface_ids:
+        log.logger.info("No interfaces to remove from Zabbix host %s.", hostid)
+        return
+
+    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
+    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    if zabbix_ip is None or zabbix_key is None:
+        log.logger.error("Zabbix IP or API key not set in environment variables.")
+        return
+
+    headers: dict[str, str] = {
+        "Authorization": f"Bearer {zabbix_key}",
+        "Content-Type": "application/json-rpc",
+    }
+
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "hostinterface.delete",
+        "params": interface_ids,
+        "id": 1,
+    }
+
+    try:
+        log.logger.info("Removing %d interface(s) from Zabbix host %s.", len(interface_ids), hostid)
+        response: requests.Response = requests.post(
+            zabbix_ip + "/api_jsonrpc.php",
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+            json=payload,
+        )
+        response_json = response.json()
+
+        if "error" in response_json:
+            error_msg = f"Failed to remove interfaces from Zabbix host {hostid}: {response_json['error']}"
+            sync_output.add_difference_output(error_msg)
+            log.logger.error(error_msg)
+            return
+
+        if response.status_code == 200:
+            interfaceids = response_json.get("result", {}).get("interfaceids", [])
+            success_msg = f"Successfully removed {len(interfaceids)} interface(s) from Zabbix host {hostid}."
+            sync_output.add_difference_output(success_msg)
+            log.logger.info(success_msg)
+        else:
+            error_msg = f"Unexpected status code {response.status_code} when removing interfaces."
+            sync_output.add_difference_output(error_msg)
+            log.logger.error(error_msg)
+    except requests.exceptions.RequestException as e:
+        error_msg = f"Exception when removing interfaces from Zabbix: {str(e)}"
+        sync_output.add_difference_output(error_msg)
+        log.logger.error(error_msg)
+
+
 def find_hostgroup_id(hostgroup_name: str) -> int:
     """Finds the Zabbix hostgroup ID based on the provided hostgroup name.
     Args:
@@ -250,6 +451,99 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     )
     log.logger.info("Zabbix Device after update %s", device_service.print_device(zb_device))
 
+    # Handle missing and extra interfaces
+    interfaces_to_add = []
+    interface_ids_to_remove = []
+
+    log.logger.info("Processing interface differences. Different fields: %s", different_fields)
+
+    # Get all Zabbix interfaces once if needed
+    zb_interface_details: list[dict] = []
+    # Check for interface-related changes: missing/extra interfaces or field changes (address, dns, port)
+    has_interface_changes = any("missing in Zabbix" in field or "extra in Zabbix" in field for field in different_fields)
+    has_interface_field_changes_check = any(
+        "address" in field or "dns" in field or "port" in field or "Interface" in field
+        for field in different_fields
+    )
+    log.logger.info("Has interface changes: %s", has_interface_changes)
+
+    if has_interface_changes or has_interface_field_changes_check:
+        zb_interface_details = get_zabbix_host_interfaces(hostid)
+        log.logger.info("Retrieved %d interface details from Zabbix", len(zb_interface_details))
+
+    for field in different_fields:
+        log.logger.debug("Processing field: %s", field)
+
+        if "missing in Zabbix" in field:
+            log.logger.info("Field indicates missing interface: %s", field)
+            # Extract port_type from message: "Interface with port_type 'X' missing in Zabbix"
+            port_type = field.split("'")[1] if "'" in field else ""
+            log.logger.info("Extracted port_type for missing interface: %s", port_type)
+
+            if port_type:
+                # Convert port_type name to numeric code to match NetBox device model
+                nb_port_type_code = device_service.uniform_port_type(port_type, numbered=True)
+                log.logger.info("Converted port_type '%s' to NetBox port_type code '%s'", port_type, nb_port_type_code)
+                log.logger.debug("Available port_types in NetBox device: %s",
+                    [getattr(iface, "port_type", "N/A") for iface in nb_device.interfaces])
+
+                # Find matching interface in NetBox by port_type code
+                nb_matching_interfaces = [
+                    iface for iface in nb_device.interfaces
+                    if getattr(iface, "port_type", "") == nb_port_type_code
+                ]
+                log.logger.info("Found %d matching interfaces in NetBox with port_type '%s' (code: '%s')",
+                    len(nb_matching_interfaces), port_type, nb_port_type_code)
+
+                if nb_matching_interfaces:
+                    interfaces_to_add.extend(nb_matching_interfaces)
+                    log.logger.info(
+                        "Added %d interface(s) with port_type '%s' to add list for device %s.",
+                        len(nb_matching_interfaces),
+                        port_type,
+                        zb_device.name,
+                    )
+                    sync_output.add_difference_output(
+                        f"Interface with port_type '{port_type}' will be added to {zb_device.name} in Zabbix."
+                    )
+
+        elif "extra in Zabbix" in field:
+            log.logger.info("Field indicates extra interface: %s", field)
+            # Extract port_type from message: "Interface with port_type 'X' extra in Zabbix"
+            port_type = field.split("'")[1] if "'" in field else ""
+            log.logger.info("Extracted port_type for extra interface: %s", port_type)
+            if port_type:
+                # Convert port_type name to Zabbix type code
+                zabbix_type_code = device_service.uniform_port_type(port_type, numbered=True)
+                log.logger.info("Converted port_type '%s' to Zabbix type code '%s'", port_type, zabbix_type_code)
+
+                # Find the interface in Zabbix details by type code and collect its ID
+                for zb_iface in zb_interface_details:
+                    if zb_iface.get("type") == zabbix_type_code:
+                        interface_ids_to_remove.append(zb_iface["interfaceid"])
+                        log.logger.info(
+                            "Found interface ID %s to remove (type: '%s' = '%s')",
+                            zb_iface["interfaceid"],
+                            zabbix_type_code,
+                            port_type,
+                        )
+
+                sync_output.add_difference_output(
+                    f"Extra interface with port_type '{port_type}' will be removed from {zb_device.name} in Zabbix."
+                )
+
+    log.logger.info("Interfaces to add: %d, Interface IDs to remove: %d", len(interfaces_to_add), len(interface_ids_to_remove))
+
+    # Make API calls to add interfaces to Zabbix
+    if interfaces_to_add:
+        log.logger.info("Making API call to add %d interface(s)", len(interfaces_to_add))
+        add_interface_to_zabbix(hostid, interfaces_to_add, sync_output, zb_interface_details)
+
+    # Make API calls to remove interfaces from Zabbix
+    if interface_ids_to_remove:
+        log.logger.info("Making API call to remove %d interface(s)", len(interface_ids_to_remove))
+        remove_interface_from_zabbix(hostid, interface_ids_to_remove, sync_output)
+
     # Prefer updated Zabbix values, but fall back to Netbox if source data is missing.
     hostgroup_source = zb_device.hostgroup if zb_device.hostgroup else nb_device.hostgroup
     hostgroupids = find_zabbix_hostgroup_ids(hostgroup_source)
@@ -265,61 +559,78 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         templateids=templateids,
         include_interfaces=False,
     )
-    clear_templateids = [find_template_ids(template) for template in old_templateids if template]
-    clear_templates_data = zb_device.clear_templates_data_zabbix(hostid, templateids=clear_templateids)
-    log.logger.info(clear_templates_data)
-    clear_response: requests.Response = requests.post(
-        zabbix_ip + "/api_jsonrpc.php",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT,
-        json=clear_templates_data,
-    )
-    clear_response_json = clear_response.json()
-    if "error" in clear_response_json:
-        sync_output.add_difference_output(
-            f"Error clearing templates for device {zb_device.name} in Zabbix: {clear_response_json['error']['data']}"
-        )
-        log.logger.error(
-            "Error clearing templates for device %s in Zabbix: %s with response status %s.",
-            zb_device.name,
-            clear_response_json["error"],
-            clear_response.status_code,
-        )
-    else:
-        log.logger.info(
-            "Templates cleared for device %s in Zabbix with response status %s.",
-            zb_device.name,
-            clear_response.status_code,
-        )
 
-    interface_update_data_zabbix = zb_device.update_interface_data_zabbix(interface_ids)
-    log.logger.info(interface_update_data_zabbix)
-    interface_response: requests.Response = requests.post(
-        zabbix_ip + "/api_jsonrpc.php",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT,
-        json=interface_update_data_zabbix,
-    )
-    interface_response_json = interface_response.json()
-    if "error" not in interface_response_json:
-        sync_output.add_difference_output(
-            f"Interface for device {zb_device.name} updated successfully in Zabbix."
-        )
-        log.logger.info(
-            "Interface for device %s updated successfully in Zabbix with response status %s.",
-            zb_device.name,
-            interface_response.status_code,
-        )
-    else:
-        sync_output.add_difference_output(
-            f"Failed to update interface for device {zb_device.name} in Zabbix: {interface_response.text}"
-        )
-        log.logger.error(
-            "Failed to update interface for device %s in Zabbix: %s with response status %s.",
-            zb_device.name,
-            interface_response.text,
-            interface_response.status_code,
-        )
+# Update interface details if there are field changes
+    # Newly added interfaces won't be in the device model, so they'll be skipped naturally
+    # Only existing interfaces that match by type will be updated
+    if has_interface_field_changes_check:
+        log.logger.info("Interface field changes detected. Updating interface details from device model.")
+
+        # Build update params by matching device model interfaces with Zabbix interfaces by type
+        # This ensures we don't try to change interface types (which fails if items are linked)
+        interface_update_params = []
+        for zb_iface in zb_interface_details:
+            zabbix_type = zb_iface.get("type")
+            # Find matching interface in device model by type
+            for nb_iface in nb_device.interfaces:
+                nb_port_type = device_service.uniform_port_type(nb_iface.port_type, numbered=True)
+                if nb_port_type == zabbix_type:
+                    # Match found - only update IP, DNS, port (don't change type or main)
+                    ip_address = (
+                        str(nb_iface.addresses[0].address).split("/", maxsplit=1)[0]
+                        if nb_iface.addresses
+                        else ""
+                    )
+                    dns_name = nb_iface.addresses[0].dns_name if nb_iface.addresses else ""
+
+                    interface_update_params.append({
+                        "interfaceid": zb_iface["interfaceid"],
+                        "ip": ip_address,
+                        "dns": dns_name,
+                        "port": 161,
+                    })
+                    log.logger.debug(
+                        "Matched interface type %s: updating interfaceid %s with ip=%s, dns=%s",
+                        zabbix_type, zb_iface["interfaceid"], ip_address, dns_name
+                    )
+                    break
+
+        if interface_update_params:
+            interface_update_data_zabbix = {
+                "jsonrpc": "2.0",
+                "method": "hostinterface.update",
+                "params": interface_update_params,
+                "id": 1,
+            }
+            log.logger.info(interface_update_data_zabbix)
+            interface_response: requests.Response = requests.post(
+                zabbix_ip + "/api_jsonrpc.php",
+                headers=headers,
+                timeout=REQUEST_TIMEOUT,
+                json=interface_update_data_zabbix,
+            )
+            interface_response_json = interface_response.json()
+            if "error" not in interface_response_json:
+                sync_output.add_difference_output(
+                    f"Interface for device {zb_device.name} updated successfully in Zabbix."
+                )
+                log.logger.info(
+                    "Interface for device %s updated successfully in Zabbix with response status %s.",
+                    zb_device.name,
+                    interface_response.status_code,
+                )
+            else:
+                sync_output.add_difference_output(
+                    f"Failed to update interface for device {zb_device.name} in Zabbix: {interface_response.text}"
+                )
+                log.logger.error(
+                    "Failed to update interface for device %s in Zabbix: %s with response status %s.",
+                    zb_device.name,
+                    interface_response.text,
+                    interface_response.status_code,
+                )
+        else:
+            log.logger.info("No matching interfaces found between device model and Zabbix.")
 
     log.logger.info(update_data_zabbix)
     response: requests.Response = requests.post(
