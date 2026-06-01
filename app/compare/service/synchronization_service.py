@@ -560,11 +560,11 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
         include_interfaces=False,
     )
 
-# Only update interface details if we didn't add interfaces
-    # (newly added interfaces aren't in the device model, so we can't use its data to update them)
-    # Use the field change check we computed earlier
-    if not interfaces_to_add and has_interface_field_changes_check:
-        log.logger.info("Interface field changes detected. Updating remaining interface details from device model.")
+# Update interface details if there are field changes
+    # Newly added interfaces won't be in the device model, so they'll be skipped naturally
+    # Only existing interfaces that match by type will be updated
+    if has_interface_field_changes_check:
+        log.logger.info("Interface field changes detected. Updating interface details from device model.")
 
         # Build update params by matching device model interfaces with Zabbix interfaces by type
         # This ensures we don't try to change interface types (which fails if items are linked)
