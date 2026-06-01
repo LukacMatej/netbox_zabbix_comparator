@@ -459,10 +459,15 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
 
     # Get all Zabbix interfaces once if needed
     zb_interface_details: list[dict] = []
+    # Check for interface-related changes: missing/extra interfaces or field changes (address, dns, port)
     has_interface_changes = any("missing in Zabbix" in field or "extra in Zabbix" in field for field in different_fields)
+    has_interface_field_changes_check = any(
+        "address" in field or "dns" in field or "port" in field or "Interface" in field
+        for field in different_fields
+    )
     log.logger.info("Has interface changes: %s", has_interface_changes)
 
-    if has_interface_changes:
+    if has_interface_changes or has_interface_field_changes_check:
         zb_interface_details = get_zabbix_host_interfaces(hostid)
         log.logger.info("Retrieved %d interface details from Zabbix", len(zb_interface_details))
 
@@ -557,13 +562,8 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
 
 # Only update interface details if we didn't add interfaces
     # (newly added interfaces aren't in the device model, so we can't use its data to update them)
-    # Check if there are any interface-related field changes to apply
-    has_interface_field_changes = any(
-        "address" in field or "dns" in field or "port" in field or "Interface" in field
-        for field in different_fields
-    )
-
-    if not interfaces_to_add and has_interface_field_changes:
+    # Use the field change check we computed earlier
+    if not interfaces_to_add and has_interface_field_changes_check:
         log.logger.info("Interface field changes detected. Updating remaining interface details from device model.")
 
         # Build update params by matching device model interfaces with Zabbix interfaces by type
@@ -631,6 +631,14 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
                 )
         else:
             log.logger.info("No matching interfaces found between device model and Zabbix.")
+
+    log.logger.info(update_data_zabbix)
+    response: requests.Response = requests.post(
+        zabbix_ip + "/api_jsonrpc.php",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
+        json=update_data_zabbix,
+    )
     response_json = response.json()
     if "error" in response_json:
         sync_output.add_difference_output(

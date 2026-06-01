@@ -153,6 +153,7 @@ class SynchronizationServiceTests(unittest.TestCase):
         )
 
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.get_zabbix_host_interfaces")
     @patch("app.compare.service.synchronization_service.device_service.find_hostinterface_ids")
     @patch("app.compare.service.synchronization_service.find_template_ids", return_value=101)
     @patch(
@@ -160,7 +161,7 @@ class SynchronizationServiceTests(unittest.TestCase):
     )
     @patch("app.compare.service.synchronization_service.requests.post")
     def test_apply_differences_splits_host_and_interface_update(
-        self, post_mock, _hostgroup_mock, _template_mock, interface_ids_mock
+        self, post_mock, _hostgroup_mock, _template_mock, interface_ids_mock, get_zabbix_interfaces_mock
     ):
         """Host basic fields and interfaces should be updated via separate API methods."""
         host_get = Mock(status_code=200)
@@ -172,8 +173,10 @@ class SynchronizationServiceTests(unittest.TestCase):
         interface_update = Mock(status_code=200)
         interface_update.json.return_value = {"result": {"interfaceids": ["77"]}}
 
-        post_mock.side_effect = [host_get, host_update, interface_update]
+        # Order: host.get, hostinterface.update, host.update
+        post_mock.side_effect = [host_get, interface_update, host_update]
         interface_ids_mock.return_value = [77]
+        get_zabbix_interfaces_mock.return_value = [{"interfaceid": "77", "type": "1", "ip": "10.0.0.2", "dns": "zb.local", "port": "161", "main": "1"}]
 
         nb = Device(
             name="nb",
@@ -203,7 +206,7 @@ class SynchronizationServiceTests(unittest.TestCase):
         self.assertEqual(host_update_payload["method"], "host.update")
         self.assertNotIn("interfaces", host_update_payload["params"])
         self.assertEqual(interface_update_payload["method"], "hostinterface.update")
-        self.assertEqual(interface_update_payload["params"][0]["interfaceid"], 77)
+        self.assertEqual(interface_update_payload["params"][0]["interfaceid"], "77")
         self.assertTrue(
             any("updated successfully" in item for item in out.synchronization_output_differences)
         )
