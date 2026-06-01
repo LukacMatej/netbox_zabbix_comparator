@@ -565,47 +565,72 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
 
     if not interfaces_to_add and has_interface_field_changes:
         log.logger.info("Interface field changes detected. Updating remaining interface details from device model.")
-        interface_update_data_zabbix = zb_device.update_interface_data_zabbix(interface_ids)
-        log.logger.info(interface_update_data_zabbix)
-        interface_response: requests.Response = requests.post(
-            zabbix_ip + "/api_jsonrpc.php",
-            headers=headers,
-            timeout=REQUEST_TIMEOUT,
-            json=interface_update_data_zabbix,
-        )
-        interface_response_json = interface_response.json()
-        if "error" not in interface_response_json:
-            sync_output.add_difference_output(
-                f"Interface for device {zb_device.name} updated successfully in Zabbix."
-            )
-            log.logger.info(
-                "Interface for device %s updated successfully in Zabbix with response status %s.",
-                zb_device.name,
-                interface_response.status_code,
-            )
-        else:
-            sync_output.add_difference_output(
-                f"Failed to update interface for device {zb_device.name} in Zabbix: {interface_response.text}"
-            )
-            log.logger.error(
-                "Failed to update interface for device %s in Zabbix: %s with response status %s.",
-                zb_device.name,
-                interface_response.text,
-                interface_response.status_code,
-            )
-    else:
-        if interfaces_to_add:
-            log.logger.info("New interfaces were added. Skipping interface detail update (added interfaces not in device model).")
-        else:
-            log.logger.info("No interface field changes detected. Skipping interface detail update.")
 
-    log.logger.info(update_data_zabbix)
-    response: requests.Response = requests.post(
-        zabbix_ip + "/api_jsonrpc.php",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT,
-        json=update_data_zabbix,
-    )
+        # Build update params by matching device model interfaces with Zabbix interfaces by type
+        # This ensures we don't try to change interface types (which fails if items are linked)
+        interface_update_params = []
+        for zb_iface in zb_interface_details:
+            zabbix_type = zb_iface.get("type")
+            # Find matching interface in device model by type
+            for nb_iface in nb_device.interfaces:
+                nb_port_type = device_service.uniform_port_type(nb_iface.port_type, numbered=True)
+                if nb_port_type == zabbix_type:
+                    # Match found - only update IP, DNS, port (don't change type or main)
+                    ip_address = (
+                        str(nb_iface.addresses[0].address).split("/", maxsplit=1)[0]
+                        if nb_iface.addresses
+                        else ""
+                    )
+                    dns_name = nb_iface.addresses[0].dns_name if nb_iface.addresses else ""
+
+                    interface_update_params.append({
+                        "interfaceid": zb_iface["interfaceid"],
+                        "ip": ip_address,
+                        "dns": dns_name,
+                        "port": 161,
+                    })
+                    log.logger.debug(
+                        "Matched interface type %s: updating interfaceid %s with ip=%s, dns=%s",
+                        zabbix_type, zb_iface["interfaceid"], ip_address, dns_name
+                    )
+                    break
+
+        if interface_update_params:
+            interface_update_data_zabbix = {
+                "jsonrpc": "2.0",
+                "method": "hostinterface.update",
+                "params": interface_update_params,
+                "id": 1,
+            }
+            log.logger.info(interface_update_data_zabbix)
+            interface_response: requests.Response = requests.post(
+                zabbix_ip + "/api_jsonrpc.php",
+                headers=headers,
+                timeout=REQUEST_TIMEOUT,
+                json=interface_update_data_zabbix,
+            )
+            interface_response_json = interface_response.json()
+            if "error" not in interface_response_json:
+                sync_output.add_difference_output(
+                    f"Interface for device {zb_device.name} updated successfully in Zabbix."
+                )
+                log.logger.info(
+                    "Interface for device %s updated successfully in Zabbix with response status %s.",
+                    zb_device.name,
+                    interface_response.status_code,
+                )
+            else:
+                sync_output.add_difference_output(
+                    f"Failed to update interface for device {zb_device.name} in Zabbix: {interface_response.text}"
+                )
+                log.logger.error(
+                    "Failed to update interface for device %s in Zabbix: %s with response status %s.",
+                    zb_device.name,
+                    interface_response.text,
+                    interface_response.status_code,
+                )
+        else:
+            log.logger.info("No matching interfaces found between device model and Zabbix.")
     response_json = response.json()
     if "error" in response_json:
         sync_output.add_difference_output(
