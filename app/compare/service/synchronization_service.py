@@ -91,12 +91,13 @@ def get_zabbix_host_interfaces(hostid: str) -> list[dict]:
         return []
 
 
-def add_interface_to_zabbix(hostid: str, interfaces: list[interface_model], sync_output: sync_output_model):
+def add_interface_to_zabbix(hostid: str, interfaces: list[interface_model], sync_output: sync_output_model, existing_interfaces: list[dict] = None):
     """Adds new interfaces to a Zabbix host via API.
     Args:
         hostid (str): The Zabbix host ID to add interfaces to.
         interfaces (list[interface_model]): List of interface models to add.
         sync_output (sync_output_model): The synchronization output model to log results.
+        existing_interfaces (list[dict]): List of existing interface details from Zabbix (optional). Each dict should contain 'type' and 'main' keys.
     """
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
     zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
@@ -109,18 +110,23 @@ def add_interface_to_zabbix(hostid: str, interfaces: list[interface_model], sync
         "Content-Type": "application/json-rpc",
     }
 
-    # Get existing interfaces to determine the main interface index
-    interface_ids = device_service.find_hostinterface_ids(hostid)
-    existing_interface_count = len(interface_ids)
+    if existing_interfaces is None:
+        existing_interfaces = []
 
     # Prepare interface data for creation
     interface_params = []
     for index, interface in enumerate(interfaces):
-        # The first interface (index 0) should be the main interface if no others exist
-        is_main = 1 if existing_interface_count == 0 and index == 0 else 0
-
         # Ensure port_type is in numeric format
         port_type = device_service.uniform_port_type(interface.port_type, numbered=True)
+
+        # Check if there's already a primary (main=1) interface for this type
+        has_primary_for_type = any(
+            iface.get("type") == port_type and iface.get("main") == "1"
+            for iface in existing_interfaces
+        )
+        # If no primary exists for this type, mark this as main; otherwise mark as secondary
+        is_main = 0 if has_primary_for_type else 1
+        log.logger.debug("Interface type '%s': has_primary=%s, setting main=%d", port_type, has_primary_for_type, is_main)
 
         interface_data = {
             "hostid": hostid,
@@ -526,7 +532,7 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
     # Make API calls to add interfaces to Zabbix
     if interfaces_to_add:
         log.logger.info("Making API call to add %d interface(s)", len(interfaces_to_add))
-        add_interface_to_zabbix(hostid, interfaces_to_add, sync_output)
+        add_interface_to_zabbix(hostid, interfaces_to_add, sync_output, zb_interface_details)
 
     # Make API calls to remove interfaces from Zabbix
     if interface_ids_to_remove:
