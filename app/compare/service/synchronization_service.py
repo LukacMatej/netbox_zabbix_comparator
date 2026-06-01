@@ -491,8 +491,8 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             # Extract port_type from message: "Interface with port_type 'X' extra in Zabbix"
             port_type = field.split("'")[1] if "'" in field else ""
             log.logger.info("Extracted port_type for extra interface: %s", port_type)
-
             if port_type:
+                port_type = device_service.uniform_port_type(port_type)
                 # Collect interfaces to remove by port_type from the device model
                 interfaces_to_remove_by_type = [
                     iface for iface in zb_device.interfaces
