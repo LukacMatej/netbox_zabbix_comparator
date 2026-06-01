@@ -119,9 +119,12 @@ def add_interface_to_zabbix(hostid: str, interfaces: list[interface_model], sync
         # The first interface (index 0) should be the main interface if no others exist
         is_main = 1 if existing_interface_count == 0 and index == 0 else 0
 
+        # Ensure port_type is in numeric format
+        port_type = device_service.uniform_port_type(interface.port_type, numbered=True)
+
         interface_data = {
             "hostid": hostid,
-            "type": interface.port_type if interface.port_type in ("1", "2", "3", "4") else "1",
+            "type": port_type if port_type in ("1", "2", "3", "4") else "1",
             "main": is_main,
             "useip": 1,
             "ip": (
@@ -467,12 +470,19 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             log.logger.info("Extracted port_type for missing interface: %s", port_type)
 
             if port_type:
-                # Find matching interface in NetBox by port_type
+                # Convert port_type name to numeric code to match NetBox device model
+                nb_port_type_code = device_service.uniform_port_type(port_type, numbered=True)
+                log.logger.info("Converted port_type '%s' to NetBox port_type code '%s'", port_type, nb_port_type_code)
+                log.logger.debug("Available port_types in NetBox device: %s",
+                    [getattr(iface, "port_type", "N/A") for iface in nb_device.interfaces])
+
+                # Find matching interface in NetBox by port_type code
                 nb_matching_interfaces = [
                     iface for iface in nb_device.interfaces
-                    if getattr(iface, "port_type", "") == port_type
+                    if getattr(iface, "port_type", "") == nb_port_type_code
                 ]
-                log.logger.info("Found %d matching interfaces in NetBox with port_type '%s'", len(nb_matching_interfaces), port_type)
+                log.logger.info("Found %d matching interfaces in NetBox with port_type '%s' (code: '%s')",
+                    len(nb_matching_interfaces), port_type, nb_port_type_code)
 
                 if nb_matching_interfaces:
                     interfaces_to_add.extend(nb_matching_interfaces)
