@@ -492,50 +492,20 @@ def apply_differences(differences: device_difference_model, sync_output: sync_ou
             port_type = field.split("'")[1] if "'" in field else ""
             log.logger.info("Extracted port_type for extra interface: %s", port_type)
             if port_type:
-                port_type = device_service.uniform_port_type(port_type)
-                # Collect interfaces to remove by port_type from the device model
-                interfaces_to_remove_by_type = [
-                    iface for iface in zb_device.interfaces
-                    if getattr(iface, "port_type", "") == port_type
-                ]
-                log.logger.info("Found %d interface(s) in device model with port_type '%s'", len(interfaces_to_remove_by_type), port_type)
-                log.logger.debug("Zabbix interfaces in device model: %s",
-                    [(getattr(iface, "port_type", ""), [addr.address for addr in iface.addresses if iface.addresses]) for iface in zb_device.interfaces])
+                # Convert port_type name to Zabbix type code
+                zabbix_type_code = device_service.uniform_port_type(port_type, numbered=True)
+                log.logger.info("Converted port_type '%s' to Zabbix type code '%s'", port_type, zabbix_type_code)
 
-                if interfaces_to_remove_by_type:
-                    # Match interfaces from device model by IP/DNS to get interface IDs from Zabbix
-                    for iface_to_remove in interfaces_to_remove_by_type:
-                        iface_ip = (
-                            str(iface_to_remove.addresses[0].address).split("/", maxsplit=1)[0]
-                            if iface_to_remove.addresses
-                            else ""
+                # Find the interface in Zabbix details by type code and collect its ID
+                for zb_iface in zb_interface_details:
+                    if zb_iface.get("type") == zabbix_type_code:
+                        interface_ids_to_remove.append(zb_iface["interfaceid"])
+                        log.logger.info(
+                            "Found interface ID %s to remove (type: '%s' = '%s')",
+                            zb_iface["interfaceid"],
+                            zabbix_type_code,
+                            port_type,
                         )
-                        iface_dns = (
-                            iface_to_remove.addresses[0].dns_name
-                            if iface_to_remove.addresses
-                            else ""
-                        )
-                        log.logger.info("Looking for interface to remove with IP: %s, DNS: %s, port_type: %s", iface_ip, iface_dns, port_type)
-
-                        # Match by IP or DNS in the Zabbix interface details
-                        for zb_iface in zb_interface_details:
-                            zb_iface_ip = zb_iface.get("ip", "")
-                            zb_iface_dns = zb_iface.get("dns", "")
-                            log.logger.debug("Comparing with Zabbix interface - IP: %s, DNS: %s, type: %s", zb_iface_ip, zb_iface_dns, zb_iface.get("type"))
-
-                            if (zb_iface_ip == iface_ip or zb_iface_dns == iface_dns) and zb_iface_ip:
-                                interface_ids_to_remove.append(zb_iface["interfaceid"])
-                                log.logger.info(
-                                    "Found interface ID %s to remove (IP: %s, port_type: '%s')",
-                                    zb_iface["interfaceid"],
-                                    zb_iface_ip,
-                                    port_type,
-                                )
-                                break
-                else:
-                    log.logger.warning("No interfaces found in device model with port_type '%s'. Available port_types: %s",
-                        port_type,
-                        [getattr(iface, "port_type", "N/A") for iface in zb_device.interfaces])
 
                 sync_output.add_difference_output(
                     f"Extra interface with port_type '{port_type}' will be removed from {zb_device.name} in Zabbix."
