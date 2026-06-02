@@ -50,6 +50,9 @@ from app.compare.service import synchronization_service as synchronize
 from app.device.service import validator_service as validator
 
 proxy_root_path: str = os.environ.get("PROXY_ROOT_PATH", "")
+# Ensure root_path starts with / if provided
+if proxy_root_path and not proxy_root_path.startswith("/"):
+    proxy_root_path = "/" + proxy_root_path
 app = FastAPI(root_path=proxy_root_path, title="NetBox Zabbix Compare")
 templates = Jinja2Templates(directory="templates")
 
