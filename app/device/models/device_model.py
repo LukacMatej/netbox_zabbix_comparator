@@ -146,7 +146,7 @@ class Device:
                         else ""
                     ),
                     "dns": self.interfaces[index].addresses[0].dns_name if self.interfaces[index].addresses else "",
-                    "port": 161,
+                    "port": map_port_type_default_port(self.interfaces[index].port_type),
                     "details": {"version": 3},
                 }
             )
@@ -186,23 +186,6 @@ class Device:
             "id": 1,
         }
 
-    # def create_data_netbox(self) -> dict:
-    #     """Creates a dictionary representation of the device for Netbox API."""
-    #     return {
-    #         "name": self.name,
-    #         "device_type": ds.find_nb_device_type_id("Catalyst 2970 Series"),
-    #         # Replace with actual device type
-    #         "role": ds.find_nb_device_role_id(str(self.hostgroup).split("/")[2]),
-    #         "site": ds.find_nb_site_id(str(self.hostgroup).split("/",maxsplit=1)[0]),
-    #         "status": format_nb_status(self.status),
-    #         "local_context_data": {
-    #             "zabbix": {
-    #                 "templates": [
-    #                     str(template) for template in self.templates if template
-    #                 ]
-    #                 }
-    #         }
-    #     }
     @staticmethod
     def get_device_fields() -> list[str]:
         """Returns a list of device fields for comparison."""
@@ -242,24 +225,6 @@ def format_nb_status(status: str) -> str:
         "Decommissioning": "decommissioning",
     }
     return status_map.get(status, "offline")
-
-
-# def map_port_type(port_type: str) -> str:
-#     """Maps the port type to a Netbox compatible format."""
-#     if isinstance(port_type, list):
-#         port_type = port_type[0] if port_type else ""
-#     port_type_map: dict[str, str] = {
-#         "Agent": "1",
-#         "SNMP": "2",
-#         "IPMI": "3",
-#         "JMX": "4",
-#         "1": "1",
-#         "2": "2",
-#         "3": "3",
-#         "4": "4",
-#     }
-#     return port_type_map.get(port_type, "1")
-
 
 def normalize_status(status: str) -> str:
     """
@@ -312,7 +277,7 @@ def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
                         else ""
                     ),
                     "dns": interface.addresses[0].dns_name if interface.addresses else "",
-                    "port": 161,
+                    "port": map_port_type_default_port(interface.port_type),
                 }
             )
         elif interface.port_type in ("2", "SNMP"):
@@ -327,7 +292,7 @@ def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
                         else ""
                     ),
                     "dns": interface.addresses[0].dns_name if interface.addresses else "",
-                    "port": 161,
+                    "port": map_port_type_default_port(interface.port_type),
                     "details": {"version": 3},
                 }
             )
@@ -343,7 +308,7 @@ def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
                         else ""
                     ),
                     "dns": interface.addresses[0].dns_name if interface.addresses else "",
-                    "port": 161,
+                    "port": map_port_type_default_port(interface.port_type),
                     "details": {"version": 3},
                 }
             )
@@ -366,8 +331,28 @@ def dict_interfaces_zb_id(interfaces: list[InterfaceModel], interface_id) -> lis
                     else ""
                 ),
                 "dns": interface.addresses[0].dns_name if interface.addresses else "",
-                "port": 161,
+                "port": map_port_type_default_port(interface.port_type),
                 "details": {"version": 3},
             }
         )
     return result
+
+def map_port_type_default_port(port_type: str) -> str:
+    """
+    Maps the port type to its default port number.
+    Args:
+        port_type (str): The port type to be mapped.
+    Returns:
+        str: The default port number corresponding to the given port type.
+    """
+    port_map = {
+        "1": "10050",
+        "2": "161",
+        "3": "623",
+        "4": "12345",
+        "Agent": "10050",
+        "SNMP": "161",
+        "IPMI": "623",
+        "JMX": "12345",
+    }
+    return port_map.get(port_type, "161")
