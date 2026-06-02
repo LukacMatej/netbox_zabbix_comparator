@@ -49,8 +49,11 @@ from app.logger import logger_conf as log
 from app.compare.service import synchronization_service as synchronize
 from app.device.service import validator_service as validator
 
-
-app = FastAPI(title="NetBox Zabbix Compare")
+proxy_root_path: str = os.environ.get("PROXY_ROOT_PATH", "")
+# Ensure root_path starts with / if provided
+if proxy_root_path and not proxy_root_path.startswith("/"):
+    proxy_root_path = "/" + proxy_root_path
+app = FastAPI(root_path=proxy_root_path, title="NetBox Zabbix Compare")
 templates = Jinja2Templates(directory="templates")
 
 
@@ -68,13 +71,14 @@ def test(request: Request) -> HTMLResponse:
         request,
         "index.html",
         {
+            "request": request,
             "netbox_url": netbox_url,
             "zabbix_url": zabbix_url
         },
         status_code=200)
 
 
-@app.get("/run_comparison", response_class=HTMLResponse)
+@app.get("/run_comparison", name="run_comparison", response_class=HTMLResponse)
 def run_compare(request: Request) -> Response:
     """
     Compare devices between Netbox and Zabbix systems.
@@ -146,7 +150,7 @@ def run_compare(request: Request) -> Response:
     )
 
 
-@app.get("/run_comparison_sync", response_class=HTMLResponse)
+@app.get("/run_comparison_sync", name="run_comparison_sync", response_class=HTMLResponse)
 def run_compare_sync(request: Request) -> Response:
     """
     Execute a comparison and synchronization between NetBox and Zabbix devices.
