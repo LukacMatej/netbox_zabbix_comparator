@@ -14,6 +14,7 @@ docker run -d \
   -e NETBOX_KEY=<Netbox API klíč> \
   -e ZABBIX_IP=<IP Adresa Zabbixu s http:/> \
   -e ZABBIX_KEY=<Zabbix API klíč> \
+  -e PROXY_ROOT_PATH=<dev|prod>
   netbox-zabbix
 ```
 
