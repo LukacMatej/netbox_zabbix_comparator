@@ -75,7 +75,7 @@ def test(request: Request) -> HTMLResponse:
         status_code=200)
 
 
-@app.get("/run_comparison", response_class=HTMLResponse)
+@app.get("/run_comparison", name="run_comparison", response_class=HTMLResponse)
 def run_compare(request: Request) -> Response:
     """
     Compare devices between Netbox and Zabbix systems.
@@ -147,7 +147,7 @@ def run_compare(request: Request) -> Response:
     )
 
 
-@app.get("/run_comparison_sync", response_class=HTMLResponse)
+@app.get("/run_comparison_sync", name="run_comparison_sync", response_class=HTMLResponse)
 def run_compare_sync(request: Request) -> Response:
     """
     Execute a comparison and synchronization between NetBox and Zabbix devices.
