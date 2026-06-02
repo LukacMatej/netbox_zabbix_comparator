@@ -49,8 +49,8 @@ from app.logger import logger_conf as log
 from app.compare.service import synchronization_service as synchronize
 from app.device.service import validator_service as validator
 
-
-app = FastAPI(title="NetBox Zabbix Compare")
+proxy_root_path: str = os.environ.get("PROXY_ROOT_PATH", "")
+app = FastAPI(root_path=proxy_root_path, title="NetBox Zabbix Compare")
 templates = Jinja2Templates(directory="templates")
 
 
@@ -68,6 +68,7 @@ def test(request: Request) -> HTMLResponse:
         request,
         "index.html",
         {
+            "request": request,
             "netbox_url": netbox_url,
             "zabbix_url": zabbix_url
         },

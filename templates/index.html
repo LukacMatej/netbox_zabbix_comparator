@@ -111,7 +111,7 @@
                 type="button"
                 class="menu-action"
                 style="border-bottom: 1px solid #eee;"
-                hx-get="/run_comparison"
+                hx-get="{{ url_for('run_comparison') }}"
                 hx-target="#page-content"
                 hx-swap="innerHTML"
                 hx-indicator="#comparison-loading"
@@ -120,7 +120,7 @@
             <button
                 type="button"
                 class="menu-action"
-                hx-get="/run_comparison_sync"
+                hx-get="{{ url_for('run_comparison_sync') }}"
                 hx-target="#page-content"
                 hx-swap="innerHTML"
                 hx-indicator="#comparison-loading"
