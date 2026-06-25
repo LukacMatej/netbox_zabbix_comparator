@@ -31,7 +31,6 @@ Dependencies:
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 
@@ -43,7 +42,6 @@ from fastapi.templating import Jinja2Templates
 
 from app.compare.service import compare_service as ct
 from app.compare.service import synchronization_service as ss
-from app.compare.service import synchronization_service as synchronize
 from app.device.models.device_model import Device
 from app.device.models.difference_model import DeviceDifference
 from app.device.models.synchonization_output_model import (
@@ -200,7 +198,7 @@ def run_compare_sync(request: Request) -> Response:
         zabbix_devices,
     )
     ds.map_port_type_device(netbox_devices, zabbix_devices, numbered=True)
-    sync_output: sync_output_model = ss.sync_netbox_zabbix_devices(
+    sync_output = ss.sync_netbox_zabbix_devices(
         netbox_devices=netbox_devices,
         zabbix_devices=zabbix_devices,
         differences=differences,
