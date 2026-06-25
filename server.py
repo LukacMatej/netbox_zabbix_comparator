@@ -257,9 +257,9 @@ async def validate_update(request: Request):
     )
     log.logger.debug("Full request data: %s", data)
 
-    if event_type not in ["update", "updated", "created", "deleted"]:
+    if event_type not in ["updated", "created", "deleted"]:
         log.logger.warning(
-            "Invalid event type: %s (expected 'update', 'updated', 'created', or 'deleted')",
+            "Invalid event type: %s (expected 'updated', 'created', or 'deleted')",
             event_type,
         )
         return JSONResponse(
