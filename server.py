@@ -33,21 +33,23 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+
 import requests
 import uvicorn
-import json
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
+
 from app.compare.service import compare_service as ct
 from app.compare.service import synchronization_service as ss
-from app.device.models.synchonization_output_model import SyncOutput as sync_output_model
-from app.device.service import device_service as ds
-from app.device.models.difference_model import DeviceDifference
 from app.device.models.device_model import Device
-from app.logger import logger_conf as log
-from app.compare.service import synchronization_service as synchronize
+from app.device.models.difference_model import DeviceDifference
+from app.device.models.synchonization_output_model import (
+    SyncOutput as sync_output_model,
+)
+from app.device.service import device_service as ds
 from app.device.service import validator_service as validator
+from app.logger import logger_conf as log
 
 proxy_root_path: str = os.environ.get("PROXY_ROOT_PATH", "")
 # Ensure root_path starts with / if provided
@@ -70,12 +72,9 @@ def test(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "index.html",
-        {
-            "request": request,
-            "netbox_url": netbox_url,
-            "zabbix_url": zabbix_url
-        },
-        status_code=200)
+        {"request": request, "netbox_url": netbox_url, "zabbix_url": zabbix_url},
+        status_code=200,
+    )
 
 
 @app.get("/run_comparison", name="run_comparison", response_class=HTMLResponse)
@@ -102,8 +101,10 @@ def run_compare(request: Request) -> Response:
     netbox_ip: str | None = os.environ.get("NETBOX_IP")
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
     zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
-    compare_output: Exception | tuple[list[DeviceDifference], list[Device], list[Device]] = (
-        ct.compare(nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key)
+    compare_output: (
+        Exception | tuple[list[DeviceDifference], list[Device], list[Device]]
+    ) = ct.compare(
+        nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key
     )
     if isinstance(compare_output, Exception):
         return PlainTextResponse(str(compare_output), status_code=500)
@@ -118,10 +119,7 @@ def run_compare(request: Request) -> Response:
         netbox_devices,
         zabbix_devices,
     )
-    if (
-        isinstance(formatted_output, tuple)
-        and len(formatted_output) == 3
-    ):
+    if isinstance(formatted_output, tuple) and len(formatted_output) == 3:
         display_differences, display_netbox_devices, display_zabbix_devices = (
             formatted_output
         )
@@ -150,7 +148,9 @@ def run_compare(request: Request) -> Response:
     )
 
 
-@app.get("/run_comparison_sync", name="run_comparison_sync", response_class=HTMLResponse)
+@app.get(
+    "/run_comparison_sync", name="run_comparison_sync", response_class=HTMLResponse
+)
 def run_compare_sync(request: Request) -> Response:
     """
     Execute a comparison and synchronization between NetBox and Zabbix devices.
@@ -177,8 +177,10 @@ def run_compare_sync(request: Request) -> Response:
     netbox_ip: str | None = os.environ.get("NETBOX_IP")
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
     zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
-    compare_output: Exception | tuple[list[DeviceDifference], list[Device], list[Device]] = (
-        ct.compare(nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key)
+    compare_output: (
+        Exception | tuple[list[DeviceDifference], list[Device], list[Device]]
+    ) = ct.compare(
+        nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key
     )
     if isinstance(compare_output, Exception):
         return PlainTextResponse(str(compare_output), status_code=500)
@@ -188,21 +190,22 @@ def run_compare_sync(request: Request) -> Response:
     log.logger.debug(ds.print_differences(differences))
     log.logger.debug(ds.print_devices(netbox_devices))
     log.logger.debug(ds.print_devices(zabbix_devices))
-    formatted_output_result: tuple[list[DeviceDifference], list[Device], list[Device]] = ds.uniform_output_text(
+    formatted_output_result: tuple[
+        list[DeviceDifference], list[Device], list[Device]
+    ] = ds.uniform_output_text(
         differences,
         netbox_devices,
         zabbix_devices,
     )
-    ds.map_port_type_device(netbox_devices, zabbix_devices,numbered=True)
-    sync_output: sync_output_model = ss.sync_netbox_zabbix_devices(
-        netbox_devices=netbox_devices, zabbix_devices=zabbix_devices, differences=differences
+    ds.map_port_type_device(netbox_devices, zabbix_devices, numbered=True)
+    sync_output = ss.sync_netbox_zabbix_devices(
+        netbox_devices=netbox_devices,
+        zabbix_devices=zabbix_devices,
+        differences=differences,
     )
     log.logger.debug("Synchronization Output: %s", sync_output)
 
-    if (
-        isinstance(formatted_output_result, tuple)
-        and len(formatted_output_result) == 3
-    ):
+    if isinstance(formatted_output_result, tuple) and len(formatted_output_result) == 3:
         display_differences, display_netbox_devices, display_zabbix_devices = (
             formatted_output_result
         )
@@ -230,6 +233,7 @@ def run_compare_sync(request: Request) -> Response:
         status_code=200,
     )
 
+
 @app.post("/validate_update")
 async def validate_update(request: Request):
     """Validate device update against Zabbix configuration.
@@ -251,9 +255,9 @@ async def validate_update(request: Request):
     )
     log.logger.debug("Full request data: %s", data)
 
-    if event_type not in ["update", "updated"]:
+    if event_type not in ["updated", "created", "deleted"]:
         log.logger.warning(
-            "Invalid event type: %s (expected 'update' or 'updated')",
+            "Invalid event type: %s (expected 'updated', 'created', or 'deleted')",
             event_type,
         )
         return JSONResponse(
@@ -294,6 +298,7 @@ async def validate_update(request: Request):
     )
 
     return JSONResponse(result, status_code=200)
+
 
 def test_connection() -> tuple[str, int]:
     """
@@ -349,6 +354,7 @@ def test_connection() -> tuple[str, int]:
 
     return "Connection to Zabbix and NetBox successful.", 200
 
+
 def parser_init() -> argparse.ArgumentParser:
     """
     Initialize the argument parser for the server.
@@ -360,7 +366,9 @@ def parser_init() -> argparse.ArgumentParser:
     argparser.add_argument(
         "-d", "--development", help="Turn on development server", action="store_true"
     )
-    argparser.add_argument("-debug", "--debug", help="Turn on debug mode", action="store_true")
+    argparser.add_argument(
+        "-debug", "--debug", help="Turn on debug mode", action="store_true"
+    )
     return argparser
 
 
