@@ -209,7 +209,7 @@
 				<button
 					type="button"
 					hx-post="{{ url_for('synchronize_zabbix_device') }}"
-					hx-vals='{{ device_to_dict(difference.nb_device) | tojson }}'
+					hx-vals='{{ difference_to_dict(difference) | tojson }}'
 					hx-ext="json-enc"
 					hx-target="#page-content"
 					hx-swap="innerHTML"

@@ -78,6 +78,15 @@ def device_to_dict(device: Device) -> dict:
     }
 templates.env.globals["device_to_dict"] = device_to_dict
 
+def difference_to_dict(difference: DeviceDifference) -> dict:
+    """Converts a DeviceDifference into a JSON-serializable dict."""
+    return {
+        "nb_device": device_to_dict(difference.nb_device),
+        "zb_device": device_to_dict(difference.zb_device),
+        "differences": list(difference.differences),
+    }
+templates.env.globals["difference_to_dict"] = difference_to_dict
+
 @app.get("/", response_class=HTMLResponse)
 def test(request: Request) -> HTMLResponse:
     """
@@ -112,16 +121,19 @@ async def synchronize_zabbix_device(request: Request) -> Response:
         payload = await request.json()
     except ValueError:
         return PlainTextResponse("Invalid or missing JSON body", status_code=400)
-    difference = DeviceDifference(**payload)
-    nb_device: Device = difference.nb_device
-    zb_device: Device = difference.zb_device
+
+    nb_device = Device(**payload["nb_device"])
+    zb_device = Device(**payload["zb_device"])
+    difference = DeviceDifference(
+        nb_device=nb_device,
+        zb_device=zb_device,
+        differences=tuple(payload["differences"]),
+    )
+
     log.logger.info(f"Synchronizing Zabbix device: {nb_device} -> {zb_device}")
     sync_output: sync_output_model = sync_output_model()
     ss.apply_differences(differences=difference, sync_output=sync_output)
-    return Response(
-        {"difference": difference, "sync_output": sync_output},
-        status_code=200,
-    )
+    return Response({"difference": difference, "sync_output": sync_output}, status_code=200)
 
 @app.get("/run_comparison", name="run_comparison", response_class=HTMLResponse)
 def run_compare(request: Request) -> Response:
