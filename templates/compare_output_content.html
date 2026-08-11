@@ -211,8 +211,8 @@
 					hx-post="{{ url_for('synchronize_zabbix_device') }}"
 					hx-vals='{{ difference_to_dict(difference) | tojson }}'
 					hx-ext="json-enc"
-					hx-target="#page-content"
-					hx-swap="innerHTML"
+					hx-target="this"
+					hx-swap="outerHTML"
 					hx-indicator="#comparison-loading"
 					hx-push-url="false"
 				>
