@@ -637,7 +637,7 @@ def apply_differences(
     template_source = (
         zb_device.templates if zb_device.templates else nb_device.templates
     )
-
+    template_source = template_source if isinstance(template_source, list) else [template_source]
     interface_ids: list[int] = device_service.find_hostinterface_ids(hostid)
     templateids: list[int] = [
         find_template_ids(template) for template in template_source if template

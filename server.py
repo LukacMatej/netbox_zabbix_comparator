@@ -138,15 +138,14 @@ def test(request: Request) -> HTMLResponse:
     )
 
 
-@app.post(
-    "/create_zabbix_device", name="create_zabbix_device", response_class=HTMLResponse
-)
+@app.post("/create_zabbix_device", name="create_zabbix_device", response_class=HTMLResponse)
 async def create_zabbix_device(request: Request) -> Response:
     try:
         payload = await request.json()
     except ValueError:
         return PlainTextResponse("Invalid or missing JSON body", status_code=400)
-    device = Device(**payload)
+
+    device = dict_to_device(payload)
     log.logger.info(f"Creating Zabbix device for device_id: {device.name}")
     ss.create_zabbix_device(device, sync_output_model())
     return Response({"device": device}, status_code=200)
