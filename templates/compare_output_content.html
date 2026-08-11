@@ -1,226 +1,303 @@
 <style>
-    body {
-        margin: 0;
-        padding: 0;
-    }
-    nav {
-        margin-top: 0 !important;
-        margin-left: 0 !important;
-        margin-right: 0 !important;
-        background: none !important;
-        width: 100%;
-        display: flex;
-        justify-content: flex-start;
-    }
-    #nav-links a:hover {
-        background: #f0f0f0;
-    }
-    @media (min-width: 600px) {
-        #nav-links {
-            left: 36px;
-        }
-    }
-    nav > div {
-        margin-left: 2vh !important;
-    }
-    .container {
-        display: flex;
-        flex-direction: row;
-    }
-    .column {
-        border-right: 1px solid black;
-        flex: 33.33%;
-        padding: 10px;
-    }
-    .column:last-child {
-        border-right: none;
-    }
-    .header {
-        font-weight: bold;
-    }
-    .header:first-child {
-        font-size: 1.5em;
-    }
-    .lines {
-        line-height: 2;
-    }
-    .line {
-        font-size: 0;
-        color: white;
-        border-bottom: 1px solid black;
-    }
-    .line:last-child {
-        border-bottom: none;
-    }
-    .line_sync {
-        font-size: 0;
-        color: white;
-        border-bottom: 1px solid black;
-        margin-top: 20px;
-    }
-    .tab-interface {
-        margin-left: 20px;
-    }
-    .tab-address {
-        margin-left: 40px;
-    }
-    .differences {
-        display: flex;
-        flex: 50% 50%;
-    }
+	body {
+		margin: 0;
+		padding: 0;
+	}
+	nav {
+		margin-top: 0 !important;
+		margin-left: 0 !important;
+		margin-right: 0 !important;
+		background: none !important;
+		width: 100%;
+		display: flex;
+		justify-content: flex-start;
+	}
+	#nav-links a:hover {
+		background: #f0f0f0;
+	}
+	@media (min-width: 600px) {
+		#nav-links {
+			left: 36px;
+		}
+	}
+	nav > div {
+		margin-left: 2vh !important;
+	}
+	.container {
+		display: flex;
+		flex-direction: row;
+	}
+	.column {
+		border-right: 1px solid black;
+		flex: 33.33%;
+		padding: 10px;
+	}
+	.column:last-child {
+		border-right: none;
+	}
+	.header {
+		font-weight: bold;
+	}
+	.header:first-child {
+		font-size: 1.5em;
+	}
+	.lines {
+		line-height: 2;
+	}
+	.line {
+		font-size: 0;
+		color: white;
+		border-bottom: 1px solid black;
+	}
+	.line:last-child {
+		border-bottom: none;
+	}
+	.line_sync {
+		font-size: 0;
+		color: white;
+		border-bottom: 1px solid black;
+		margin-top: 20px;
+	}
+	.tab-interface {
+		margin-left: 20px;
+	}
+	.tab-address {
+		margin-left: 40px;
+	}
+	.differences {
+		display: flex;
+		flex: 50% 50%;
+	}
+	.button-create button{
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		margin-top: 20px;
+		width: 99%;
+		relative: inline-block;
+		padding: 10px;
+		color: black;
+		background-color: lightgray;
+		border-radius: 4px;
+		box-shadow: 2xl;
+		transition: transform 300ms ease-in-out;
+		&:hover {
+			transform: scale(1.01);
+		}
+		&:active {
+			transform: scale(0.99);
+		}
+	}
 </style>
 <div class="container">
-    <div class="column">
-        <div class="header">Netbox Devices</div>
-        {% if netbox_devices %}
-        <div class="lines">
-            {% for device in netbox_devices %}
-                <div><strong>{{ device.name }}</strong></div>
-                <div>Interfaces:</div>
-                {% for interface in device.interfaces %}
-                    <div class="tab-interface">Interface: {{ interface.name }}, MAC Address:{% if interface.mac_address%} {{interface.mac_address}} {% else %} None {% endif %}</div>
-                    <div class="tab-interface">Addresses:</div>
-                    {% for address in interface.addresses %}
-                        <div class="tab-address">IP address: {{ address.address }}, DNS Name: {{address.dns_name}}</div>
-                    {% endfor %}
-                {% endfor %}
-                <div>Hostgroup: {{ device.hostgroup }}, {% if device.description%} Description: {{ device.description }} ,{% endif %} Status: {{ device.status }}</div>
-                <div>Templates: {{ device.templates }}</div>
-                <div><strong>Zarizeni bude vytvoreno v Zabbixu</strong></div>
-                <div>
-                    <button
-                        type="button"
-                        class="device-action"
-                        style="border-bottom: 1px solid #eee;"
-                        hx-get="{{ url_for('create_zabbix_device', device_id=device.id) }}"
-                        hx-target="#page-content"
-                        hx-swap="innerHTML"
-                        hx-indicator="#comparison-loading"
-                        hx-push-url="false"
-                    ></button>
-                </div>
-                <div class="line">Oddeleni</div>
-            {% endfor %}
-        </div>
-        {% else %}
-            <div>No Netbox devices found</div>
-        {% endif %}
-    </div>
+	<div class="column">
+		<div class="header">Netbox Devices</div>
+		{% if netbox_devices %}
+		<div class="lines">
+			{% for device in netbox_devices %}
+			<div><strong>{{ device.name }}</strong></div>
+			<div>Interfaces:</div>
+			{% for interface in device.interfaces %}
+			<div class="tab-interface">
+				Interface: {{ interface.name }}, MAC Address:{% if
+				interface.mac_address%} {{interface.mac_address}} {% else %}
+				None {% endif %}
+			</div>
+			<div class="tab-interface">Addresses:</div>
+			{% for address in interface.addresses %}
+			<div class="tab-address">
+				IP address: {{ address.address }}, DNS Name:
+				{{address.dns_name}}
+			</div>
+			{% endfor %} {% endfor %}
+			<div>
+				Hostgroup: {{ device.hostgroup }}, {% if device.description%}
+				Description: {{ device.description }} ,{% endif %} Status: {{
+				device.status }}
+			</div>
+			<div>Templates: {{ device.templates }}</div>
+			<div class="button-create">
+				<button
+					type="button"
+					hx-get="{{ url_for('create_zabbix_device', device=device) }}"
+					hx-target="#page-content"
+					hx-swap="innerHTML"
+					hx-indicator="#comparison-loading"
+					hx-push-url="false"
+				>
+					<strong
+						>Create Zabbix Device
+					</strong>
+				</button>
+			</div>
+			<div class="line">Oddeleni</div>
+			{% endfor %}
+		</div>
+		{% else %}
+		<div>No Netbox devices found</div>
+		{% endif %}
+	</div>
 
-    <div class="column">
-        <div class="header">Differences</div>
-        {% if differences %}
-        <div class="lines">
-            {% for difference in differences %}
-                <div><strong>Netbox: {{ difference.nb_device.name }}</strong></div>
-                <div class="interfaces">Interfaces:</div>
-                {% for interface in difference.nb_device.interfaces %}
-                    <div class="tab-interface">Interface: {{ interface.name }}, Port Type:{% if interface.port_type %} {{interface.port_type}} {% else %} None {% endif %}</div>
-                    <div class="tab-interface">Addresses:</div>
-                    {% for address in interface.addresses %}
-                        <div class="tab-address">IP address: {{ address.address }}, DNS Name: {{ address.dns_name }}</div>
-                    {% endfor %}
-                {% endfor %}
-                <div>Hostgroup: {{ difference.nb_device.hostgroup }},{% if difference.nb_device.description %} Description: {{ difference.nb_device.description }} ,{% endif %} Status: {{ difference.nb_device.status }}</div>
-                <div>Templates: {{ difference.nb_device.templates }}</div>
-                <br>
-                <div class="differences">
-                    <div>
-                        <div><strong>Same:</strong></div>
-                        {% for difference in difference.differences[1] %}
-                            <div class="tab-interface">{{ difference }}</div>
-                        {% endfor %}
-                    </div>
-                    <div>
-                        <div><strong>Differences:</strong></div>
-                        {% for difference in difference.differences[0] %}
-                            <div class="tab-interface">{{ difference }}</div>
-                        {% endfor %}
-                    </div>
-                </div>
-                <br>
-                <div><strong>Zabbix: {{ difference.zb_device.name }}</strong></div>
-                <div>Interfaces:</div>
-                {% for interface in difference.zb_device.interfaces %}
-                    <div class="tab-interface">Interface: {{ interface.name }}, Port Type: {% if interface.port_type %} {{interface.port_type}} {% else %} None {% endif %}</div>
-                    <div class="tab-interface">Addresses:</div>
-                    {% for address in interface.addresses %}
-                        <div class="tab-address">IP address: {{ address.address }}, DNS Name: {{ address.dns_name }}</div>
-                    {% endfor %}
-                {% endfor %}
-                <div>Hostgroup: {{ difference.zb_device.hostgroup }}, {% if difference.zb_device.description%} Description: {{ difference.zb_device.description }} ,{% endif %} Status: {{ difference.zb_device.status }}</div>
-                <div>Templates: {{ difference.zb_device.templates }}</div>
-                <div class="line">Oddeleni</div>
-            {% endfor %}
-        </div>
-        {% else %}
-            <div>No differences found</div>
-        {% endif %}
-    </div>
+	<div class="column">
+		<div class="header">Differences</div>
+		{% if differences %}
+		<div class="lines">
+			{% for difference in differences %}
+			<div><strong>Netbox: {{ difference.nb_device.name }}</strong></div>
+			<div class="interfaces">Interfaces:</div>
+			{% for interface in difference.nb_device.interfaces %}
+			<div class="tab-interface">
+				Interface: {{ interface.name }}, Port Type:{% if
+				interface.port_type %} {{interface.port_type}} {% else %} None
+				{% endif %}
+			</div>
+			<div class="tab-interface">Addresses:</div>
+			{% for address in interface.addresses %}
+			<div class="tab-address">
+				IP address: {{ address.address }}, DNS Name: {{ address.dns_name
+				}}
+			</div>
+			{% endfor %} {% endfor %}
+			<div>
+				Hostgroup: {{ difference.nb_device.hostgroup }},{% if
+				difference.nb_device.description %} Description: {{
+				difference.nb_device.description }} ,{% endif %} Status: {{
+				difference.nb_device.status }}
+			</div>
+			<div>Templates: {{ difference.nb_device.templates }}</div>
+			<br />
+			<div class="differences">
+				<div>
+					<div><strong>Same:</strong></div>
+					{% for difference in difference.differences[1] %}
+					<div class="tab-interface">{{ difference }}</div>
+					{% endfor %}
+				</div>
+				<div>
+					<div><strong>Differences:</strong></div>
+					{% for difference in difference.differences[0] %}
+					<div class="tab-interface">{{ difference }}</div>
+					{% endfor %}
+				</div>
+			</div>
+			<br />
+			<div><strong>Zabbix: {{ difference.zb_device.name }}</strong></div>
+			<div>Interfaces:</div>
+			{% for interface in difference.zb_device.interfaces %}
+			<div class="tab-interface">
+				Interface: {{ interface.name }}, Port Type: {% if
+				interface.port_type %} {{interface.port_type}} {% else %} None
+				{% endif %}
+			</div>
+			<div class="tab-interface">Addresses:</div>
+			{% for address in interface.addresses %}
+			<div class="tab-address">
+				IP address: {{ address.address }}, DNS Name: {{ address.dns_name
+				}}
+			</div>
+			{% endfor %} {% endfor %}
+			<div>
+				Hostgroup: {{ difference.zb_device.hostgroup }}, {% if
+				difference.zb_device.description%} Description: {{
+				difference.zb_device.description }} ,{% endif %} Status: {{
+				difference.zb_device.status }}
+			</div>
+			<div>Templates: {{ difference.zb_device.templates }}</div>
+			<div class="button-create">
+				<button
+					type="button"
+					hx-get="{{ url_for('synchronize_zabbix_device', difference=difference) }}"
+					hx-target="#page-content"
+					hx-swap="innerHTML"
+					hx-indicator="#comparison-loading"
+					hx-push-url="false"
+				>
+					<strong
+						>Synchronize Zabbix Device
+					</strong>
+				</button>
+			</div>
+			<div class="line">Oddeleni</div>
+			{% endfor %}
+		</div>
+		{% else %}
+		<div>No differences found</div>
+		{% endif %}
+	</div>
 
-    <div class="column">
-        <div class="header">Zabbix Devices</div>
-        {% if zabbix_devices %}
-        <div class="lines">
-            {% for device in zabbix_devices %}
-                <div><strong>{{ device.name }}</strong></div>
-                <div>Interfaces:</div>
-                {% for interface in device.interfaces %}
-                    <div class="tab-interface">Interface: {{ interface.name }}, Port Type: {% if interface.port_type %} {{interface.port_type}} {% else %} None {% endif %}</div>
-                    <div class="tab-interface">Addresses:</div>
-                    {% for address in interface.addresses %}
-                        <div class="tab-address">IP address: {{ address.address }}, DNS Name: {{address.dns_name}}</div>
-                    {% endfor %}
-                {% endfor %}
-                <div>Hostgroup: {{ device.hostgroup }}, {% if device.description%} Description: {{ device.description }} ,{% endif %} Status: {{ device.status }}</div>
-                <div>Templates: {{ device.templates }}</div>
-                <div class="line">Oddeleni</div>
-            {% endfor %}
-        </div>
-        {% else %}
-            <div>No Zabbix devices found</div>
-        {% endif %}
-    </div>
+	<div class="column">
+		<div class="header">Zabbix Devices</div>
+		{% if zabbix_devices %}
+		<div class="lines">
+			{% for device in zabbix_devices %}
+			<div><strong>{{ device.name }}</strong></div>
+			<div>Interfaces:</div>
+			{% for interface in device.interfaces %}
+			<div class="tab-interface">
+				Interface: {{ interface.name }}, Port Type: {% if
+				interface.port_type %} {{interface.port_type}} {% else %} None
+				{% endif %}
+			</div>
+			<div class="tab-interface">Addresses:</div>
+			{% for address in interface.addresses %}
+			<div class="tab-address">
+				IP address: {{ address.address }}, DNS Name:
+				{{address.dns_name}}
+			</div>
+			{% endfor %} {% endfor %}
+			<div>
+				Hostgroup: {{ device.hostgroup }}, {% if device.description%}
+				Description: {{ device.description }} ,{% endif %} Status: {{
+				device.status }}
+			</div>
+			<div>Templates: {{ device.templates }}</div>
+			<div class="line">Oddeleni</div>
+			{% endfor %}
+		</div>
+		{% else %}
+		<div>No Zabbix devices found</div>
+		{% endif %}
+	</div>
 </div>
 
 {% if synchronization and sync_output %}
 <div class="line_sync">Oddeleni</div>
 <div class="container">
-    <div class="column">
-        <div class="header">Synchronization output from Netbox</div>
-        {% if sync_output.synchronization_output_zabbix %}
-            <div class="lines">
-                {% for output in sync_output.synchronization_output_zabbix %}
-                    <div>{{ output }}</div>
-                {% endfor %}
-            </div>
-        {% else %}
-            <div>No synchronization output found</div>
-        {% endif %}
-    </div>
-    <div class="column">
-        <div class="header">Synchronization output from Differences</div>
-        {% if sync_output.synchronization_output_differences %}
-            <div class="lines">
-                {% for output in sync_output.synchronization_output_differences %}
-                    <div>{{ output }}</div>
-                {% endfor %}
-            </div>
-        {% else %}
-            <div>No synchronization output found</div>
-        {% endif %}
-    </div>
-    <div class="column">
-        <div class="header">Synchronization output from Zabbix</div>
-        {% if sync_output.synchronization_output_netbox %}
-            <div class="lines">
-                {% for output in sync_output.synchronization_output_netbox %}
-                    <div>{{ output }}</div>
-                {% endfor %}
-            </div>
-        {% else %}
-            <div>No synchronization output found</div>
-        {% endif %}
-    </div>
+	<div class="column">
+		<div class="header">Synchronization output from Netbox</div>
+		{% if sync_output.synchronization_output_zabbix %}
+		<div class="lines">
+			{% for output in sync_output.synchronization_output_zabbix %}
+			<div>{{ output }}</div>
+			{% endfor %}
+		</div>
+		{% else %}
+		<div>No synchronization output found</div>
+		{% endif %}
+	</div>
+	<div class="column">
+		<div class="header">Synchronization output from Differences</div>
+		{% if sync_output.synchronization_output_differences %}
+		<div class="lines">
+			{% for output in sync_output.synchronization_output_differences %}
+			<div>{{ output }}</div>
+			{% endfor %}
+		</div>
+		{% else %}
+		<div>No synchronization output found</div>
+		{% endif %}
+	</div>
+	<div class="column">
+		<div class="header">Synchronization output from Zabbix</div>
+		{% if sync_output.synchronization_output_netbox %}
+		<div class="lines">
+			{% for output in sync_output.synchronization_output_netbox %}
+			<div>{{ output }}</div>
+			{% endfor %}
+		</div>
+		{% else %}
+		<div>No synchronization output found</div>
+		{% endif %}
+	</div>
 </div>
 {% endif %}
