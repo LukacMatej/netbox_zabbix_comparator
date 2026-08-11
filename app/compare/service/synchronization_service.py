@@ -33,6 +33,7 @@ import requests
 
 from app.device.models.address_model import Address as address_model
 from app.device.models.device_model import Device as device_model
+from app.device.models.device_model import map_port_type_default_port
 from app.device.models.difference_model import (
     DeviceDifference as device_difference_model,
 )
@@ -685,7 +686,7 @@ def apply_differences(
                             "interfaceid": zb_iface["interfaceid"],
                             "ip": ip_address,
                             "dns": dns_name,
-                            "port": 161,
+                            "port": map_port_type_default_port(nb_iface.port_type),
                         }
                     )
                     log.logger.debug(
