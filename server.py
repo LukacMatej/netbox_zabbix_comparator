@@ -147,8 +147,19 @@ async def create_zabbix_device(request: Request) -> Response:
 
     device = dict_to_device(payload)
     log.logger.info(f"Creating Zabbix device for device_id: {device.name}")
-    ss.create_zabbix_device(device, sync_output_model())
-    return Response({"device": device}, status_code=200)
+    try:
+        ss.create_zabbix_device(device, sync_output_model())
+        success = True
+    except Exception as e:  # pylint: disable=broad-except
+        log.logger.error("Failed to create Zabbix device for %s: %s", device.name, e, exc_info=True)
+        success = False
+
+    return templates.TemplateResponse(
+        request,
+        "sync_button_result.html",
+        {"success": success},
+        status_code=200,
+    )
 
 @app.post("/synchronize_zabbix_device", name="synchronize_zabbix_device", response_class=HTMLResponse)
 async def synchronize_zabbix_device(request: Request) -> Response:
@@ -166,9 +177,20 @@ async def synchronize_zabbix_device(request: Request) -> Response:
     )
 
     log.logger.info(f"Synchronizing Zabbix device: {nb_device} -> {zb_device}")
-    sync_output: sync_output_model = sync_output_model()
-    ss.apply_differences(differences=difference, sync_output=sync_output)
-    return Response({"difference": difference, "sync_output": sync_output}, status_code=200)
+    sync_output = sync_output_model()
+    try:
+        ss.apply_differences(differences=difference, sync_output=sync_output)
+        success = True
+    except Exception as e:  # pylint: disable=broad-except
+        log.logger.error("Synchronization failed for %s: %s", nb_device.name, e, exc_info=True)
+        success = False
+
+    return templates.TemplateResponse(
+        request,
+        "sync_button_result.html",
+        {"success": success},
+        status_code=200,
+    )
 
 
 @app.get("/run_comparison", name="run_comparison", response_class=HTMLResponse)

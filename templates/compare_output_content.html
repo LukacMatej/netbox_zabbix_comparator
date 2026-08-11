@@ -122,8 +122,8 @@
 					hx-post="{{ url_for('create_zabbix_device') }}"
 					hx-vals='{{ device_to_dict(device) | tojson }}'
 					hx-ext="json-enc"
-					hx-target="#page-content"
-					hx-swap="innerHTML"
+					hx-target="this"
+					hx-swap="outerHTML"
 					hx-indicator="#comparison-loading"
 					hx-push-url="false"
 				>
