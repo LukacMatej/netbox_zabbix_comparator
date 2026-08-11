@@ -76,13 +76,23 @@ def test(request: Request) -> HTMLResponse:
         status_code=200,
     )
 
-@app.get("/create_zabbix_device/{device_id}", name="create_zabbix_device", response_class=HTMLResponse)
-def create_zabbix_device(request: Request, device_id: int) -> Response:
-    log.logger.info(f"Creating Zabbix device for device_id: {device_id}")
+@app.get("/create_zabbix_device/{device}", name="create_zabbix_device", response_class=HTMLResponse)
+def create_zabbix_device(request: Request, device: int) -> Response:
+    log.logger.info(f"Creating Zabbix device for device_id: {device}")
     return templates.TemplateResponse(
         request,
         "compare_output_content.html",
-        {"request": request, "device_id": device_id},
+        {"request": request, "device": device},
+        status_code=200,
+    )
+
+@app.get("/synchronize_zabbix_device/{difference}", name="synchronize_zabbix_device", response_class=HTMLResponse)
+def synchronize_zabbix_device(request: Request, difference: int) -> Response:
+    log.logger.info(f"Synchronizing Zabbix device for difference_id: {difference}")
+    return templates.TemplateResponse(
+        request,
+        "compare_output_content.html",
+        {"request": request, "difference": difference},
         status_code=200,
     )
 
