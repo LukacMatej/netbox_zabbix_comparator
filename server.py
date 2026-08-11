@@ -76,29 +76,22 @@ def test(request: Request) -> HTMLResponse:
         status_code=200,
     )
 
-@app.get("/create_zabbix_device/{device}", name="create_zabbix_device", response_class=HTMLResponse)
+@app.post("/create_zabbix_device", name="create_zabbix_device", response_class=HTMLResponse)
 def create_zabbix_device(request: Request, device: Device) -> Response:
     log.logger.info(f"Creating Zabbix device for device_id: {device.name}")
-    ss.create_zabbix_device(device, sync_output_model())
-    return templates.TemplateResponse(
-        request,
-        "compare_output_content.html",
-        {"request": request, "device": device},
-        status_code=200,
-    )
+    sync_output: sync_output_model = sync_output_model()
+    ss.create_zabbix_device(device, sync_output)
+    return Response({"device": device}, status_code=200)
 
-@app.get("/synchronize_zabbix_device/{difference}", name="synchronize_zabbix_device", response_class=HTMLResponse)
+@app.post("/synchronize_zabbix_device", name="synchronize_zabbix_device", response_class=HTMLResponse)
 def synchronize_zabbix_device(request: Request, difference: DeviceDifference) -> Response:
     nb_device: Device = difference.nb_device
     zb_device: Device = difference.zb_device
     log.logger.info(f"Synchronizing Zabbix device: {nb_device} -> {zb_device}")
     sync_output: sync_output_model = sync_output_model()
     ss.apply_differences(differences=difference, sync_output=sync_output)
-    return templates.TemplateResponse(
-        request,
-        "compare_output_content.html",
-        {"request": request, "difference": difference},
-        status_code=200,
+    return Response(
+        {"difference": difference, "sync_output": sync_output},
     )
 
 @app.get("/run_comparison", name="run_comparison", response_class=HTMLResponse)

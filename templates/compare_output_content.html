@@ -119,7 +119,9 @@
 			<div class="button-create">
 				<button
 					type="button"
-					hx-get="{{ url_for('create_zabbix_device', device=device) }}"
+					hx-post="{{ url_for('create_zabbix_device') }}"
+					hx-vals='{{ device.model_dump_json() }}'
+					hx-ext="json-enc"
 					hx-target="#page-content"
 					hx-swap="innerHTML"
 					hx-indicator="#comparison-loading"
@@ -206,7 +208,9 @@
 			<div class="button-create">
 				<button
 					type="button"
-					hx-get="{{ url_for('synchronize_zabbix_device', difference=difference) }}"
+					hx-post="{{ url_for('synchronize_zabbix_device') }}"
+					hx-vals='{{ difference.nb_device.model_dump_json() }}'
+					hx-ext="json-enc"
 					hx-target="#page-content"
 					hx-swap="innerHTML"
 					hx-indicator="#comparison-loading"
