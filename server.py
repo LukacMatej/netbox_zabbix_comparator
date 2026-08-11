@@ -42,8 +42,10 @@ from fastapi.templating import Jinja2Templates
 
 from app.compare.service import compare_service as ct
 from app.compare.service import synchronization_service as ss
+from app.device.models.address_model import Address
 from app.device.models.device_model import Device
 from app.device.models.difference_model import DeviceDifference
+from app.device.models.interface_model import Interface
 from app.device.models.synchonization_output_model import (
     SyncOutput as sync_output_model,
 )
@@ -57,6 +59,31 @@ if proxy_root_path and not proxy_root_path.startswith("/"):
     proxy_root_path = "/" + proxy_root_path
 app = FastAPI(root_path=proxy_root_path, title="NetBox Zabbix Compare")
 templates = Jinja2Templates(directory="templates")
+
+
+def dict_to_address(data: dict) -> Address:
+    return Address(address=data["address"], dns_name=data["dns_name"])
+
+
+def dict_to_interface(data: dict) -> Interface:
+    return Interface(
+        name=data["name"],
+        addresses=[dict_to_address(a) for a in data["addresses"]],
+        mac_address=data["mac_address"],
+        port_type=data["port_type"],
+    )
+
+
+def dict_to_device(data: dict) -> Device:
+    return Device(
+        name=data["name"],
+        interfaces=[dict_to_interface(i) for i in data["interfaces"]],
+        hostgroup=data["hostgroup"],
+        description=data["description"],
+        templates=data["templates"],
+        status=data["status"],
+    )
+
 
 def device_to_dict(device: Device) -> dict:
     """Converts a Device (plain class, not Pydantic) into a JSON-serializable dict."""
@@ -76,7 +103,10 @@ def device_to_dict(device: Device) -> dict:
             for interface in device.interfaces
         ],
     }
+
+
 templates.env.globals["device_to_dict"] = device_to_dict
+
 
 def difference_to_dict(difference: DeviceDifference) -> dict:
     """Converts a DeviceDifference into a JSON-serializable dict."""
@@ -85,7 +115,10 @@ def difference_to_dict(difference: DeviceDifference) -> dict:
         "zb_device": device_to_dict(difference.zb_device),
         "differences": list(difference.differences),
     }
+
+
 templates.env.globals["difference_to_dict"] = difference_to_dict
+
 
 @app.get("/", response_class=HTMLResponse)
 def test(request: Request) -> HTMLResponse:
@@ -104,7 +137,10 @@ def test(request: Request) -> HTMLResponse:
         status_code=200,
     )
 
-@app.post("/create_zabbix_device", name="create_zabbix_device", response_class=HTMLResponse)
+
+@app.post(
+    "/create_zabbix_device", name="create_zabbix_device", response_class=HTMLResponse
+)
 async def create_zabbix_device(request: Request) -> Response:
     try:
         payload = await request.json()
@@ -122,8 +158,8 @@ async def synchronize_zabbix_device(request: Request) -> Response:
     except ValueError:
         return PlainTextResponse("Invalid or missing JSON body", status_code=400)
 
-    nb_device = Device(**payload["nb_device"])
-    zb_device = Device(**payload["zb_device"])
+    nb_device = dict_to_device(payload["nb_device"])
+    zb_device = dict_to_device(payload["zb_device"])
     difference = DeviceDifference(
         nb_device=nb_device,
         zb_device=zb_device,
@@ -134,6 +170,7 @@ async def synchronize_zabbix_device(request: Request) -> Response:
     sync_output: sync_output_model = sync_output_model()
     ss.apply_differences(differences=difference, sync_output=sync_output)
     return Response({"difference": difference, "sync_output": sync_output}, status_code=200)
+
 
 @app.get("/run_comparison", name="run_comparison", response_class=HTMLResponse)
 def run_compare(request: Request) -> Response:
