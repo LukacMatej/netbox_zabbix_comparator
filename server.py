@@ -97,7 +97,10 @@ def test(request: Request) -> HTMLResponse:
 
 @app.post("/create_zabbix_device", name="create_zabbix_device", response_class=HTMLResponse)
 async def create_zabbix_device(request: Request) -> Response:
-    payload = await request.json()
+    try:
+        payload = await request.json()
+    except ValueError:
+        return PlainTextResponse("Invalid or missing JSON body", status_code=400)
     device = Device(**payload)
     log.logger.info(f"Creating Zabbix device for device_id: {device.name}")
     ss.create_zabbix_device(device, sync_output_model())
@@ -105,7 +108,10 @@ async def create_zabbix_device(request: Request) -> Response:
 
 @app.post("/synchronize_zabbix_device", name="synchronize_zabbix_device", response_class=HTMLResponse)
 async def synchronize_zabbix_device(request: Request) -> Response:
-    payload = await request.json()
+    try:
+        payload = await request.json()
+    except ValueError:
+        return PlainTextResponse("Invalid or missing JSON body", status_code=400)
     difference = DeviceDifference(**payload)
     nb_device: Device = difference.nb_device
     zb_device: Device = difference.zb_device
