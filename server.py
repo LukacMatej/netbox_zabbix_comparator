@@ -349,6 +349,23 @@ def run_compare_sync(request: Request) -> Response:
         status_code=200,
     )
 
+@app.post("/webhook_create")
+async def webhook_create(request: Request):
+    """Handle webhook create event."""
+    data = await request.json()
+    log.logger.info("Webhook create event received: %s", data)
+
+@app.post("/webhook_update")
+async def webhook_update(request: Request):
+    """Handle webhook update event."""
+    data = await request.json()
+    log.logger.info("Webhook update event received: %s", data)
+
+@app.post("/webhook_delete")
+async def webhook_delete(request: Request):
+    """Handle webhook delete event."""
+    data = await request.json()
+    log.logger.info("Webhook delete event received: %s", data)
 
 @app.post("/validate_update")
 async def validate_update(request: Request):
@@ -496,7 +513,7 @@ if __name__ == "__main__":
         log.logger.error(response[0])
         sys.exit(1)
     docker_ip: str = os.environ.get("LISTEN_ADDRESS", "0.0.0.0")
-    docker_port: str | int = os.environ.get("HTTP_PORT", 7000)
+    docker_port: str | int = os.environ.get("HTTP_PORT", "7000")
     uvicorn.run(
         "server:app",
         host=docker_ip,
