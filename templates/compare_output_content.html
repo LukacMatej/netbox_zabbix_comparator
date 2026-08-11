@@ -120,7 +120,7 @@
 				<button
 					type="button"
 					hx-post="{{ url_for('create_zabbix_device') }}"
-					hx-vals='{{ device.model_dump_json() }}'
+					hx-vals='{{ device_to_dict(device) | tojson }}'
 					hx-ext="json-enc"
 					hx-target="#page-content"
 					hx-swap="innerHTML"
@@ -209,7 +209,7 @@
 				<button
 					type="button"
 					hx-post="{{ url_for('synchronize_zabbix_device') }}"
-					hx-vals='{{ difference.nb_device.model_dump_json() }}'
+					hx-vals='{{ device_to_dict(difference.nb_device) | tojson }}'
 					hx-ext="json-enc"
 					hx-target="#page-content"
 					hx-swap="innerHTML"

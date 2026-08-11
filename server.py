@@ -58,6 +58,24 @@ if proxy_root_path and not proxy_root_path.startswith("/"):
 app = FastAPI(root_path=proxy_root_path, title="NetBox Zabbix Compare")
 templates = Jinja2Templates(directory="templates")
 
+def device_to_dict(device: Device) -> dict:
+    """Converts a Device (plain class, not Pydantic) into a JSON-serializable dict."""
+    return {
+        "name": device.name,
+        "hostgroup": device.hostgroup,
+        "description": device.description,
+        "templates": device.templates,
+        "status": device.status,
+        "interfaces": [
+            {
+                "name": interface.name,
+                "mac_address": interface.mac_address,
+                "port_type": interface.port_type,
+                "addresses": [address.to_dict() for address in interface.addresses],
+            }
+            for interface in device.interfaces
+        ],
+    }
 
 @app.get("/", response_class=HTMLResponse)
 def test(request: Request) -> HTMLResponse:
@@ -77,14 +95,17 @@ def test(request: Request) -> HTMLResponse:
     )
 
 @app.post("/create_zabbix_device", name="create_zabbix_device", response_class=HTMLResponse)
-def create_zabbix_device(request: Request, device: Device) -> Response:
+async def create_zabbix_device(request: Request) -> Response:
+    payload = await request.json()
+    device = Device(**payload)
     log.logger.info(f"Creating Zabbix device for device_id: {device.name}")
-    sync_output: sync_output_model = sync_output_model()
-    ss.create_zabbix_device(device, sync_output)
+    ss.create_zabbix_device(device, sync_output_model())
     return Response({"device": device}, status_code=200)
 
 @app.post("/synchronize_zabbix_device", name="synchronize_zabbix_device", response_class=HTMLResponse)
-def synchronize_zabbix_device(request: Request, difference: DeviceDifference) -> Response:
+async def synchronize_zabbix_device(request: Request) -> Response:
+    payload = await request.json()
+    difference = DeviceDifference(**payload)
     nb_device: Device = difference.nb_device
     zb_device: Device = difference.zb_device
     log.logger.info(f"Synchronizing Zabbix device: {nb_device} -> {zb_device}")
@@ -92,6 +113,7 @@ def synchronize_zabbix_device(request: Request, difference: DeviceDifference) ->
     ss.apply_differences(differences=difference, sync_output=sync_output)
     return Response(
         {"difference": difference, "sync_output": sync_output},
+        status_code=200,
     )
 
 @app.get("/run_comparison", name="run_comparison", response_class=HTMLResponse)
