@@ -76,6 +76,7 @@ def device_to_dict(device: Device) -> dict:
             for interface in device.interfaces
         ],
     }
+templates.env.globals["device_to_dict"] = device_to_dict
 
 @app.get("/", response_class=HTMLResponse)
 def test(request: Request) -> HTMLResponse:
