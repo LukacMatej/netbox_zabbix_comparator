@@ -76,6 +76,15 @@ def test(request: Request) -> HTMLResponse:
         status_code=200,
     )
 
+@app.get("/create_zabbix_device/{device_id}", name="create_zabbix_device", response_class=HTMLResponse)
+def create_zabbix_device(request: Request, device_id: int) -> Response:
+    log.logger.info(f"Creating Zabbix device for device_id: {device_id}")
+    return templates.TemplateResponse(
+        request,
+        "compare_output_content.html",
+        {"request": request, "device_id": device_id},
+        status_code=200,
+    )
 
 @app.get("/run_comparison", name="run_comparison", response_class=HTMLResponse)
 def run_compare(request: Request) -> Response:

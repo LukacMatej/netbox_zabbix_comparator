@@ -54,7 +54,7 @@ class ZabbixCustomFieldValidator(CustomValidator):
         # 5. Fire off the synchronous validation request
         try:
             response = requests.post(
-                "http://192.168.201.48:7003/update_device",
+                "http://192.168.201.48:7000/validate_update",
                 json=payload,
                 timeout=3.0,
             )

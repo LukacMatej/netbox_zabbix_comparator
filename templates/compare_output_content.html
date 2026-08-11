@@ -87,7 +87,18 @@
                 <div>Hostgroup: {{ device.hostgroup }}, {% if device.description%} Description: {{ device.description }} ,{% endif %} Status: {{ device.status }}</div>
                 <div>Templates: {{ device.templates }}</div>
                 <div><strong>Zarizeni bude vytvoreno v Zabbixu</strong></div>
-
+                <div>
+                    <button
+                        type="button"
+                        class="device-action"
+                        style="border-bottom: 1px solid #eee;"
+                        hx-get="{{ url_for('create_zabbix_device', device_id=device.id) }}"
+                        hx-target="#page-content"
+                        hx-swap="innerHTML"
+                        hx-indicator="#comparison-loading"
+                        hx-push-url="false"
+                    ></button>
+                </div>
                 <div class="line">Oddeleni</div>
             {% endfor %}
         </div>
