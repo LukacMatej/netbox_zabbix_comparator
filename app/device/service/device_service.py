@@ -1262,7 +1262,7 @@ def delete_zabbix_device(device: device_model) -> tuple[str, int]:
         return "OK", 200
 
 
-def get_zabbix_hostid(name: str) -> Optional[Host]:
+def get_zabbix_hostid(name: str) -> str | None:
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
     zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
     REQUEST_TIMEOUT: int = 30
