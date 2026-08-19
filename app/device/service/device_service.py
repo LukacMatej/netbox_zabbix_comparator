@@ -899,9 +899,9 @@ def get_primary_interface(device_data: dict) -> Interface | None:
     Given the 'data' block of a device webhook, resolve the interface
     that holds the device's primary IPv4 address.
     """
-    NETBOX_URL = os.environ["NETBOX_URL"].rstrip("/")
-    NETBOX_TOKEN = os.environ["NETBOX_TOKEN"]
-    HEADERS = {"Authorization": f"Token {NETBOX_TOKEN}"}
+    NETBOX_IP = os.environ["NETBOX_IP"].rstrip("/")
+    NETBOX_KEY = os.environ["NETBOX_KEY"]
+    HEADERS = {"Authorization": f"Token {NETBOX_KEY}"}
     primary_ip4 = device_data.get("primary_ip4")
     if not primary_ip4 or primary_ip4 == "None":
         return None
@@ -910,7 +910,7 @@ def get_primary_interface(device_data: dict) -> Interface | None:
 
     # Fetch the IP address object to find its assigned interface
     resp = requests.get(
-        f"{NETBOX_URL}/api/ipam/ip-addresses/{ip_id}/",
+        f"{NETBOX_IP}/api/ipam/ip-addresses/{ip_id}/",
         headers=HEADERS,
         timeout=10,
     )
@@ -926,7 +926,7 @@ def get_primary_interface(device_data: dict) -> Interface | None:
 
     # Fetch full interface details (assigned_object in the IP response is often trimmed)
     iface_resp = requests.get(
-        f"{NETBOX_URL}/api/dcim/interfaces/{interface_id}/",
+        f"{NETBOX_IP}/api/dcim/interfaces/{interface_id}/",
         headers=HEADERS,
         timeout=10,
     )
