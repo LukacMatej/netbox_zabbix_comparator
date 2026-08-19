@@ -940,7 +940,7 @@ def get_primary_interface(device_data: dict) -> interface_model | None:
     return interface_model(
         name=iface["name"],
         addresses=[
-            Address(
+            address_model(
                 address=primary_ip4["address"],
                 dns_name=primary_ip4.get("dns_name", ""),
             )
