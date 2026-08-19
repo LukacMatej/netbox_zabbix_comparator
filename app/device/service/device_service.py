@@ -885,7 +885,7 @@ def parse_webhook_update(data: dict) -> Device:
     primary_interface = get_primary_interface(device_data)
     interfaces = [primary_interface] if primary_interface else []
 
-    return Device(
+    return device_model(
         name=postchange.get("name", device_data.get("name", "")),
         interfaces=interfaces,
         hostgroup=(postchange.get("custom_fields") or {}).get("zabbix_hostgroups", []),
@@ -894,7 +894,7 @@ def parse_webhook_update(data: dict) -> Device:
         status=postchange.get("status", "Inactive"),
     )
 
-def get_primary_interface(device_data: dict) -> Interface | None:
+def get_primary_interface(device_data: dict) -> interface_model | None:
     """
     Given the 'data' block of a device webhook, resolve the interface
     that holds the device's primary IPv4 address.
@@ -937,7 +937,7 @@ def get_primary_interface(device_data: dict) -> Interface | None:
     if not mac and iface.get("primary_mac_address"):
         mac = iface["primary_mac_address"].get("mac_address", "")
 
-    return Interface(
+    return interface_model(
         name=iface["name"],
         addresses=[
             Address(
