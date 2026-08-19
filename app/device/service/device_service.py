@@ -892,7 +892,7 @@ def parse_webhook_update(data: dict) -> Device:
         description=postchange.get("description", ""),
         templates=(postchange.get("custom_fields") or {}).get("zabbix_templates", []),
         status=postchange.get("status", "Inactive"),
-    )]
+    )
 
 def get_primary_interface(device_data: dict) -> Interface | None:
     """
