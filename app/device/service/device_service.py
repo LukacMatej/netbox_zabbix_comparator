@@ -873,7 +873,7 @@ def parse_webhook_create(data: dict) -> device_model:
         interfaces=[],
         hostgroup=custom_fields.get("zabbix_hostgroups", []),
         description=device_data.get("description", ""),
-        templates=custom_fields.get("zabbix_templates", []),
+        templates=None,
         status=device_data.get("status", {}).get("value", "Inactive"),
     )
 
