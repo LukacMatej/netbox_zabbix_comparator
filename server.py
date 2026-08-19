@@ -424,10 +424,25 @@ async def webhook_update(request: Request):
 
 @app.post("/webhook_delete")
 async def webhook_delete(request: Request):
-    """Handle webhook delete event."""
+    """Handle webhook create event."""
     data = await request.json()
-    nb_device = ds.parse_webhook_delete(data)
-    log.logger.info("Webhook delete event received: %s", nb_device)
+    nb_device: Device = ds.parse_webhook_delete(data)
+    log.logger.info("Webhook delete event received: %s", data)
+    log.logger.info(f"Deleting Zabbix device for device_id: {nb_device.name}")
+    try:
+        ds.delete_zabbix_device(nb_device)
+        response = "True"
+        status_code = 200
+    except Exception as e:  # pylint: disable=broad-except
+        log.logger.error(
+            "Failed to delete Zabbix device for %s: %s",
+            nb_device.name,
+            e,
+            exc_info=True,
+        )
+        response = str(e)
+        status_code = 500
+    return {"success": response}, status_code
 
 
 @app.post("/validate_update")
