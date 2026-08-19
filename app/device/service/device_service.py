@@ -864,3 +864,174 @@ def uniform_output_text(
     except (TypeError, AttributeError, KeyError) as e:
         log.logger.error("Error uniforming output text: %s", e)
         return differences, netbox_devices, zabbix_devices
+
+def parse_webhook_create(data: dict) -> device_model:
+    device_data = data["data"]
+    custom_fields = device_data.get("custom_fields", {})
+    return device_model(
+        name=device_data["name"],
+        interfaces=[],
+        hostgroup=custom_fields.get("zabbix_hostgroups", []),
+        description=device_data.get("description", ""),
+        templates=custom_fields.get("zabbix_templates", []),
+        status=device_data.get("status", {}).get("value", "Inactive"),
+    )
+
+def parse_webhook_update(data: dict) -> Device:
+    """Build the Device that should be synced into Zabbix from a NetBox webhook."""
+    device_data = data["data"]
+    postchange = data["snapshots"].get("postchange") or {}
+
+    primary_interface = get_primary_interface(device_data)
+    interfaces = [primary_interface] if primary_interface else []
+
+    return Device(
+        name=postchange.get("name", device_data.get("name", "")),
+        interfaces=interfaces,
+        hostgroup=(postchange.get("custom_fields") or {}).get("zabbix_hostgroups", []),
+        description=postchange.get("description", ""),
+        templates=(postchange.get("custom_fields") or {}).get("zabbix_templates", []),
+        status=postchange.get("status", "Inactive"),
+    )]
+
+def get_primary_interface(device_data: dict) -> Interface | None:
+    """
+    Given the 'data' block of a device webhook, resolve the interface
+    that holds the device's primary IPv4 address.
+    """
+    NETBOX_URL = os.environ["NETBOX_URL"].rstrip("/")
+    NETBOX_TOKEN = os.environ["NETBOX_TOKEN"]
+    HEADERS = {"Authorization": f"Token {NETBOX_TOKEN}"}
+    primary_ip4 = device_data.get("primary_ip4")
+    if not primary_ip4 or primary_ip4 == "None":
+        return None
+
+    ip_id = primary_ip4["id"]
+
+    # Fetch the IP address object to find its assigned interface
+    resp = requests.get(
+        f"{NETBOX_URL}/api/ipam/ip-addresses/{ip_id}/",
+        headers=HEADERS,
+        timeout=10,
+    )
+    resp.raise_for_status()
+    ip_obj = resp.json()
+
+    assigned = ip_obj.get("assigned_object")
+    if not assigned or ip_obj.get("assigned_object_type") != "dcim.interface":
+        # primary IP might be assigned to a VM interface, or not assigned at all
+        return None
+
+    interface_id = assigned["id"]
+
+    # Fetch full interface details (assigned_object in the IP response is often trimmed)
+    iface_resp = requests.get(
+        f"{NETBOX_URL}/api/dcim/interfaces/{interface_id}/",
+        headers=HEADERS,
+        timeout=10,
+    )
+    iface_resp.raise_for_status()
+    iface = iface_resp.json()
+
+    mac = iface.get("mac_address") or ""
+    if not mac and iface.get("primary_mac_address"):
+        mac = iface["primary_mac_address"].get("mac_address", "")
+
+    return Interface(
+        name=iface["name"],
+        addresses=[
+            Address(
+                address=primary_ip4["address"],
+                dns_name=primary_ip4.get("dns_name", ""),
+            )
+        ],
+        mac_address=mac,
+        port_type=(iface.get("type") or {}).get("value", ""),
+    )
+
+def parse_webhook_delete(data: dict) -> device_model:
+    device = device_model(**data)
+    return device
+
+def get_zabbix_device(name: str) -> device_model | None:
+    """
+    Fetches a single device from Zabbix by exact host name.
+    Args:
+        name (str): The Zabbix host name to look up.
+    Returns:
+        device_model | None: The matching device, or None if not found
+            or if Zabbix credentials are missing.
+    """
+    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
+    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    REQUEST_TIMEOUT: int = 30
+    if zabbix_ip is None or zabbix_key is None:
+        log.logger.error("Zabbix IP or API key not set in environment variables.")
+        return None
+
+    headers: dict[str, str] = {
+        "Authorization": f"Bearer {zabbix_key}",
+        "Content-Type": "application/json-rpc",
+    }
+
+    response: requests.Response = requests.post(
+        zabbix_ip + "/api_jsonrpc.php",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
+        json={
+            "jsonrpc": "2.0",
+            "method": "host.get",
+            "params": {
+                "filter": {"host": [name]},
+                "output": ["hostid", "host", "description", "status"],
+                "selectInterfaces": ["interfaceid", "ip", "dns", "port", "type", "main"],
+                "selectGroups": ["name"],
+                "selectParentTemplates": ["name"],
+            },
+            "id": 1,
+        },
+    )
+
+    if response.status_code != 200:
+        log.logger.error(
+            "Zabbix API request failed for %s: HTTP %s", name, response.status_code
+        )
+        return None
+
+    data = response.json()
+    if "error" in data:
+        log.logger.error("Error in Zabbix API response for %s: %s", name, data["error"])
+        return None
+
+    results = data.get("result", [])
+    if not results:
+        log.logger.info("No Zabbix host found for %s.", name)
+        return None
+
+    host = results[0]
+
+    interfaces: list[interface_model] = []
+    for iface in host.get("interfaces", []):
+        addresses: list[address_model] = []
+        if iface.get("ip"):
+            addresses.append(address_model(address=iface["ip"], dns_name=iface.get("dns", "")))
+        interfaces.append(
+            interface_model(
+                name=f"if{iface.get('interfaceid', '')}",
+                addresses=addresses,
+                mac_address="",  # Zabbix host interfaces don't carry MAC addresses
+                port_type=str(iface.get("type", "")),
+            )
+        )
+
+    hostgroup: list[str] = [g["name"] for g in host.get("groups", []) if "name" in g]
+    templates: list[str] = [t["name"] for t in host.get("parentTemplates", []) if "name" in t]
+
+    return device_model(
+        name=host.get("host", name),
+        interfaces=interfaces,
+        hostgroup=hostgroup,
+        description=host.get("description", ""),
+        templates=templates,
+        status=host.get("status", "Inactive"),
+    )

@@ -138,7 +138,9 @@ def test(request: Request) -> HTMLResponse:
     )
 
 
-@app.post("/create_zabbix_device", name="create_zabbix_device", response_class=HTMLResponse)
+@app.post(
+    "/create_zabbix_device", name="create_zabbix_device", response_class=HTMLResponse
+)
 async def create_zabbix_device(request: Request) -> Response:
     try:
         payload = await request.json()
@@ -151,7 +153,9 @@ async def create_zabbix_device(request: Request) -> Response:
         ss.create_zabbix_device(device, sync_output_model())
         success = True
     except Exception as e:  # pylint: disable=broad-except
-        log.logger.error("Failed to create Zabbix device for %s: %s", device.name, e, exc_info=True)
+        log.logger.error(
+            "Failed to create Zabbix device for %s: %s", device.name, e, exc_info=True
+        )
         success = False
 
     return templates.TemplateResponse(
@@ -161,7 +165,12 @@ async def create_zabbix_device(request: Request) -> Response:
         status_code=200,
     )
 
-@app.post("/synchronize_zabbix_device", name="synchronize_zabbix_device", response_class=HTMLResponse)
+
+@app.post(
+    "/synchronize_zabbix_device",
+    name="synchronize_zabbix_device",
+    response_class=HTMLResponse,
+)
 async def synchronize_zabbix_device(request: Request) -> Response:
     try:
         payload = await request.json()
@@ -182,7 +191,9 @@ async def synchronize_zabbix_device(request: Request) -> Response:
         ss.apply_differences(differences=difference, sync_output=sync_output)
         success = True
     except Exception as e:  # pylint: disable=broad-except
-        log.logger.error("Synchronization failed for %s: %s", nb_device.name, e, exc_info=True)
+        log.logger.error(
+            "Synchronization failed for %s: %s", nb_device.name, e, exc_info=True
+        )
         success = False
 
     return templates.TemplateResponse(
@@ -349,11 +360,29 @@ def run_compare_sync(request: Request) -> Response:
         status_code=200,
     )
 
+
 @app.post("/webhook_create")
 async def webhook_create(request: Request):
     """Handle webhook create event."""
     data = await request.json()
+    nb_device: Device = ds.parse_webhook_create(data)
     log.logger.info("Webhook create event received: %s", data)
+    log.logger.info(f"Creating Zabbix device for device_id: {nb_device.name}")
+    try:
+        ss.create_zabbix_device(nb_device, sync_output_model())
+        response = "True"
+        status_code = 200
+    except Exception as e:  # pylint: disable=broad-except
+        log.logger.error(
+            "Failed to create Zabbix device for %s: %s",
+            nb_device.name,
+            e,
+            exc_info=True,
+        )
+        response = str(e)
+        status_code = 500
+    return {"success": response}, status_code
+
 
 @app.post("/webhook_update")
 async def webhook_update(request: Request):
@@ -361,11 +390,45 @@ async def webhook_update(request: Request):
     data = await request.json()
     log.logger.info("Webhook update event received: %s", data)
 
+    nb_device = ds.parse_webhook_update(data)
+    zb_device = ds.get_zabbix_device(nb_device.name)
+
+    if zb_device is None:
+        log.logger.info("No Zabbix host found for %s, skipping sync.", nb_device.name)
+        return {"success": "True"}, 200
+
+    differences = ct.compare_devices([nb_device], [zb_device])
+    difference_list = differences[0]
+
+    if not difference_list:
+        log.logger.info("No differences found for %s.", nb_device.name)
+        return {"success": "True"}, 200
+
+    difference = difference_list[0]
+    log.logger.info("Synchronizing Zabbix device: %s -> %s", nb_device, zb_device)
+
+    sync_output = sync_output_model()
+    try:
+        ss.apply_differences(differences=difference, sync_output=sync_output)
+        response = "True"
+        status_code = 200
+    except Exception as e:  # pylint: disable=broad-except
+        log.logger.error(
+            "Synchronization failed for %s: %s", nb_device.name, e, exc_info=True
+        )
+        response = str(e)
+        status_code = 500
+
+    return {"success": response}, status_code
+
+
 @app.post("/webhook_delete")
 async def webhook_delete(request: Request):
     """Handle webhook delete event."""
     data = await request.json()
-    log.logger.info("Webhook delete event received: %s", data)
+    nb_device = ds.parse_webhook_delete(data)
+    log.logger.info("Webhook delete event received: %s", nb_device)
+
 
 @app.post("/validate_update")
 async def validate_update(request: Request):
