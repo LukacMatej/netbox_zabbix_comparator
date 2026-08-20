@@ -168,14 +168,13 @@ def add_interface_to_zabbix(
             } if port_type == "snmp" else None
         }
         interface_params.append(interface_data)
-
     payload = {
         "jsonrpc": "2.0",
         "method": "hostinterface.create",
         "params": interface_params,
         "id": 1,
     }
-
+    log.logger.info("Params payload: %s", payload)
     try:
         log.logger.info(
             "Adding %d interface(s) to Zabbix host %s.", len(interfaces), hostid
