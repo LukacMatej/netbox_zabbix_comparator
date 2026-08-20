@@ -117,18 +117,6 @@ class Device:
             "id": 1,
         }
 
-    def clear_templates_data_zabbix(self, hostid, templateids) -> dict:
-        """Creates a dictionary representation for Zabbix host template update."""
-        return {
-            "jsonrpc": "2.0",
-            "method": "host.update",
-            "params": {
-                "hostid": hostid,
-                "templates_clear": [{"templateid": tempId} for tempId in templateids if tempId],
-            },
-            "id": 1,
-        }
-
     def update_interface_data_zabbix(self, interface_ids) -> dict:
         """Creates a dictionary representation for Zabbix host interface update."""
 
@@ -247,7 +235,9 @@ def normalize_status(status: str) -> str:
         "Inactive"
     """
 
-    if status in (0, "0", "Active"):
+    if status in (0, "0"):
+        return "Active"
+    if isinstance(status, str) and status.strip().lower() == "active":
         return "Active"
     return "Inactive"
 
@@ -263,55 +253,39 @@ def _is_main_interface(interfaces: list[InterfaceModel], index: int) -> int:
 
 def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
     """Converts a list of InterfaceModel objects to a list of dictionaries."""
+    type_map = {"Agent": "1", "SNMP": "2", "IPMI": "3", "JMX": "4"}
     result = []
     for index, interface in enumerate(interfaces):
-        if interface.port_type in ("1", "Agent"):
-            result.append(
-                {
-                    "type": interface.port_type,
-                    "main": _is_main_interface(interfaces, index),
-                    "useip": 1,
-                    "ip": (
-                        str(interface.addresses[0].address).split("/", maxsplit=1)[0]
-                        if interface.addresses
-                        else ""
-                    ),
-                    "dns": interface.addresses[0].dns_name if interface.addresses else "",
-                    "port": map_port_type_default_port(interface.port_type),
-                }
-            )
-        elif interface.port_type in ("2", "SNMP"):
-            result.append(
-                {
-                    "type": interface.port_type,
-                    "main": _is_main_interface(interfaces, index),
-                    "useip": 1,
-                    "ip": (
-                        str(interface.addresses[0].address).split("/", maxsplit=1)[0]
-                        if interface.addresses
-                        else ""
-                    ),
-                    "dns": interface.addresses[0].dns_name if interface.addresses else "",
-                    "port": map_port_type_default_port(interface.port_type),
-                    "details": {"version": 3},
-                }
-            )
+        zabbix_type = type_map.get(interface.port_type, interface.port_type)
+        if zabbix_type == "1":
+            result.append({
+                "type": zabbix_type,
+                "main": _is_main_interface(interfaces, index),
+                "useip": 1,
+                "ip": (str(interface.addresses[0].address).split("/", maxsplit=1)[0] if interface.addresses else ""),
+                "dns": interface.addresses[0].dns_name if interface.addresses else "",
+                "port": map_port_type_default_port(interface.port_type),
+            })
+        elif zabbix_type == "2":
+            result.append({
+                "type": zabbix_type,
+                "main": _is_main_interface(interfaces, index),
+                "useip": 1,
+                "ip": (str(interface.addresses[0].address).split("/", maxsplit=1)[0] if interface.addresses else ""),
+                "dns": interface.addresses[0].dns_name if interface.addresses else "",
+                "port": map_port_type_default_port(interface.port_type),
+                "details": {"version": 3},
+            })
         else:
-            result.append(
-                {
-                    "type": interface.port_type,
-                    "main": _is_main_interface(interfaces, index),
-                    "useip": 1,
-                    "ip": (
-                        str(interface.addresses[0].address).split("/", maxsplit=1)[0]
-                        if interface.addresses
-                        else ""
-                    ),
-                    "dns": interface.addresses[0].dns_name if interface.addresses else "",
-                    "port": map_port_type_default_port(interface.port_type),
-                    "details": {"version": 3},
-                }
-            )
+            result.append({
+                "type": zabbix_type,
+                "main": _is_main_interface(interfaces, index),
+                "useip": 1,
+                "ip": (str(interface.addresses[0].address).split("/", maxsplit=1)[0] if interface.addresses else ""),
+                "dns": interface.addresses[0].dns_name if interface.addresses else "",
+                "port": map_port_type_default_port(interface.port_type),
+                "details": {"version": 3},
+            })
     return result
 
 

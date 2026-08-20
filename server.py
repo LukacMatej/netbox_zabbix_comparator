@@ -42,8 +42,10 @@ from fastapi.templating import Jinja2Templates
 
 from app.compare.service import compare_service as ct
 from app.compare.service import synchronization_service as ss
+from app.device.models.address_model import Address
 from app.device.models.device_model import Device
 from app.device.models.difference_model import DeviceDifference
+from app.device.models.interface_model import Interface
 from app.device.models.synchonization_output_model import (
     SyncOutput as sync_output_model,
 )
@@ -57,6 +59,65 @@ if proxy_root_path and not proxy_root_path.startswith("/"):
     proxy_root_path = "/" + proxy_root_path
 app = FastAPI(root_path=proxy_root_path, title="NetBox Zabbix Compare")
 templates = Jinja2Templates(directory="templates")
+
+
+def dict_to_address(data: dict) -> Address:
+    return Address(address=data["address"], dns_name=data["dns_name"])
+
+
+def dict_to_interface(data: dict) -> Interface:
+    return Interface(
+        name=data["name"],
+        addresses=[dict_to_address(a) for a in data["addresses"]],
+        mac_address=data["mac_address"],
+        port_type=data["port_type"],
+    )
+
+
+def dict_to_device(data: dict) -> Device:
+    return Device(
+        name=data["name"],
+        interfaces=[dict_to_interface(i) for i in data["interfaces"]],
+        hostgroup=data["hostgroup"],
+        description=data["description"],
+        templates=data["templates"],
+        status=data["status"],
+    )
+
+
+def device_to_dict(device: Device) -> dict:
+    """Converts a Device (plain class, not Pydantic) into a JSON-serializable dict."""
+    return {
+        "name": device.name,
+        "hostgroup": device.hostgroup,
+        "description": device.description,
+        "templates": device.templates,
+        "status": device.status,
+        "interfaces": [
+            {
+                "name": interface.name,
+                "mac_address": interface.mac_address,
+                "port_type": interface.port_type,
+                "addresses": [address.to_dict() for address in interface.addresses],
+            }
+            for interface in device.interfaces
+        ],
+    }
+
+
+templates.env.globals["device_to_dict"] = device_to_dict
+
+
+def difference_to_dict(difference: DeviceDifference) -> dict:
+    """Converts a DeviceDifference into a JSON-serializable dict."""
+    return {
+        "nb_device": device_to_dict(difference.nb_device),
+        "zb_device": device_to_dict(difference.zb_device),
+        "differences": list(difference.differences),
+    }
+
+
+templates.env.globals["difference_to_dict"] = difference_to_dict
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -73,6 +134,72 @@ def test(request: Request) -> HTMLResponse:
         request,
         "index.html",
         {"request": request, "netbox_url": netbox_url, "zabbix_url": zabbix_url},
+        status_code=200,
+    )
+
+
+@app.post(
+    "/create_zabbix_device", name="create_zabbix_device", response_class=HTMLResponse
+)
+async def create_zabbix_device(request: Request) -> Response:
+    try:
+        payload = await request.json()
+    except ValueError:
+        return PlainTextResponse("Invalid or missing JSON body", status_code=400)
+
+    device = dict_to_device(payload)
+    log.logger.info(f"Creating Zabbix device for device_id: {device.name}")
+    try:
+        ss.create_zabbix_device(device, sync_output_model())
+        success = True
+    except Exception as e:  # pylint: disable=broad-except
+        log.logger.error(
+            "Failed to create Zabbix device for %s: %s", device.name, e, exc_info=True
+        )
+        success = False
+
+    return templates.TemplateResponse(
+        request,
+        "sync_button_result.html",
+        {"success": success},
+        status_code=200,
+    )
+
+
+@app.post(
+    "/synchronize_zabbix_device",
+    name="synchronize_zabbix_device",
+    response_class=HTMLResponse,
+)
+async def synchronize_zabbix_device(request: Request) -> Response:
+    try:
+        payload = await request.json()
+    except ValueError:
+        return PlainTextResponse("Invalid or missing JSON body", status_code=400)
+
+    nb_device = dict_to_device(payload["nb_device"])
+    zb_device = dict_to_device(payload["zb_device"])
+    difference = DeviceDifference(
+        nb_device=nb_device,
+        zb_device=zb_device,
+        differences=tuple(payload["differences"]),
+    )
+
+    log.logger.info(f"Synchronizing Zabbix device: {nb_device} -> {zb_device}")
+    sync_output = sync_output_model()
+    try:
+        ss.apply_differences(differences=difference, sync_output=sync_output)
+        success = True
+    except Exception as e:  # pylint: disable=broad-except
+        log.logger.error(
+            "Synchronization failed for %s: %s", nb_device.name, e, exc_info=True
+        )
+        success = False
+
+    return templates.TemplateResponse(
+        request,
+        "sync_button_result.html",
+        {"success": success},
         status_code=200,
     )
 
@@ -234,6 +361,90 @@ def run_compare_sync(request: Request) -> Response:
     )
 
 
+@app.post("/webhook_create")
+async def webhook_create(request: Request):
+    """Handle webhook create event."""
+    data = await request.json()
+    nb_device: Device = ds.parse_webhook_create(data)
+    log.logger.info("Webhook create event received: %s", data)
+    log.logger.info(f"Creating Zabbix device for device_id: {nb_device.name}")
+    try:
+        ss.create_zabbix_device(nb_device, sync_output_model())
+        response = "True"
+        status_code = 200
+    except Exception as e:  # pylint: disable=broad-except
+        log.logger.error(
+            "Failed to create Zabbix device for %s: %s",
+            nb_device.name,
+            e,
+            exc_info=True,
+        )
+        response = str(e)
+        status_code = 500
+    return {"success": response}, status_code
+
+
+@app.post("/webhook_update")
+async def webhook_update(request: Request):
+    """Handle webhook update event."""
+    data = await request.json()
+    log.logger.info("Webhook update event received: %s", data)
+
+    nb_device = ds.parse_webhook_update(data)
+    zb_device = ds.get_zabbix_device(nb_device.name)
+
+    if zb_device is None:
+        log.logger.info("No Zabbix host found for %s, skipping sync.", nb_device.name)
+        return {"success": "True"}, 200
+
+    differences = ct.compare_devices([nb_device], [zb_device])
+    difference_list = differences[0]
+
+    if not difference_list:
+        log.logger.info("No differences found for %s.", nb_device.name)
+        return {"success": "True"}, 200
+
+    difference = difference_list[0]
+    log.logger.info("Synchronizing Zabbix device: %s -> %s", nb_device, zb_device)
+
+    sync_output = sync_output_model()
+    try:
+        ss.apply_differences(differences=difference, sync_output=sync_output)
+        response = "True"
+        status_code = 200
+    except Exception as e:  # pylint: disable=broad-except
+        log.logger.error(
+            "Synchronization failed for %s: %s", nb_device.name, e, exc_info=True
+        )
+        response = str(e)
+        status_code = 500
+
+    return {"success": response}, status_code
+
+
+@app.post("/webhook_delete")
+async def webhook_delete(request: Request):
+    """Handle webhook create event."""
+    data = await request.json()
+    nb_device: Device = ds.parse_webhook_delete(data)
+    log.logger.info("Webhook delete event received: %s", data)
+    log.logger.info(f"Deleting Zabbix device for device_id: {nb_device.name}")
+    try:
+        ds.delete_zabbix_device(nb_device)
+        response = "True"
+        status_code = 200
+    except Exception as e:  # pylint: disable=broad-except
+        log.logger.error(
+            "Failed to delete Zabbix device for %s: %s",
+            nb_device.name,
+            e,
+            exc_info=True,
+        )
+        response = str(e)
+        status_code = 500
+    return {"success": response}, status_code
+
+
 @app.post("/validate_update")
 async def validate_update(request: Request):
     """Validate device update against Zabbix configuration.
@@ -380,7 +591,7 @@ if __name__ == "__main__":
         log.logger.error(response[0])
         sys.exit(1)
     docker_ip: str = os.environ.get("LISTEN_ADDRESS", "0.0.0.0")
-    docker_port: str | int = os.environ.get("HTTP_PORT", 7000)
+    docker_port: str | int = os.environ.get("HTTP_PORT", "7000")
     uvicorn.run(
         "server:app",
         host=docker_ip,

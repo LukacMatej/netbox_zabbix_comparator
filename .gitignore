@@ -27,3 +27,5 @@ docker_init.sh
 init.sh
 .gitlab-ci-backup.yml
 rest.http
+create.json
+update.json
