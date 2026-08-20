@@ -319,6 +319,109 @@ def find_hostgroup_id(hostgroup_name: str) -> int:
     )
     return -1
 
+def resolve_inventory_link_conflicts(
+    hostid: str, new_template_ids: list[int], sync_output: sync_output_model
+) -> None:
+    """
+    Before linking new templates, free up any host inventory field already
+    claimed by a leftover item from an old/unlinked template, so the new
+    template's item can claim it without Zabbix rejecting the link.
+    Only clears the inventory_link property — never deletes items or history.
+    """
+    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
+    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    if zabbix_ip is None or zabbix_key is None:
+        log.logger.error("Zabbix IP or API key not set in environment variables.")
+        return
+    headers: dict[str, str] = {
+        "Authorization": f"Bearer {zabbix_key}",
+        "Content-Type": "application/json-rpc",
+    }
+    valid_template_ids = [tid for tid in new_template_ids if tid and tid != -1]
+    if not valid_template_ids:
+        return
+
+    # 1. Which inventory fields will the new templates try to claim?
+    new_items_resp = requests.post(
+        zabbix_ip + "/api_jsonrpc.php",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
+        json={
+            "jsonrpc": "2.0",
+            "method": "item.get",
+            "params": {
+                "templateids": valid_template_ids,
+                "output": ["itemid", "inventory_link"],
+            },
+            "id": 1,
+        },
+    )
+    new_items_json = new_items_resp.json()
+    if "error" in new_items_json:
+        log.logger.error(
+            "Failed to fetch new template items for inventory check: %s",
+            new_items_json["error"],
+        )
+        return
+    wanted_links = {
+        item["inventory_link"]
+        for item in new_items_json.get("result", [])
+        if item.get("inventory_link") not in (None, "0")
+    }
+    if not wanted_links:
+        return  # new templates don't populate any inventory field
+
+    # 2. Which items already on the host claim those same fields?
+    host_items_resp = requests.post(
+        zabbix_ip + "/api_jsonrpc.php",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
+        json={
+            "jsonrpc": "2.0",
+            "method": "item.get",
+            "params": {
+                "hostids": hostid,
+                "output": ["itemid", "inventory_link", "key_"],
+            },
+            "id": 1,
+        },
+    )
+    host_items_json = host_items_resp.json()
+    if "error" in host_items_json:
+        log.logger.error(
+            "Failed to fetch host items for inventory check: %s", host_items_json["error"]
+        )
+        return
+    conflicting_items = [
+        item
+        for item in host_items_json.get("result", [])
+        if item.get("inventory_link") in wanted_links
+    ]
+    if not conflicting_items:
+        return
+
+    # 3. Free the inventory field on each conflicting item — item and history are untouched
+    for item in conflicting_items:
+        clear_resp = requests.post(
+            zabbix_ip + "/api_jsonrpc.php",
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+            json={
+                "jsonrpc": "2.0",
+                "method": "item.update",
+                "params": {"itemid": item["itemid"], "inventory_link": 0},
+                "id": 1,
+            },
+        )
+        result = clear_resp.json()
+        if "error" in result:
+            msg = f"Failed to clear inventory_link on item {item.get('key_', item['itemid'])}: {result['error']}"
+            sync_output.add_difference_output(msg)
+            log.logger.error(msg)
+        else:
+            msg = f"Freed inventory field on old item {item.get('key_', item['itemid'])} to allow new template link."
+            sync_output.add_difference_output(msg)
+            log.logger.info(msg)
 
 def find_template_ids(template_name: str) -> int:
     """Finds the Zabbix template ID based on the provided template name.
@@ -648,6 +751,7 @@ def apply_differences(
     templateids: list[int] = [
         find_template_ids(template) for template in template_source if template
     ]
+    resolve_inventory_link_conflicts(hostid, templateids, sync_output)
     update_data_zabbix = zb_device.update_data_zabbix(
         name=nb_device.name,
         hostid=hostid,
