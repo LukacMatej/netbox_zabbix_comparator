@@ -25,8 +25,6 @@ Functions:
         creating missing devices and applying detected differences.
 
 """
-from nt import unlink
-
 import os
 from typing import Any
 
