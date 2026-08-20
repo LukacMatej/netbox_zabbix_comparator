@@ -464,6 +464,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
         response: requests.Response = requests.post(
             ip, headers=headers, json={"query": query}, timeout=30
         )
+
         log.logger.debug(
             "Request to Netbox API: %s %s  with headers %s and body %s",
             response.request.method,

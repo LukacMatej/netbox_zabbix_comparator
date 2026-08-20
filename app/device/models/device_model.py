@@ -117,18 +117,6 @@ class Device:
             "id": 1,
         }
 
-    def clear_templates_data_zabbix(self, hostid, templateids) -> dict:
-        """Creates a dictionary representation for Zabbix host template update."""
-        return {
-            "jsonrpc": "2.0",
-            "method": "host.update",
-            "params": {
-                "hostid": hostid,
-                "templates_clear": [{"templateid": tempId} for tempId in templateids if tempId],
-            },
-            "id": 1,
-        }
-
     def update_interface_data_zabbix(self, interface_ids) -> dict:
         """Creates a dictionary representation for Zabbix host interface update."""
 
@@ -247,7 +235,9 @@ def normalize_status(status: str) -> str:
         "Inactive"
     """
 
-    if status in (0, "0", "Active"):
+    if status in (0, "0"):
+        return "Active"
+    if isinstance(status, str) and status.strip().lower() == "active":
         return "Active"
     return "Inactive"
 

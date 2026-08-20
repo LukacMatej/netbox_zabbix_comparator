@@ -106,7 +106,7 @@ def add_interface_to_zabbix(
     hostid: str,
     interfaces: list[interface_model],
     sync_output: sync_output_model,
-    existing_interfaces: list[dict] = None,
+    existing_interfaces: list[dict] | None = None,
 ):
     """Adds new interfaces to a Zabbix host via API.
     Args:
@@ -206,7 +206,7 @@ def add_interface_to_zabbix(
             sync_output.add_difference_output(error_msg)
             log.logger.error(error_msg)
     except requests.exceptions.RequestException as e:
-        error_msg = f"Exception when adding interfaces to Zabbix: {str(e)}"
+        error_msg = f"Exception when adding interfaces to Zabbix: {e}"
         sync_output.add_difference_output(error_msg)
         log.logger.error(error_msg)
 
@@ -270,7 +270,7 @@ def remove_interface_from_zabbix(
             sync_output.add_difference_output(error_msg)
             log.logger.error(error_msg)
     except requests.exceptions.RequestException as e:
-        error_msg = f"Exception when removing interfaces from Zabbix: {str(e)}"
+        error_msg = f"Exception when removing interfaces from Zabbix: {e}"
         sync_output.add_difference_output(error_msg)
         log.logger.error(error_msg)
 
@@ -342,7 +342,7 @@ def resolve_inventory_link_conflicts(
         return
 
     # 1. Which inventory fields will the new templates try to claim?
-    new_items_resp = requests.post(
+    new_items_resp: requests.Response = requests.post(
         zabbix_ip + "/api_jsonrpc.php",
         headers=headers,
         timeout=REQUEST_TIMEOUT,
@@ -356,7 +356,7 @@ def resolve_inventory_link_conflicts(
             "id": 1,
         },
     )
-    new_items_json = new_items_resp.json()
+    new_items_json: dict = new_items_resp.json()
     if "error" in new_items_json:
         log.logger.error(
             "Failed to fetch new template items for inventory check: %s",
@@ -366,13 +366,13 @@ def resolve_inventory_link_conflicts(
     wanted_links = {
         item["inventory_link"]
         for item in new_items_json.get("result", [])
-        if item.get("inventory_link") not in (None, "0")
+        if isinstance(item, dict) and item.get("inventory_link") not in (None, "0")
     }
     if not wanted_links:
         return  # new templates don't populate any inventory field
 
     # 2. Which items already on the host claim those same fields?
-    host_items_resp = requests.post(
+    host_items_resp: requests.Response = requests.post(
         zabbix_ip + "/api_jsonrpc.php",
         headers=headers,
         timeout=REQUEST_TIMEOUT,
@@ -386,7 +386,7 @@ def resolve_inventory_link_conflicts(
             "id": 1,
         },
     )
-    host_items_json = host_items_resp.json()
+    host_items_json: dict = host_items_resp.json()
     if "error" in host_items_json:
         log.logger.error(
             "Failed to fetch host items for inventory check: %s", host_items_json["error"]
@@ -395,14 +395,14 @@ def resolve_inventory_link_conflicts(
     conflicting_items = [
         item
         for item in host_items_json.get("result", [])
-        if item.get("inventory_link") in wanted_links
+        if isinstance(item, dict) and item.get("inventory_link") in wanted_links
     ]
     if not conflicting_items:
         return
 
     # 3. Free the inventory field on each conflicting item — item and history are untouched
     for item in conflicting_items:
-        clear_resp = requests.post(
+        clear_resp: requests.Response = requests.post(
             zabbix_ip + "/api_jsonrpc.php",
             headers=headers,
             timeout=REQUEST_TIMEOUT,
@@ -413,7 +413,7 @@ def resolve_inventory_link_conflicts(
                 "id": 1,
             },
         )
-        result = clear_resp.json()
+        result: dict = clear_resp.json()
         if "error" in result:
             msg = f"Failed to clear inventory_link on item {item.get('key_', item['itemid'])}: {result['error']}"
             sync_output.add_difference_output(msg)
@@ -479,7 +479,6 @@ def apply_differences(
     """
     nb_device: device_model = differences.nb_device
     zb_device: device_model = differences.zb_device
-    old_templateids: list[str] = zb_device.templates
     different_fields: list[str] = differences.differences[
         0
     ]  # tuple: (different_fields, same_fields)
@@ -751,7 +750,11 @@ def apply_differences(
     templateids: list[int] = [
         find_template_ids(template) for template in template_source if template
     ]
-    resolve_inventory_link_conflicts(hostid, templateids, sync_output)
+    template_field_changed = any(
+    	extract_field_name(field) == "templates" for field in different_fields
+    )
+    if template_field_changed:
+        resolve_inventory_link_conflicts(hostid, templateids, sync_output)
     update_data_zabbix = zb_device.update_data_zabbix(
         name=nb_device.name,
         hostid=hostid,
@@ -961,17 +964,7 @@ def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
     if hostgroup_names is None:
         hostgroup_names = [default_hostgroup]
     # Normalize common input shapes (str, dict, tuple/set) to a list for iteration.
-    if isinstance(hostgroup_names, str):
-        hostgroup_names = [hostgroup_names]
-    elif isinstance(hostgroup_names, dict):
-        hostgroup_names = [hostgroup_names]
-    elif isinstance(hostgroup_names, (tuple, set)):
-        hostgroup_names = list(hostgroup_names)
-    elif not isinstance(hostgroup_names, list):
-        log.logger.warning(
-            "Unexpected hostgroup_names type %s, coercing to single-item list",
-            type(hostgroup_names).__name__,
-        )
+    if isinstance(hostgroup_names, (str, dict, tuple, set)) or not isinstance(hostgroup_names, list):
         hostgroup_names = [hostgroup_names]
     # Extract names from the list, handling both strings and dictionaries
     names_to_check = []
