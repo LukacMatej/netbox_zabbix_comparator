@@ -161,6 +161,11 @@ def add_interface_to_zabbix(
             ),
             "dns": interface.addresses[0].dns_name if interface.addresses else "",
             "port": port,
+            "details": {
+                "version": "2",
+                "bulk": "1",
+                "community": "{$SNMP_COMMUNITY}"
+            } if port_type == "snmp" else None
         }
         interface_params.append(interface_data)
 
