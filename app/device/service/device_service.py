@@ -1043,42 +1043,46 @@ def parse_webhook_create(data: dict) -> device_model:
     )
 
 
-def parse_webhook_update(data: dict) -> Device:
+def parse_webhook_update(data: dict) -> device_model:
     """Build the Device that should be synced into Zabbix from a NetBox webhook."""
     device_data = data["data"]
     postchange = data["snapshots"].get("postchange") or {}
 
-    primary_interface = get_primary_interface(device_data)
+    custom_fields = postchange.get("custom_fields") or device_data.get("custom_fields", {})
+    # zabbix_port_type is a NetBox multi-select custom field, e.g. ["1"]
+    zabbix_port_type_list = custom_fields.get("zabbix_port_type") or []
+    zabbix_port_type = zabbix_port_type_list[0] if zabbix_port_type_list else "1"
+
+    primary_interface = get_primary_interface(device_data, zabbix_port_type)
     interfaces = [primary_interface] if primary_interface else []
 
     return device_model(
         name=postchange.get("name", device_data.get("name", "")),
         interfaces=interfaces,
-        hostgroup=(postchange.get("custom_fields") or {}).get("zabbix_hostgroups", []),
+        hostgroup=custom_fields.get("zabbix_hostgroups", []),
         description=postchange.get("description", ""),
-        templates=(postchange.get("custom_fields") or {}).get("zabbix_templates", []),
+        templates=custom_fields.get("zabbix_templates", []),
         status=postchange.get("status", "Inactive"),
     )
 
 
-def get_primary_interface(device_data: dict) -> interface_model | None:
+def get_primary_interface(device_data: dict, zabbix_port_type: str) -> interface_model | None:
     """
-    Given the 'data' block of a device webhook, resolve the interface
-    that holds the device's primary IPv4 address.
+    Resolve the interface holding the device's primary IPv4 address.
+    port_type comes from the device's zabbix_port_type custom field
+    (1=Agent, 2=SNMP, 3=IPMI, 4=JMX) — NOT the physical NetBox interface type.
     """
-    NETBOX_IP = os.environ["NETBOX_IP"].rstrip("/")
-    NETBOX_KEY = os.environ["NETBOX_KEY"]
-    HEADERS = {"Authorization": f"Token {NETBOX_KEY}"}
+    netbox_ip = os.environ.get("NETBOX_IP")
+    netbox_key = os.environ.get("NETBOX_KEY")
+    headers = {"Authorization": f"Token {netbox_key}"} if netbox_key else {}
     primary_ip4 = device_data.get("primary_ip4")
     if not primary_ip4 or primary_ip4 == "None":
         return None
 
     ip_id = primary_ip4["id"]
-
-    # Fetch the IP address object to find its assigned interface
     resp = requests.get(
-        f"{NETBOX_IP}/api/ipam/ip-addresses/{ip_id}/",
-        headers=HEADERS,
+        f"{netbox_ip}/api/ipam/ip-addresses/{ip_id}/",
+        headers=headers,
         timeout=10,
     )
     resp.raise_for_status()
@@ -1086,15 +1090,12 @@ def get_primary_interface(device_data: dict) -> interface_model | None:
 
     assigned = ip_obj.get("assigned_object")
     if not assigned or ip_obj.get("assigned_object_type") != "dcim.interface":
-        # primary IP might be assigned to a VM interface, or not assigned at all
         return None
 
     interface_id = assigned["id"]
-
-    # Fetch full interface details (assigned_object in the IP response is often trimmed)
     iface_resp = requests.get(
-        f"{NETBOX_IP}/api/dcim/interfaces/{interface_id}/",
-        headers=HEADERS,
+        f"{netbox_ip}/api/dcim/interfaces/{interface_id}/",
+        headers=headers,
         timeout=10,
     )
     iface_resp.raise_for_status()
@@ -1107,13 +1108,10 @@ def get_primary_interface(device_data: dict) -> interface_model | None:
     return interface_model(
         name=iface["name"],
         addresses=[
-            address_model(
-                address=primary_ip4["address"],
-                dns_name=primary_ip4.get("dns_name", ""),
-            )
+            address_model(address=primary_ip4["address"], dns_name=primary_ip4.get("dns_name", "")),
         ],
         mac_address=mac,
-        port_type=(iface.get("type") or {}).get("value", ""),
+        port_type=zabbix_port_type,  # e.g. "1" — matches Zabbix's own numeric type codes
     )
 
 
