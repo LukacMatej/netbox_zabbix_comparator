@@ -25,6 +25,7 @@ Functions:
         creating missing devices and applying detected differences.
 
 """
+from nt import unlink
 
 import os
 from typing import Any
@@ -318,6 +319,32 @@ def find_hostgroup_id(hostgroup_name: str) -> int:
         "Failed to find Zabbix hostgroup ID for %s: %s", hostgroup_name, response.text
     )
     return -1
+
+def unlink_current_templates(
+    hostid: str, headers: dict, zabbix_ip: str, sync_output: sync_output_model
+) -> None:
+    """
+    Non-destructively unlinks all templates currently on the host, so a
+    subsequent template link doesn't collide with a matching-named but
+    non-identical graph/item prototype still owned by the outgoing template.
+    Items become plain host items and keep their history; nothing is deleted.
+    """
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "host.update",
+        "params": {"hostid": hostid, "templates": []},
+        "id": 1,
+    }
+    resp = requests.post(
+        zabbix_ip + "/api_jsonrpc.php", headers=headers, timeout=REQUEST_TIMEOUT, json=payload
+    )
+    result = resp.json()
+    if "error" in result:
+        msg = f"Failed to unlink existing templates from host {hostid} before relink: {result['error']}"
+        sync_output.add_difference_output(msg)
+        log.logger.error(msg)
+    else:
+        log.logger.info("Unlinked existing templates from host %s prior to relink.", hostid)
 
 def resolve_graph_name_conflicts(
     hostid: str, new_template_ids: list[int], sync_output: sync_output_model
@@ -870,6 +897,7 @@ def apply_differences(
     )
     if template_field_changed:
         resolve_inventory_link_conflicts(hostid, templateids, sync_output)
+        unlink_current_templates(hostid, headers, zabbix_ip, sync_output)
         resolve_graph_name_conflicts(hostid, templateids, sync_output)
     update_data_zabbix = zb_device.update_data_zabbix(
         name=nb_device.name,
