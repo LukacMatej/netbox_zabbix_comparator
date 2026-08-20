@@ -148,10 +148,10 @@ def add_interface_to_zabbix(
             has_primary_for_type,
             is_main,
         )
-
+        port = map_port_type_default_port(port_type)
         interface_data = {
             "hostid": hostid,
-            "type": port_type if port_type in ("1", "2", "3", "4") else "1",
+            "type": device_service.uniform_port_type(port_type,True),
             "main": is_main,
             "useip": 1,
             "ip": (
@@ -160,7 +160,7 @@ def add_interface_to_zabbix(
                 else ""
             ),
             "dns": interface.addresses[0].dns_name if interface.addresses else "",
-            "port": 161,
+            "port": port,
         }
         interface_params.append(interface_data)
 
