@@ -149,9 +149,9 @@ def add_interface_to_zabbix(
             is_main,
         )
         port = map_port_type_default_port(port_type)
-        interface_data = {
+        interface_data: dict[str, str | int | dict[str, str]] = {
             "hostid": hostid,
-            "type": device_service.uniform_port_type(port_type,True),
+            "type": port_type,
             "main": is_main,
             "useip": 1,
             "ip": (
@@ -161,12 +161,13 @@ def add_interface_to_zabbix(
             ),
             "dns": interface.addresses[0].dns_name if interface.addresses else "",
             "port": port,
-            "details": {
+        }
+        if port_type == "2":  # SNMP
+            interface_data["details"] = {
                 "version": "2",
                 "bulk": "1",
-                "community": "{$SNMP_COMMUNITY}"
-            } if port_type == "snmp" else None
-        }
+                "community": "{$SNMP_COMMUNITY}",
+            }
         interface_params.append(interface_data)
     payload = {
         "jsonrpc": "2.0",
