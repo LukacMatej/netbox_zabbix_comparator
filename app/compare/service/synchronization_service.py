@@ -319,6 +319,121 @@ def find_hostgroup_id(hostgroup_name: str) -> int:
     )
     return -1
 
+def resolve_graph_name_conflicts(
+    hostid: str, new_template_ids: list[int], sync_output: sync_output_model
+) -> None:
+    """
+    Before linking new templates, delete any host graph whose name collides
+    with a graph (or graph prototype) defined in the new template(s), where
+    the existing graph comes from a different discovery rule/template and
+    would otherwise block the link with "graph already exists ... items are
+    not identical".
+    Deletes only the graph object — item history is untouched. The new
+    template's own discovery rule will recreate an equivalent graph once it runs.
+    """
+    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
+    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    if zabbix_ip is None or zabbix_key is None:
+        log.logger.error("Zabbix IP or API key not set in environment variables.")
+        return
+    headers: dict[str, str] = {
+        "Authorization": f"Bearer {zabbix_key}",
+        "Content-Type": "application/json-rpc",
+    }
+    valid_template_ids = [tid for tid in new_template_ids if tid and tid != -1]
+    if not valid_template_ids:
+        return
+
+    # 1. Static graph names defined directly on the new templates
+    static_resp = requests.post(
+        zabbix_ip + "/api_jsonrpc.php",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
+        json={
+            "jsonrpc": "2.0",
+            "method": "graph.get",
+            "params": {"templateids": valid_template_ids, "output": ["graphid", "name"]},
+            "id": 1,
+        },
+    )
+    static_json = static_resp.json()
+    if "error" in static_json:
+        log.logger.error("Failed to fetch new template graphs: %s", static_json["error"])
+        return
+    new_graph_names = {
+        g["name"] for g in static_json.get("result", []) if isinstance(g, dict)
+    }
+
+    # 2. Graph prototype names from the new templates' discovery rules
+    proto_resp = requests.post(
+        zabbix_ip + "/api_jsonrpc.php",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
+        json={
+            "jsonrpc": "2.0",
+            "method": "graphprototype.get",
+            "params": {"templateids": valid_template_ids, "output": ["graphid", "name"]},
+            "id": 1,
+        },
+    )
+    proto_json = proto_resp.json()
+    if "error" in proto_json:
+        log.logger.error("Failed to fetch new template graph prototypes: %s", proto_json["error"])
+        return
+    new_graph_names |= {
+        g["name"] for g in proto_json.get("result", []) if isinstance(g, dict)
+    }
+
+    if not new_graph_names:
+        return
+
+    # 3. Existing graphs already on the host
+    host_graphs_resp = requests.post(
+        zabbix_ip + "/api_jsonrpc.php",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
+        json={
+            "jsonrpc": "2.0",
+            "method": "graph.get",
+            "params": {"hostids": hostid, "output": ["graphid", "name"]},
+            "id": 1,
+        },
+    )
+    host_graphs_json = host_graphs_resp.json()
+    if "error" in host_graphs_json:
+        log.logger.error("Failed to fetch host graphs: %s", host_graphs_json["error"])
+        return
+
+    conflicting_graph_ids = [
+        g["graphid"]
+        for g in host_graphs_json.get("result", [])
+        if isinstance(g, dict) and g.get("name") in new_graph_names
+    ]
+    if not conflicting_graph_ids:
+        return
+
+    # 4. Delete only the conflicting graphs — items and their history are untouched
+    delete_resp = requests.post(
+        zabbix_ip + "/api_jsonrpc.php",
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
+        json={
+            "jsonrpc": "2.0",
+            "method": "graph.delete",
+            "params": conflicting_graph_ids,
+            "id": 1,
+        },
+    )
+    delete_json = delete_resp.json()
+    if "error" in delete_json:
+        msg = f"Failed to delete conflicting graph(s) {conflicting_graph_ids}: {delete_json['error']}"
+        sync_output.add_difference_output(msg)
+        log.logger.error(msg)
+    else:
+        msg = f"Deleted {len(conflicting_graph_ids)} conflicting graph(s) on host {hostid} to allow new template link."
+        sync_output.add_difference_output(msg)
+        log.logger.info(msg)
+
 def resolve_inventory_link_conflicts(
     hostid: str, new_template_ids: list[int], sync_output: sync_output_model
 ) -> None:
@@ -755,6 +870,7 @@ def apply_differences(
     )
     if template_field_changed:
         resolve_inventory_link_conflicts(hostid, templateids, sync_output)
+        resolve_graph_name_conflicts(hostid, templateids, sync_output)
     update_data_zabbix = zb_device.update_data_zabbix(
         name=nb_device.name,
         hostid=hostid,
