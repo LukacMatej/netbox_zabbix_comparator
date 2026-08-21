@@ -481,6 +481,7 @@ def apply_differences(
     different_fields: list[str] = differences.differences[
         0
     ]  # tuple: (different_fields, same_fields)
+    had_errors: bool = False
 
     def extract_field_name(field: str):
         if "(" in field:
@@ -491,6 +492,7 @@ def apply_differences(
     zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
     if zabbix_ip is None or zabbix_key is None:
         log.logger.error("Zabbix IP or API key not set in environment variables.")
+        had_errors = True
         return
     headers: dict[str, str] = {
         "Authorization": f"Bearer {zabbix_key}",
@@ -515,6 +517,7 @@ def apply_differences(
                 f"Error in Zabbix API response: {data['error']}"
             )
             log.logger.error("Error in Zabbix API response: %s", data["error"])
+            had_errors = True
             return
         if data["result"]:
             hostid = data["result"][0]["hostid"]
@@ -525,6 +528,7 @@ def apply_differences(
         log.logger.error(
             "Failed to find Zabbix hostid for %s, cannot update device.", zb_device.name
         )
+        had_errors = True
         return
     log.logger.info(
         "Zabbix Device before update %s", device_service.print_device(zb_device)
@@ -754,8 +758,6 @@ def apply_differences(
     )
     if template_field_changed:
         resolve_inventory_link_conflicts(hostid, templateids, sync_output)
-        unlink_current_templates(hostid, headers, zabbix_ip, sync_output)
-        resolve_graph_name_conflicts(hostid, templateids, sync_output)
     update_data_zabbix = zb_device.update_data_zabbix(
         name=nb_device.name,
         hostid=hostid,
@@ -845,10 +847,12 @@ def apply_differences(
                     interface_response.text,
                     interface_response.status_code,
                 )
+                had_errors = True
         else:
             log.logger.info(
                 "No matching interfaces found between device model and Zabbix."
             )
+            had_errors = True
 
     log.logger.info(update_data_zabbix)
     response: requests.Response = requests.post(
@@ -863,6 +867,7 @@ def apply_differences(
             f"Error in Zabbix API response: {response_json['error']['data']}"
         )
         log.logger.error("Error in Zabbix API response: %s", response_json["error"])
+        had_errors = True
     else:
         sync_output.add_difference_output(
             f"Device {zb_device.name} updated successfully in Zabbix."
@@ -872,6 +877,8 @@ def apply_differences(
             zb_device.name,
             response.status_code,
         )
+    if had_errors:
+        raise RuntimeError("One or more errors occurred during synchronization; see sync output for details.")
 
 
 def create_zabbix_device(device: device_model, sync_output: sync_output_model):
@@ -935,7 +942,7 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
             f"Error in Zabbix API response: {reponse_json['error']['data']}"
         )
         log.logger.error("Error in Zabbix API response: %s", reponse_json["error"])
-        return
+        raise RuntimeError("Error in Zabbix API response: %s", reponse_json["error"])
     if response.status_code == 200:
         sync_output.add_zabbix_output(
             f"Device {device.name} created successfully in Zabbix."
@@ -948,6 +955,7 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
         log.logger.error(
             "Failed to create device %s in Zabbix: %s", device.name, response.text
         )
+        raise RuntimeError(f"Failed to create device {device.name} in Zabbix: {response.text}")
 
 
 def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:

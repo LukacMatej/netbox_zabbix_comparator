@@ -31,13 +31,19 @@ Dependencies:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import os
 import sys
 
 import requests
 import uvicorn
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    StreamingResponse,
+)
 from fastapi.templating import Jinja2Templates
 
 from app.compare.service import compare_service as ct
@@ -120,6 +126,11 @@ def difference_to_dict(difference: DeviceDifference) -> dict:
 templates.env.globals["difference_to_dict"] = difference_to_dict
 
 
+@app.on_event("startup")
+async def startup_event():
+    log.broadcaster.set_loop(asyncio.get_running_loop())
+
+
 @app.get("/", response_class=HTMLResponse)
 def test(request: Request) -> HTMLResponse:
     """
@@ -138,6 +149,35 @@ def test(request: Request) -> HTMLResponse:
     )
 
 
+async def log_event_stream(from_start: bool = True):
+    q = log.broadcaster.subscribe()
+    try:
+        if from_start:
+            for line in list(log.broadcaster.buffer):
+                yield f"data: {line}\n\n"
+        while True:
+            line = await q.get()
+            yield f"data: {line}\n\n"
+    finally:
+        log.broadcaster.unsubscribe(q)
+
+
+@app.get("/logs/stream")
+async def stream_logs(from_start: bool = True):
+    return StreamingResponse(
+        log_event_stream(from_start=from_start),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+@app.get("/logs", name="logs_page", response_class=HTMLResponse)
+async def logs_page(request: Request) -> Response:
+    return templates.TemplateResponse(request, "logs_fragment.html", {})
+
 @app.post(
     "/create_zabbix_device", name="create_zabbix_device", response_class=HTMLResponse
 )
@@ -149,6 +189,7 @@ async def create_zabbix_device(request: Request) -> Response:
 
     device = dict_to_device(payload)
     log.logger.info(f"Creating Zabbix device for device_id: {device.name}")
+    error_log = ""
     try:
         ss.create_zabbix_device(device, sync_output_model())
         success = True
@@ -157,11 +198,12 @@ async def create_zabbix_device(request: Request) -> Response:
             "Failed to create Zabbix device for %s: %s", device.name, e, exc_info=True
         )
         success = False
+        error_log = str(e)
 
     return templates.TemplateResponse(
         request,
         "sync_button_result.html",
-        {"success": success},
+        {"success": success, "error_log": error_log},
         status_code=200,
     )
 
@@ -184,22 +226,28 @@ async def synchronize_zabbix_device(request: Request) -> Response:
         zb_device=zb_device,
         differences=tuple(payload["differences"]),
     )
-
+    error_log = ""
     log.logger.info(f"Synchronizing Zabbix device: {nb_device} -> {zb_device}")
     sync_output = sync_output_model()
     try:
         ss.apply_differences(differences=difference, sync_output=sync_output)
+        if "Exception " in sync_output.synchronization_output_differences:
+            raise Exception(
+                "Differences found: "
+                + ", ".join(sync_output.synchronization_output_differences)
+            )
         success = True
     except Exception as e:  # pylint: disable=broad-except
         log.logger.error(
             "Synchronization failed for %s: %s", nb_device.name, e, exc_info=True
         )
         success = False
+        error_log = str(e)
 
     return templates.TemplateResponse(
         request,
         "sync_button_result.html",
-        {"success": success},
+        {"success": success, "error_log": error_log},
         status_code=200,
     )
 
