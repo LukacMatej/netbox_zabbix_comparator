@@ -755,8 +755,6 @@ def apply_differences(
     )
     if template_field_changed:
         resolve_inventory_link_conflicts(hostid, templateids, sync_output)
-        unlink_current_templates(hostid, headers, zabbix_ip, sync_output)
-        resolve_graph_name_conflicts(hostid, templateids, sync_output)
     update_data_zabbix = zb_device.update_data_zabbix(
         name=nb_device.name,
         hostid=hostid,

@@ -196,11 +196,12 @@ async def synchronize_zabbix_device(request: Request) -> Response:
             "Synchronization failed for %s: %s", nb_device.name, e, exc_info=True
         )
         success = False
+        error_log = str(e)
 
     return templates.TemplateResponse(
         request,
         "sync_button_result.html",
-        {"success": success},
+        {"success": success, "error_log": error_log},
         status_code=200,
     )
 
