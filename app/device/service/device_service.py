@@ -42,7 +42,6 @@ Dependencies:
 """
 
 from __future__ import annotations
-from server import templates
 
 import copy
 import json
