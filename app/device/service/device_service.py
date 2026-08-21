@@ -42,6 +42,7 @@ Dependencies:
 """
 
 from __future__ import annotations
+from server import templates
 
 import copy
 import json
@@ -1056,16 +1057,50 @@ def parse_webhook_update(data: dict) -> device_model:
 
     primary_interface = get_primary_interface(device_data, zabbix_port_type)
     interfaces = [primary_interface] if primary_interface else []
+    role_data = device_data.get("role")
+    role = role_data.get("name") if role_data else ""
 
+    if custom_fields.get("zabbix_templates"):
+        templates: list[str] = custom_fields.get("zabbix_templates")
+    else:
+    	try:
+        	templates: list[str] = query_netbox_role_templates(role)
+    	except requests.exceptions.HTTPError:
+    		templates: list[str] = []
+    if not templates:
+        templates = device_data.get("config_context", {}).get("zabbix", []).get("templates", [])
     return device_model(
         name=postchange.get("name", device_data.get("name", "")),
         interfaces=interfaces,
         hostgroup=custom_fields.get("zabbix_hostgroups", []),
         description=postchange.get("description", ""),
-        templates=custom_fields.get("zabbix_templates", []),
+        templates=templates,
         status=postchange.get("status", "Inactive"),
     )
 
+def query_netbox_role_templates(role: str) -> list[str]:
+    netbox_ip: str | None = os.environ.get("NETBOX_IP")
+    netbox_key: str | None = os.environ.get("NETBOX_KEY")
+    headers = {"Authorization": f"Token {netbox_key}"} if netbox_key else {}
+    query = """
+    {
+        device_role_list {
+            name
+            custom_fields
+        }
+    }
+    """
+    response: requests.Response = requests.post(netbox_ip, headers=headers, json={"query": query}, timeout=30)
+    response.raise_for_status()
+    data_json = response.json()
+    role_data = data_json.get("data", {}).get("device_role_list", [])
+
+    role_dict = {r.get("name"): r for r in role_data}
+
+    role_entry = role_dict.get(role, {})
+    custom_fields = role_entry.get("custom_fields") or {}
+    templates_roles = custom_fields.get("zabbix_templates") or []
+    return templates_roles
 
 def get_primary_interface(device_data: dict, zabbix_port_type: str) -> interface_model | None:
     """
