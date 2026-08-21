@@ -149,6 +149,7 @@ async def create_zabbix_device(request: Request) -> Response:
 
     device = dict_to_device(payload)
     log.logger.info(f"Creating Zabbix device for device_id: {device.name}")
+    error_log = ""
     try:
         ss.create_zabbix_device(device, sync_output_model())
         success = True
@@ -185,7 +186,7 @@ async def synchronize_zabbix_device(request: Request) -> Response:
         zb_device=zb_device,
         differences=tuple(payload["differences"]),
     )
-
+    error_log = ""
     log.logger.info(f"Synchronizing Zabbix device: {nb_device} -> {zb_device}")
     sync_output = sync_output_model()
     try:
