@@ -936,7 +936,7 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
             f"Error in Zabbix API response: {reponse_json['error']['data']}"
         )
         log.logger.error("Error in Zabbix API response: %s", reponse_json["error"])
-        raise (reponse_json["error"])
+        raise Exception(reponse_json["error"])
     if response.status_code == 200:
         sync_output.add_zabbix_output(
             f"Device {device.name} created successfully in Zabbix."
@@ -949,7 +949,7 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
         log.logger.error(
             "Failed to create device %s in Zabbix: %s", device.name, response.text
         )
-        raise (response.text)
+        raise Exception(response.text)
 
 
 def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
