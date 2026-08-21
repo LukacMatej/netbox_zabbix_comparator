@@ -190,6 +190,8 @@ async def synchronize_zabbix_device(request: Request) -> Response:
     sync_output = sync_output_model()
     try:
         ss.apply_differences(differences=difference, sync_output=sync_output)
+        if "Exception " in sync_output.synchronization_output_differences:
+            raise Exception("Differences found: " + ", ".join(sync_output.synchronization_output_differences))
         success = True
     except Exception as e:  # pylint: disable=broad-except
         log.logger.error(

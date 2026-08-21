@@ -25,7 +25,6 @@ Functions:
         creating missing devices and applying detected differences.
 
 """
-from logging import raiseExceptions
 import os
 from typing import Any
 
@@ -516,7 +515,7 @@ def apply_differences(
                 f"Error in Zabbix API response: {data['error']}"
             )
             log.logger.error("Error in Zabbix API response: %s", data["error"])
-            raise Exception(data["error"])
+            return
         if data["result"]:
             hostid = data["result"][0]["hostid"]
     if not hostid:
@@ -526,9 +525,7 @@ def apply_differences(
         log.logger.error(
             "Failed to find Zabbix hostid for %s, cannot update device.", zb_device.name
         )
-        raise Exception(
-            f"Failed to find Zabbix hostid for {zb_device.name}, cannot update device."
-        )
+        return
     log.logger.info(
         "Zabbix Device before update %s", device_service.print_device(zb_device)
     )
@@ -757,6 +754,8 @@ def apply_differences(
     )
     if template_field_changed:
         resolve_inventory_link_conflicts(hostid, templateids, sync_output)
+        unlink_current_templates(hostid, headers, zabbix_ip, sync_output)
+        resolve_graph_name_conflicts(hostid, templateids, sync_output)
     update_data_zabbix = zb_device.update_data_zabbix(
         name=nb_device.name,
         hostid=hostid,
@@ -864,7 +863,6 @@ def apply_differences(
             f"Error in Zabbix API response: {response_json['error']['data']}"
         )
         log.logger.error("Error in Zabbix API response: %s", response_json["error"])
-        raise Exception(response_json["error"]["data"])
     else:
         sync_output.add_difference_output(
             f"Device {zb_device.name} updated successfully in Zabbix."
@@ -937,7 +935,6 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
             f"Error in Zabbix API response: {reponse_json['error']['data']}"
         )
         log.logger.error("Error in Zabbix API response: %s", reponse_json["error"])
-        raise Exception(reponse_json["error"])
     if response.status_code == 200:
         sync_output.add_zabbix_output(
             f"Device {device.name} created successfully in Zabbix."
@@ -950,7 +947,6 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
         log.logger.error(
             "Failed to create device %s in Zabbix: %s", device.name, response.text
         )
-        raise Exception(response.text)
 
 
 def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
