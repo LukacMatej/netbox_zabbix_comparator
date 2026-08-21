@@ -516,7 +516,7 @@ def apply_differences(
                 f"Error in Zabbix API response: {data['error']}"
             )
             log.logger.error("Error in Zabbix API response: %s", data["error"])
-            return
+            raise Exception(data["error"])
         if data["result"]:
             hostid = data["result"][0]["hostid"]
     if not hostid:
@@ -526,7 +526,9 @@ def apply_differences(
         log.logger.error(
             "Failed to find Zabbix hostid for %s, cannot update device.", zb_device.name
         )
-        return
+        raise Exception(
+            f"Failed to find Zabbix hostid for {zb_device.name}, cannot update device."
+        )
     log.logger.info(
         "Zabbix Device before update %s", device_service.print_device(zb_device)
     )
@@ -862,6 +864,7 @@ def apply_differences(
             f"Error in Zabbix API response: {response_json['error']['data']}"
         )
         log.logger.error("Error in Zabbix API response: %s", response_json["error"])
+        raise Exception(response_json["error"]["data"])
     else:
         sync_output.add_difference_output(
             f"Device {zb_device.name} updated successfully in Zabbix."
