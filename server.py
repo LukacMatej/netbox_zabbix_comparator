@@ -152,19 +152,18 @@ async def create_zabbix_device(request: Request) -> Response:
     try:
         ss.create_zabbix_device(device, sync_output_model())
         success = True
-        status_code = 200
     except Exception as e:  # pylint: disable=broad-except
         log.logger.error(
             "Failed to create Zabbix device for %s: %s", device.name, e, exc_info=True
         )
-        status_code = 500
         success = False
+        error_log = str(e)
 
     return templates.TemplateResponse(
         request,
         "sync_button_result.html",
-        {"success": success},
-        status_code=status_code,
+        {"success": success, "error_log": error_log},
+        status_code=200,
     )
 
 
