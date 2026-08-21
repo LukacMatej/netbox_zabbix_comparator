@@ -935,7 +935,7 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
             f"Error in Zabbix API response: {reponse_json['error']['data']}"
         )
         log.logger.error("Error in Zabbix API response: %s", reponse_json["error"])
-        return
+        return Exception(reponse_json["error"])
     if response.status_code == 200:
         sync_output.add_zabbix_output(
             f"Device {device.name} created successfully in Zabbix."
