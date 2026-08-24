@@ -1143,7 +1143,7 @@ def get_primary_interface(device_data: dict, zabbix_port_type: str) -> interface
     return interface_model(
         name=iface["name"],
         addresses=[
-            address_model(address=primary_ip4["address"], dns_name=primary_ip4.get("dns_name", "")),
+            address_model(address=str(primary_ip4["address"]).split("/")[0], dns_name=primary_ip4.get("dns_name", "")),
         ],
         mac_address=mac,
         port_type=zabbix_port_type,  # e.g. "1" — matches Zabbix's own numeric type codes

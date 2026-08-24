@@ -912,6 +912,7 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
             device.hostgroup,
         )
         return
+
     templates = device.templates if isinstance(device.templates, list) else [device.templates]
     templateids: list[int] = [
         find_template_ids(template) for template in templates if template
@@ -925,6 +926,7 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
             device.name,
         )
         return
+
     data_zabbix = device.create_data_zabbix(
         hostgroupids=hostgroupids, templateids=templateids
     )
