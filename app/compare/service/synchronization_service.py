@@ -852,7 +852,6 @@ def apply_differences(
             log.logger.info(
                 "No matching interfaces found between device model and Zabbix."
             )
-            had_errors = True
 
     log.logger.info(update_data_zabbix)
     response: requests.Response = requests.post(
