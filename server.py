@@ -84,9 +84,9 @@ def dict_to_device(data: dict) -> Device:
     return Device(
         name=data["name"],
         interfaces=[dict_to_interface(i) for i in data["interfaces"]],
-        hostgroup=str(data["hostgroup"]).strip().split(","),
+        hostgroup=str(data["hostgroup"]).split(", "),
         description=data["description"],
-        templates=str(data["templates"]).strip().split(","),
+        templates=str(data["templates"]).split(", "),
         status=data["status"],
     )
 
