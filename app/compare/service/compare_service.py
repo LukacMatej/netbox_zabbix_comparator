@@ -164,7 +164,7 @@ def _compare_device_fields(
         if nb_value != compare_value:
             if field == "name":
                 msg = f"{field} ({nb_value} != {compare_value}), "
-                msg += "Hodnota v netboxu přepíše hodnotu v zabbixu"
+                msg += "Field in Netbox will overwrite value in Zabbix"
                 diffs.append(msg)
             else:
                 diffs.append(field)
@@ -198,7 +198,7 @@ def _compare_address_fields(
                 if nb_value != zb_value:
                     if field in ("address", "dns_name"):
                         msg = f"{field} ({nb_value} != {zb_value}), "
-                        msg += "Hodnota v netboxu přepíše hodnotu v zabbixu"
+                        msg += "Field in Netbox will overwrite value in Zabbix"
                         diffs.append(msg)
                     else:
                         diffs.append(f"{field}")
@@ -267,7 +267,7 @@ def _compare_interface_fields(
                     fields_counter += 1
                     if nb_value != zb_value:
                         msg = f"{field} ({nb_value} != {zb_value}), "
-                        msg += "Hodnota v netboxu přepíše hodnotu v zabbixu"
+                        msg += "Field in Netbox will overwrite value in Zabbix"
                         diffs.append(msg)
                     else:
                         same_count += 1
@@ -358,7 +358,7 @@ def find_differences(
             found = 1
             msg = f"{check_device_model_result[1]} ({check_device_model_result[2]} "
             msg += f"!= {check_device_model_result[3]}), "
-            msg += "Hodnota v netboxu přepíše hodnotu v zabbixu"
+            msg += "Field in Netbox will overwrite value in Zabbix"
             diffs.append(msg)
 
     # No secondary pass: matching occurs before calling this function, so a
