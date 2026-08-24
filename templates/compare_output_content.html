@@ -101,9 +101,9 @@
 			<div>Interfaces:</div>
 			{% for interface in device.interfaces %}
 			<div class="tab-interface">
-				Interface: {{ interface.name }}, MAC Address:{% if
-				interface.mac_address%} {{interface.mac_address}} {% else %}
-				None {% endif %}
+				Interface: {{ interface.name }}, Port Type: {% if
+				interface.port_type %} {{interface.port_type}} {% else %} None
+				{% endif %}
 			</div>
 			<div class="tab-interface">Addresses:</div>
 			{% for address in interface.addresses %}
