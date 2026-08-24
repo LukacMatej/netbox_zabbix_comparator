@@ -741,9 +741,15 @@ def apply_differences(
         remove_interface_from_zabbix(hostid, interface_ids_to_remove, sync_output)
 
     # Prefer updated Zabbix values, but fall back to Netbox if source data is missing.
-    hostgroup_source = (
+    hostgroup_source: list[str] | str = (
         zb_device.hostgroup if zb_device.hostgroup else nb_device.hostgroup
     )
+    if not isinstance(hostgroup_source, list):
+        hostgroup_source = [hostgroup_source]
+
+    default_hostgroup: str = os.environ.get("ZABBIX_DEFAULT_HOSTGROUP", "Netbox")
+    if not default_hostgroup in zb_device.hostgroup:
+        hostgroup_source = hostgroup_source + [default_hostgroup]
     hostgroupids = find_zabbix_hostgroup_ids(hostgroup_source)
     template_source = (
         zb_device.templates if zb_device.templates else nb_device.templates
