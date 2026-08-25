@@ -7,7 +7,6 @@ class ZabbixCustomFieldValidator(CustomValidator):
         # 1. Define the custom fields we want to monitor
         TARGET_FIELDS = {"zabbix_port_type", "zabbix_templates"}
 
-        # 2. Grab the pre-change snapshot
        # 2. Grab the pre-change snapshot
         snapshot = getattr(instance, "_prechange_snapshot", None)
 

@@ -125,3 +125,9 @@ Controlled via the hamburger menu:
 * Device exists only in Netbox → created in Zabbix
 * Device exists in both → values from Netbox overwrite values in Zabbix (if they differ)
 * Device is identical → nothing happens
+
+### Webhooks
+* App listens for webhook events from Netbox and synchronizes Zabbix accordingly
+* /webhook_create
+* /webhook_update
+* /webhook_delete
