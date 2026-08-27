@@ -55,6 +55,26 @@ class CompareServiceTests(unittest.TestCase):
         self.assertEqual(len(zb_only), 1)
         self.assertIsInstance(zb_only, list)
 
+    def test_compare_devices_order_independent_exact_match(self):
+        """Regression: the exact match must win regardless of NetBox list order.
+
+        Reproduces a real bug where a device with only a weak base-name fallback match
+        (mtik-sana, scoring 0.35 against mtik-sanb) could permanently claim a Zabbix host
+        before the device with the true exact match (mtik-sanb, scoring 1.0) was even
+        considered, purely because of NetBox list iteration order under the old
+        greedy/order-dependent matching.
+        """
+        nb_sana = _device("mtik-sana", "192.168.200.4", "mtik-sana.netsystem.local")
+        nb_sanb = _device("mtik-sanb", "192.168.200.5", "mtik-sanb.netsystem.local")
+        zb_sanb = _device("mtik-sanb", "192.168.200.5", "mtik-sanb.netsystem.local")
+
+        for nb_list in ([nb_sana, nb_sanb], [nb_sanb, nb_sana]):
+            with self.subTest(order=[d.name for d in nb_list]):
+                different, nb_only, zb_only = cs.compare_devices(nb_list, [zb_sanb])
+                self.assertEqual(different, [])
+                self.assertEqual(zb_only, [])
+                self.assertEqual([d.name for d in nb_only], ["mtik-sana"])
+
     @patch("app.compare.service.compare_service.compare_devices", return_value=([], [], []))
     @patch("app.compare.service.compare_service.ds.map_port_type_device")
     @patch("app.compare.service.compare_service.ds.get_zb_devices")

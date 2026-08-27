@@ -1,10 +1,7 @@
-FROM python:alpine
+FROM python:slim
 
-RUN apk update && apk upgrade && apk add --no-cache \
-    python3 \
-    py3-pip \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     curl && \
-    apk cache clean && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /
