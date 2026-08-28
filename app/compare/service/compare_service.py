@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import re
 
+from scipy.optimize import linear_sum_assignment
+
 from app.logger import logger_conf as log
 from app.device.service import device_service as ds
 from app.device.models.device_model import Device as device_model
@@ -434,13 +436,101 @@ def _calculate_match_score(nb_dev: device_model, zb_dev: device_model) -> float:
     return min(score, 1.0)  # Cap at 1.0
 
 
+def _tie_break_signals(nb_dev: device_model, zb_dev: device_model) -> tuple[int, int, int]:
+    """Return (templates_overlap, hostgroup_overlap, secondary_score) for a device pair.
+
+    Used to break ties between otherwise equally-scored candidates: prefer more shared
+    templates, then more shared hostgroups, then exact IP/DNS/name matches as a fallback.
+    """
+    # templates overlap (normalized)
+    try:
+        nb_templates = set(
+            t.lower() for t in (nb_dev.templates or []) if isinstance(t, str)
+        )
+    except (TypeError, AttributeError):
+        nb_templates = set()
+    try:
+        zb_templates = set(
+            t.lower() for t in (zb_dev.templates or []) if isinstance(t, str)
+        )
+    except (TypeError, AttributeError):
+        zb_templates = set()
+    templates_overlap = len(nb_templates & zb_templates)
+
+    # hostgroup overlap (Zabbix hostgroups may be list of dicts)
+    def hg_names(hg):
+        if not hg:
+            return set()
+        if isinstance(hg, list):
+            names = set()
+            for item in hg:
+                if isinstance(item, dict) and "name" in item:
+                    names.add(str(item["name"]).lower())
+                elif isinstance(item, str):
+                    names.add(item.lower())
+            return names
+        if isinstance(hg, str):
+            return {hg.lower()}
+        return set()
+
+    nb_hg = hg_names(nb_dev.hostgroup)
+    zb_hg = hg_names(zb_dev.hostgroup)
+    hostgroup_overlap = len(nb_hg & zb_hg)
+
+    # secondary exact matches weight (IP/DNS/name)
+    nb_ip, nb_dns = _primary_ip_dns(nb_dev)
+    zb_ip, zb_dns = _primary_ip_dns(zb_dev)
+    nb_name = normalize_name(getattr(nb_dev, "name", ""))
+    zb_name = normalize_name(getattr(zb_dev, "name", ""))
+
+    secondary = 0
+    if nb_ip and zb_ip and nb_ip == zb_ip:
+        secondary += 8
+    if nb_dns and zb_dns and nb_dns == zb_dns:
+        secondary += 4
+    if nb_name and zb_name and nb_name == zb_name:
+        secondary += 2
+
+    return templates_overlap, hostgroup_overlap, secondary
+
+
+# Bonus weights are ordered by magnitude (templates > hostgroups > secondary matches) and
+# capped so the combined bonus can never approach the smallest real gap between
+# _calculate_match_score's tiers (0.05, between its 0.5/0.55/0.6 tiers). This lets ties in
+# match score resolve the same way the old per-candidate tie-break logic resolved them,
+# without the bonus ever being able to override an outcome the real score should decide.
+_TEMPLATE_BONUS_WEIGHT = 5e-4
+_HOSTGROUP_BONUS_WEIGHT = 5e-6
+_SECONDARY_BONUS_WEIGHT = 5e-8
+_MAX_OVERLAP_COUNT = 50  # defensive cap; realistic overlaps are a handful of items
+
+
+def _overlap_bonus(nb_dev: device_model, zb_dev: device_model) -> float:
+    """Small tie-break bonus folded into the assignment score matrix.
+
+    Never large enough to override a real score-tier difference; only distinguishes
+    between candidates that would otherwise score identically under _calculate_match_score.
+    """
+    templates_overlap, hostgroup_overlap, secondary = _tie_break_signals(nb_dev, zb_dev)
+    return (
+        min(templates_overlap, _MAX_OVERLAP_COUNT) * _TEMPLATE_BONUS_WEIGHT
+        + min(hostgroup_overlap, _MAX_OVERLAP_COUNT) * _HOSTGROUP_BONUS_WEIGHT
+        + min(secondary, _MAX_OVERLAP_COUNT) * _SECONDARY_BONUS_WEIGHT
+    )
+
+
 def compare_devices(
     nb_device_list: list[device_model], zb_device_list: list[device_model]
 ) -> tuple[list[device_difference_model], list[device_model], list[device_model]]:
     """
     Compare devices from two sources (NetBox and Zabbix) and identify differences.
-    This function compares devices from a NetBox device list against a Zabbix device list.
-    It identifies devices with differences, devices only in NetBox, and devices only in Zabbix.
+
+    Builds a NetBox x Zabbix match-score matrix (via _calculate_match_score, with a small
+    tie-break bonus from _overlap_bonus folded in) and solves it as a bipartite assignment
+    problem (Hungarian algorithm) to find the pairing that maximizes total match score
+    across all devices at once. This avoids the order-dependency of a per-device greedy
+    match, where a device could permanently claim a mediocre match before a better match
+    for it was discovered elsewhere in the list.
     Args:
         nb_device_list (list[device_model]): List of devices from NetBox.
         zb_device_list (list[device_model]): List of devices from Zabbix.
@@ -461,151 +551,67 @@ def compare_devices(
     nb_devices: list[device_model] = []
     zb_devices: list[device_model] = []
 
-    zb_remaining = list(zb_device_list)
-    for nb_dev in nb_device_list:
-        # Find best match by scoring all remaining Zabbix devices
-        best_match = None
-        best_score = 0.0
+    if not nb_device_list:
+        return different_devices, nb_devices, list(zb_device_list)
+    if not zb_device_list:
+        return different_devices, list(nb_device_list), zb_devices
 
-        candidates: list[device_model] = []
-        for zb_dev in zb_remaining:
+    n = len(nb_device_list)
+    m = len(zb_device_list)
+
+    # Raw scores drive the >0.3 acceptance threshold and log output (unchanged semantics).
+    # Augmented scores add the tiny tie-break bonus and are what the solver optimizes.
+    raw_scores = [[0.0] * m for _ in range(n)]
+    aug_scores = [[0.0] * m for _ in range(n)]
+    for i, nb_dev in enumerate(nb_device_list):
+        for j, zb_dev in enumerate(zb_device_list):
             score = _calculate_match_score(nb_dev, zb_dev)
-            if score > best_score:
-                best_score = score
-                candidates = [zb_dev]
-            elif abs(score - best_score) < 1e-9:
-                candidates.append(zb_dev)
+            raw_scores[i][j] = score
+            aug_scores[i][j] = score + _overlap_bonus(nb_dev, zb_dev) if score > 0 else 0.0
 
-        # Resolve ties using stronger heuristics: prefer candidate with fewest differences
-        best_match = None
-        if candidates:
-            if len(candidates) == 1:
-                best_match = candidates[0]
-            else:
-                # Use find_differences to pick candidate with minimal difference count
-                best_candidates: list[tuple[device_model, int]] = []
-                for c in candidates:
-                    dif = find_differences(nb_dev, c)
-                    dif_list = dif[2][0] if dif and len(dif) > 2 and dif[2] else []
-                    best_candidates.append((c, len(dif_list)))
-                # Find minimum diff count
-                min_diff = min(count for _, count in best_candidates)
-                filtered = [c for c, count in best_candidates if count == min_diff]
-                if len(filtered) == 1:
-                    best_match = filtered[0]
-                else:
-                    # Secondary tie-breakers: prefer candidates with higher
-                    # template and hostgroup overlap with NetBox device, then
-                    # exact IP/DNS/name as fallback.
-                    nb_ip, nb_dns = _primary_ip_dns(nb_dev)
-                    nb_name = normalize_name(getattr(nb_dev, "name", ""))
+    # Globally optimal one-to-one assignment maximizing total (augmented) score.
+    row_ind, col_ind = linear_sum_assignment(aug_scores, maximize=True)
 
-                    def overlap_score(
-                        candidate: device_model,
-                        nb_device: device_model,
-                        nb_ip_val: str,
-                        nb_dns_val: str,
-                        nb_name_val: str,
-                    ) -> tuple[int, int, int]:
-                        # templates overlap (normalized)
-                        try:
-                            nb_templates = set(
-                                t.lower()
-                                for t in (nb_device.templates or [])
-                                if isinstance(t, str)
-                            )
-                        except (TypeError, AttributeError):
-                            nb_templates = set()
-                        try:
-                            c_templates = set(
-                                t.lower()
-                                for t in (candidate.templates or [])
-                                if isinstance(t, str)
-                            )
-                        except (TypeError, AttributeError):
-                            c_templates = set()
-                        templates_overlap = len(nb_templates & c_templates)
-
-                        # hostgroup overlap (Zabbix hostgroups may be list of dicts)
-                        def hg_names(hg):
-                            if not hg:
-                                return set()
-                            if isinstance(hg, list):
-                                names = set()
-                                for item in hg:
-                                    if isinstance(item, dict) and "name" in item:
-                                        names.add(str(item["name"]).lower())
-                                    elif isinstance(item, str):
-                                        names.add(item.lower())
-                                return names
-                            if isinstance(hg, str):
-                                return {hg.lower()}
-                            return set()
-
-                        nb_hg = hg_names(nb_device.hostgroup)
-                        c_hg = hg_names(candidate.hostgroup)
-                        hostgroup_overlap = len(nb_hg & c_hg)
-
-                        # secondary exact matches weight (IP/DNS/name)
-                        sec = 0
-                        c_ip, c_dns = _primary_ip_dns(candidate)
-                        c_name = normalize_name(getattr(candidate, "name", ""))
-                        if nb_ip_val and c_ip and nb_ip_val == c_ip:
-                            sec += 8
-                        if nb_dns_val and c_dns and nb_dns_val == c_dns:
-                            sec += 4
-                        if nb_name_val and c_name and nb_name_val == c_name:
-                            sec += 2
-
-                        # Return tuple for sorting: templates, hostgroups, secondary
-                        return (templates_overlap, hostgroup_overlap, sec)
-
-                    # Pre-compute scores for all candidates to avoid repeated function calls
-                    # and eliminate cell-variable-from-loop warnings
-                    scored_candidates = [
-                        (
-                            candidate,
-                            overlap_score(candidate, nb_dev, nb_ip, nb_dns, nb_name),
-                        )
-                        for candidate in filtered
-                    ]
-
-                    # Sort by highest templates overlap, then hostgroup overlap, then secondary score, then name
-                    ranked = sorted(
-                        scored_candidates,
-                        key=lambda item: (
-                            -item[1][0],
-                            -item[1][1],
-                            -item[1][2],
-                            getattr(item[0], "name", ""),
-                        ),
-                    )
-                    best_match = ranked[0][0]
-
+    matched_nb_idx: set[int] = set()
+    matched_zb_idx: set[int] = set()
+    for i, j in zip(row_ind.tolist(), col_ind.tolist()):
+        score = raw_scores[i][j]
         # Use match only if score is above threshold (>0.3 recommends good confidence)
-        if best_match and best_score > 0.3:
-            log.logger.info(
-                "Matched: %s (NB) <-> %s (ZB) with score %.2f",
-                getattr(nb_dev, "name", ""), getattr(best_match, "name", ""), best_score
-            )
-            differences: tuple[int, tuple[device_model, device_model], tuple[list[str], list[str]]] = find_differences(nb_dev, best_match)
-            if differences[0] == 1:
-                different_devices.append(
-                    device_difference_model(
-                        nb_dev, best_match, differences[2]
-                    )
-                )
-            zb_remaining.remove(best_match)
-        else:
-            if best_match:
-                log.logger.info(
-                    "No match for %s (best score: %.2f)",
-                    getattr(nb_dev, "name", ""), best_score
-                )
-            nb_devices.append(nb_dev)
+        if score <= 0.3:
+            continue
 
-    # Any Zabbix devices left unmatched are ZB-only
-    zb_devices.extend(zb_remaining)
+        nb_dev = nb_device_list[i]
+        zb_dev = zb_device_list[j]
+        log.logger.info(
+            "Matched: %s (NB) <-> %s (ZB) with score %.2f",
+            getattr(nb_dev, "name", ""), getattr(zb_dev, "name", ""), score
+        )
+        differences: tuple[int, tuple[device_model, device_model], tuple[list[str], list[str]]] = find_differences(nb_dev, zb_dev)
+        if differences[0] == 1:
+            different_devices.append(
+                device_difference_model(
+                    nb_dev, zb_dev, differences[2]
+                )
+            )
+        matched_nb_idx.add(i)
+        matched_zb_idx.add(j)
+
+    # NetBox devices with no accepted assignment are NB-only.
+    for i, nb_dev in enumerate(nb_device_list):
+        if i in matched_nb_idx:
+            continue
+        best_score = max(raw_scores[i])
+        if best_score > 0:
+            log.logger.info(
+                "No match for %s (best score: %.2f)",
+                getattr(nb_dev, "name", ""), best_score
+            )
+        nb_devices.append(nb_dev)
+
+    # Any Zabbix devices with no accepted assignment are ZB-only.
+    zb_devices.extend(
+        zb_dev for j, zb_dev in enumerate(zb_device_list) if j not in matched_zb_idx
+    )
 
     return different_devices, nb_devices, zb_devices
 
