@@ -28,7 +28,7 @@ stages:
 
 lint:
   stage: lint
-  image: python:3.9
+  image: python:3.14
   before_script:
     - pip install pre-commit pylint
   script:
@@ -38,7 +38,7 @@ lint:
 
 tests_devel:
   stage: test
-  image: python:3.11
+  image: python:3.14
   before_script:
     - pip install -r requirements.txt
   script:

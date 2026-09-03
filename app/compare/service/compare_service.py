@@ -230,7 +230,7 @@ def _compare_interface_fields(
     zb_interfaces: list[interface_model] = zb_device.interfaces or []
 
     # Build dictionaries mapping port_type to list of interfaces
-    nb_by_port = {}
+    nb_by_port: dict[str, list[interface_model]] = {}
     for iface in nb_interfaces:
         port_type = getattr(iface, "port_type", "")
         if port_type:
@@ -238,7 +238,7 @@ def _compare_interface_fields(
                 nb_by_port[port_type] = []
             nb_by_port[port_type].append(iface)
 
-    zb_by_port = {}
+    zb_by_port: dict[str, list[interface_model]] = {}
     for iface in zb_interfaces:
         port_type = getattr(iface, "port_type", "")
         if port_type:
@@ -640,9 +640,7 @@ def compare(
     log.logger.info("Starting compare")
     nb_graphql = nb_ip + "/graphql/"
     log.logger.debug("Netbox IP: %s", nb_ip)
-    log.logger.debug("Netbox Key: %s", nb_key)
     log.logger.debug("Zabbix IP: %s", zb_ip)
-    log.logger.debug("Zabbix Key: %s", zb_key)
     log.logger.debug("Netbox GraphQL: %s", nb_graphql)
     nb_device_list: list[device_model] | str = ds.get_nb_devices(nb_key, nb_graphql)
     if isinstance(nb_device_list, str):

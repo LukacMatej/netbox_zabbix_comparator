@@ -59,6 +59,36 @@ from app.logger import logger_conf as log
 
 # pylint: disable=line-too-long
 
+REQUEST_TIMEOUT = 30
+
+
+def _zabbix_post(
+    zabbix_ip: str | None, zabbix_key: str | None, method: str, params: Any, request_id: int = 1
+) -> requests.Response:
+    """POSTs a Zabbix JSON-RPC request and returns the raw response.
+
+    Centralizes the header/envelope construction repeated at every Zabbix
+    call site in this module; callers keep handling the response themselves.
+    """
+    return requests.post(
+        f"{zabbix_ip}/api_jsonrpc.php",
+        headers={
+            "Authorization": f"Bearer {zabbix_key}",
+            "Content-Type": "application/json-rpc",
+        },
+        timeout=REQUEST_TIMEOUT,
+        json={"jsonrpc": "2.0", "method": method, "params": params, "id": request_id},
+    )
+
+
+def _netbox_headers(nb_key: str | None) -> dict[str, str]:
+    """Common headers for NetBox REST API calls."""
+    return {
+        "Authorization": f"Token {nb_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
 
 def find_hostinterface_ids(hostid: str) -> list[int]:
     """
@@ -70,20 +100,10 @@ def find_hostinterface_ids(hostid: str) -> list[int]:
     """
     zb_url = os.environ.get("ZABBIX_IP")
     zb_key = os.environ.get("ZABBIX_KEY")
-    headers = {
-        "Authorization": f"Bearer {zb_key}",
-        "Content-Type": "application/json-rpc",
-    }
-    payload = {
-        "jsonrpc": "2.0",
-        "method": "hostinterface.get",
-        "params": {"hostids": hostid, "output": ["interfaceid"]},
-        "id": 1,
-    }
     try:
         log.logger.info("Finding Zabbix interface IDs for hostid %s.", hostid)
-        response = requests.post(
-            f"{zb_url}/api_jsonrpc.php", headers=headers, json=payload, timeout=30
+        response = _zabbix_post(
+            zb_url, zb_key, "hostinterface.get", {"hostids": hostid, "output": ["interfaceid"]}
         )
         response.raise_for_status()
         result = json.loads(response.text)
@@ -116,13 +136,10 @@ def find_nb_site_id(site_name: str) -> int:
     log.logger.info("Finding Netbox site ID for %s", site_name)
     nb_ip = os.environ.get("NETBOX_IP")
     nb_key = os.environ.get("NETBOX_KEY")
-    headers = {
-        "Authorization": f"Token {nb_key}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
     response = requests.get(
-        f"{nb_ip}/api/dcim/sites/?name={site_name}", headers=headers, timeout=30
+        f"{nb_ip}/api/dcim/sites/?name={site_name}",
+        headers=_netbox_headers(nb_key),
+        timeout=REQUEST_TIMEOUT,
     )
     if response.status_code == 200:
         data = json.loads(response.text)
@@ -146,15 +163,10 @@ def find_nb_device_type_id(device_type: str) -> int:
     log.logger.info("Finding Netbox device type ID for %s.", device_type)
     nb_ip = os.environ.get("NETBOX_IP")
     nb_key = os.environ.get("NETBOX_KEY")
-    headers = {
-        "Authorization": f"Token {nb_key}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
     response = requests.get(
         f"{nb_ip}/api/dcim/device-types/?model={device_type}",
-        headers=headers,
-        timeout=30,
+        headers=_netbox_headers(nb_key),
+        timeout=REQUEST_TIMEOUT,
     )
     if response.status_code == 200:
         data = json.loads(response.text)
@@ -180,15 +192,10 @@ def find_nb_device_role_id(device_role: str) -> int:
     log.logger.info("Finding Netbox device role ID for %s.", device_role)
     nb_ip = os.environ.get("NETBOX_IP")
     nb_key = os.environ.get("NETBOX_KEY")
-    headers = {
-        "Authorization": f"Token {nb_key}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
     response = requests.get(
         f"{nb_ip}/api/dcim/device-roles/?name={device_role}",
-        headers=headers,
-        timeout=30,
+        headers=_netbox_headers(nb_key),
+        timeout=REQUEST_TIMEOUT,
     )
     if response.status_code == 200:
         data = json.loads(response.text)
@@ -466,10 +473,9 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
         )
 
         log.logger.debug(
-            "Request to Netbox API: %s %s  with headers %s and body %s",
+            "Request to Netbox API: %s %s with body %s",
             response.request.method,
             response.request.url,
-            response.request.headers,
             response.request.body,
         )
         if response.status_code != 200:
@@ -860,35 +866,21 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
       - Interfaces are mapped to address_model objects with their IP and DNS information.
       - Templates are extracted from parentTemplates and mapped to their names.
     """
-    ip = f"{ip}/api_jsonrpc.php"
-    payload = {
-        "jsonrpc": "2.0",
-        "method": "host.get",
-        "params": {
-            "output": ["hostid", "host", "name", "status", "description"],
-            "selectInterfaces": ["interfaceid", "dns", "ip", "type"],
-            "selectHostGroups": ["groupid", "name"],
-            "selectParentTemplates": ["templateid", "name"],
-            "filter": {"status": [0]},
-        },
-        "id": 1,
-    }
-    headers: dict[str, str] = {
-        "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json-rpc",
-        "Accept": "application/json",
+    params = {
+        "output": ["hostid", "host", "name", "status", "description"],
+        "selectInterfaces": ["interfaceid", "dns", "ip", "type"],
+        "selectHostGroups": ["groupid", "name"],
+        "selectParentTemplates": ["templateid", "name"],
+        "filter": {"status": [0]},
     }
     try:
         zb_device_list: list[device_model] = []
         log.logger.debug(
-            "Requesting Zabbix: %s devices with payload: %s and headers: %s",
+            "Requesting Zabbix: %s devices with params: %s",
             ip,
-            payload,
-            headers,
+            params,
         )
-        response: requests.Response = requests.post(
-            ip, headers=headers, json=payload, timeout=30
-        )
+        response: requests.Response = _zabbix_post(ip, key, "host.get", params)
         log.logger.debug(response)
         response.raise_for_status()
         result = json.loads(response.text)
@@ -950,7 +942,7 @@ def uniform_port_type(port_type: str, numbered: bool = False) -> str:
             "JMX": "4",
         }
     else:
-        port_type_map: dict[str, str] = {
+        port_type_map = {
             "1": "Agent",
             "2": "SNMP",
             "3": "IPMI",
@@ -1031,7 +1023,7 @@ def uniform_output_text(
         return differences, netbox_devices, zabbix_devices
 
 
-def parse_webhook_create(data: dict) -> device_model:
+def parse_webhook(data: dict) -> device_model:
     device_data = data["data"]
     custom_fields = device_data.get("custom_fields", {})
     return device_model(
@@ -1059,13 +1051,14 @@ def parse_webhook_update(data: dict) -> device_model:
     role_data = device_data.get("role")
     role = role_data.get("name") if role_data else ""
 
+    templates: list[str]
     if custom_fields.get("zabbix_templates"):
-        templates: list[str] = custom_fields.get("zabbix_templates")
+        templates = custom_fields.get("zabbix_templates")
     else:
-    	try:
-        	templates: list[str] = query_netbox_role_templates(role)
-    	except requests.exceptions.HTTPError:
-    		templates: list[str] = []
+        try:
+            templates = query_netbox_role_templates(role)
+        except requests.exceptions.HTTPError:
+            templates = []
     if not templates:
         templates = device_data.get("config_context", {}).get("zabbix", []).get("templates", [])
     return device_model(
@@ -1077,9 +1070,16 @@ def parse_webhook_update(data: dict) -> device_model:
         status=postchange.get("status", "Inactive"),
     )
 
+
 def query_netbox_role_templates(role: str) -> list[str]:
     netbox_ip: str | None = os.environ.get("NETBOX_IP")
     netbox_key: str | None = os.environ.get("NETBOX_KEY")
+    if netbox_ip is None:
+        # Without this, requests.post(None, ...) below raises MissingSchema,
+        # which isn't a requests.exceptions.HTTPError, so parse_webhook_update's
+        # `except requests.exceptions.HTTPError` wouldn't catch it.
+        log.logger.error("NetBox IP not set in environment variables.")
+        return []
     headers = {"Authorization": f"Token {netbox_key}"} if netbox_key else {}
     query = """
     {
@@ -1150,19 +1150,6 @@ def get_primary_interface(device_data: dict, zabbix_port_type: str) -> interface
     )
 
 
-def parse_webhook_delete(data: dict) -> device_model:
-    device_data = data["data"]
-    custom_fields = device_data.get("custom_fields", {})
-    return device_model(
-        name=device_data["name"],
-        interfaces=[],
-        hostgroup=custom_fields.get("zabbix_hostgroups", []),
-        description=device_data.get("description", ""),
-        templates=None,
-        status=device_data.get("status", {}).get("value", "Inactive"),
-    )
-
-
 def get_zabbix_device(name: str) -> device_model | None:
     """
     Fetches a single device from Zabbix by exact host name.
@@ -1174,38 +1161,20 @@ def get_zabbix_device(name: str) -> device_model | None:
     """
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
     zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
-    REQUEST_TIMEOUT: int = 30
     if zabbix_ip is None or zabbix_key is None:
         log.logger.error("Zabbix IP or API key not set in environment variables.")
         return None
 
-    headers: dict[str, str] = {
-        "Authorization": f"Bearer {zabbix_key}",
-        "Content-Type": "application/json-rpc",
-    }
-
-    response: requests.Response = requests.post(
-        zabbix_ip + "/api_jsonrpc.php",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT,
-        json={
-            "jsonrpc": "2.0",
-            "method": "host.get",
-            "params": {
-                "filter": {"host": [name]},
-                "output": ["hostid", "host", "description", "status"],
-                "selectInterfaces": [
-                    "interfaceid",
-                    "ip",
-                    "dns",
-                    "port",
-                    "type",
-                    "main",
-                ],
-                "selectGroups": ["name"],
-                "selectParentTemplates": ["name"],
-            },
-            "id": 1,
+    response: requests.Response = _zabbix_post(
+        zabbix_ip,
+        zabbix_key,
+        "host.get",
+        {
+            "filter": {"host": [name]},
+            "output": ["hostid", "host", "description", "status"],
+            "selectInterfaces": ["interfaceid", "ip", "dns", "port", "type", "main"],
+            "selectGroups": ["name"],
+            "selectParentTemplates": ["name"],
         },
     )
 
@@ -1264,25 +1233,12 @@ def delete_zabbix_device(device: device_model) -> tuple[str, int]:
     if zabbix_ip is None or zabbix_key is None:
         log.logger.error("Zabbix IP or API key not set in environment variables.")
         return "None", 400
-    headers: dict[str, str] = {
-        "Content-Type": "application/json-rpc",
-        "Authorization": f"Bearer {zabbix_key}",
-    }
-    REQUEST_TIMEOUT: int = 30
     log.logger.info("Deleting Zabbix device for %s", device.name)
     zabbix_host = get_zabbix_hostid(device.name)
     if zabbix_host:
         log.logger.info("Deleting Zabbix host for %s", device.name)
-        response: requests.Response = requests.post(
-            zabbix_ip + "/api_jsonrpc.php",
-            headers=headers,
-            timeout=REQUEST_TIMEOUT,
-            json={
-                "jsonrpc": "2.0",
-                "method": "host.delete",
-                "params": [zabbix_host],
-                "id": 1,
-            },
+        response: requests.Response = _zabbix_post(
+            zabbix_ip, zabbix_key, "host.delete", [zabbix_host]
         )
         if response.status_code == 200:
             log.logger.info("Zabbix host deleted successfully")
@@ -1298,38 +1254,20 @@ def delete_zabbix_device(device: device_model) -> tuple[str, int]:
 def get_zabbix_hostid(name: str) -> str | None:
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
     zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
-    REQUEST_TIMEOUT: int = 30
     if zabbix_ip is None or zabbix_key is None:
         log.logger.error("Zabbix IP or API key not set in environment variables.")
         return None
 
-    headers: dict[str, str] = {
-        "Authorization": f"Bearer {zabbix_key}",
-        "Content-Type": "application/json-rpc",
-    }
-
-    response: requests.Response = requests.post(
-        zabbix_ip + "/api_jsonrpc.php",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT,
-        json={
-            "jsonrpc": "2.0",
-            "method": "host.get",
-            "params": {
-                "filter": {"host": [name]},
-                "output": ["hostid", "host", "description", "status"],
-                "selectInterfaces": [
-                    "interfaceid",
-                    "ip",
-                    "dns",
-                    "port",
-                    "type",
-                    "main",
-                ],
-                "selectGroups": ["name"],
-                "selectParentTemplates": ["name"],
-            },
-            "id": 1,
+    response: requests.Response = _zabbix_post(
+        zabbix_ip,
+        zabbix_key,
+        "host.get",
+        {
+            "filter": {"host": [name]},
+            "output": ["hostid", "host", "description", "status"],
+            "selectInterfaces": ["interfaceid", "ip", "dns", "port", "type", "main"],
+            "selectGroups": ["name"],
+            "selectParentTemplates": ["name"],
         },
     )
 

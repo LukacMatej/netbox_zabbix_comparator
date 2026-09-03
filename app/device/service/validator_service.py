@@ -5,6 +5,8 @@ with existing Zabbix host configurations, especially for port type changes.
 """
 import os
 import re
+from typing import Any
+
 import requests
 
 from app.logger import logger_conf as log
@@ -76,7 +78,7 @@ def query_zabbix_for_host(device_name: str) -> dict | None:
         'Content-Type': 'application/json-rpc',
         'Authorization': f'Bearer {zabbix_api_token}'
     }
-    payload = {
+    payload: dict[str, Any] = {
         "jsonrpc": "2.0",
         "method": "host.get",
         "params": {

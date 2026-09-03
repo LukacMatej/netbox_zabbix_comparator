@@ -15,3 +15,15 @@ repos:
       exclude: ^(scripts|tests|validators)/
       args: [--rcfile=.pylintrc, --fail-under=9]
       additional_dependencies: [pylint, fastapi, uvicorn, requests]
+    - id: mypy
+      name: mypy
+      entry: mypy
+      language: python
+      types: [python]
+      files: ^(server\.py|app/.*\.py)$
+      pass_filenames: false
+      # mypy needs whole-project context (not just the changed files) to
+      # resolve app.* imports correctly, so the target paths are fixed here
+      # instead of letting pre-commit pass individual filenames.
+      args: [--config-file=mypy.ini, server.py, app]
+      additional_dependencies: [mypy, fastapi, uvicorn, requests, scipy, jinja2]

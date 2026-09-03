@@ -46,6 +46,39 @@ from app.logger import logger_conf as log
 REQUEST_TIMEOUT = 30
 
 
+def _zabbix_credentials() -> tuple[str | None, str | None]:
+    """Reads ZABBIX_IP/ZABBIX_KEY from the environment, logging if either is unset.
+
+    Callers decide what to return/do when credentials are missing (the exact
+    behavior differs per function), so this only does the lookup + logging.
+    """
+    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
+    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    if zabbix_ip is None or zabbix_key is None:
+        log.logger.error("Zabbix IP or API key not set in environment variables.")
+    return zabbix_ip, zabbix_key
+
+
+def _zabbix_post(
+    zabbix_ip: str, zabbix_key: str, method: str, params: Any, request_id: int = 1
+) -> requests.Response:
+    """POSTs a Zabbix JSON-RPC request and returns the raw response.
+
+    Centralizes the header/envelope construction that used to be repeated at
+    every Zabbix call site in this module; callers keep handling the response
+    (status code, "error" key, etc.) themselves since that varies per call.
+    """
+    return requests.post(
+        zabbix_ip + "/api_jsonrpc.php",
+        headers={
+            "Authorization": f"Bearer {zabbix_key}",
+            "Content-Type": "application/json-rpc",
+        },
+        timeout=REQUEST_TIMEOUT,
+        json={"jsonrpc": "2.0", "method": method, "params": params, "id": request_id},
+    )
+
+
 def get_zabbix_host_interfaces(hostid: str) -> list[dict]:
     """Fetches detailed interface information for a Zabbix host.
     Args:
@@ -53,33 +86,19 @@ def get_zabbix_host_interfaces(hostid: str) -> list[dict]:
     Returns:
         list[dict]: List of interface details including interfaceid, type, ip, dns, etc.
     """
-    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
-    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    zabbix_ip, zabbix_key = _zabbix_credentials()
     if zabbix_ip is None or zabbix_key is None:
-        log.logger.error("Zabbix IP or API key not set in environment variables.")
         return []
 
-    headers: dict[str, str] = {
-        "Authorization": f"Bearer {zabbix_key}",
-        "Content-Type": "application/json-rpc",
-    }
-
-    payload = {
-        "jsonrpc": "2.0",
-        "method": "hostinterface.get",
-        "params": {
-            "hostids": hostid,
-            "output": ["interfaceid", "type", "ip", "dns", "port", "main"],
-        },
-        "id": 1,
-    }
-
     try:
-        response: requests.Response = requests.post(
-            zabbix_ip + "/api_jsonrpc.php",
-            headers=headers,
-            timeout=REQUEST_TIMEOUT,
-            json=payload,
+        response: requests.Response = _zabbix_post(
+            zabbix_ip,
+            zabbix_key,
+            "hostinterface.get",
+            {
+                "hostids": hostid,
+                "output": ["interfaceid", "type", "ip", "dns", "port", "main"],
+            },
         )
         response_json = response.json()
 
@@ -114,16 +133,9 @@ def add_interface_to_zabbix(
         sync_output (sync_output_model): The synchronization output model to log results.
         existing_interfaces (list[dict]): List of existing interface details from Zabbix (optional). Each dict should contain 'type' and 'main' keys.
     """
-    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
-    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    zabbix_ip, zabbix_key = _zabbix_credentials()
     if zabbix_ip is None or zabbix_key is None:
-        log.logger.error("Zabbix IP or API key not set in environment variables.")
         return
-
-    headers: dict[str, str] = {
-        "Authorization": f"Bearer {zabbix_key}",
-        "Content-Type": "application/json-rpc",
-    }
 
     if existing_interfaces is None:
         existing_interfaces = []
@@ -168,22 +180,13 @@ def add_interface_to_zabbix(
                 "community": "{$SNMP_COMMUNITY}",
             }
         interface_params.append(interface_data)
-    payload = {
-        "jsonrpc": "2.0",
-        "method": "hostinterface.create",
-        "params": interface_params,
-        "id": 1,
-    }
-    log.logger.info("Params payload: %s", payload)
+    log.logger.info("Params payload: %s", interface_params)
     try:
         log.logger.info(
             "Adding %d interface(s) to Zabbix host %s.", len(interfaces), hostid
         )
-        response: requests.Response = requests.post(
-            zabbix_ip + "/api_jsonrpc.php",
-            headers=headers,
-            timeout=REQUEST_TIMEOUT,
-            json=payload,
+        response: requests.Response = _zabbix_post(
+            zabbix_ip, zabbix_key, "hostinterface.create", interface_params
         )
         response_json = response.json()
 
@@ -223,33 +226,16 @@ def remove_interface_from_zabbix(
         log.logger.info("No interfaces to remove from Zabbix host %s.", hostid)
         return
 
-    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
-    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    zabbix_ip, zabbix_key = _zabbix_credentials()
     if zabbix_ip is None or zabbix_key is None:
-        log.logger.error("Zabbix IP or API key not set in environment variables.")
         return
-
-    headers: dict[str, str] = {
-        "Authorization": f"Bearer {zabbix_key}",
-        "Content-Type": "application/json-rpc",
-    }
-
-    payload = {
-        "jsonrpc": "2.0",
-        "method": "hostinterface.delete",
-        "params": interface_ids,
-        "id": 1,
-    }
 
     try:
         log.logger.info(
             "Removing %d interface(s) from Zabbix host %s.", len(interface_ids), hostid
         )
-        response: requests.Response = requests.post(
-            zabbix_ip + "/api_jsonrpc.php",
-            headers=headers,
-            timeout=REQUEST_TIMEOUT,
-            json=payload,
+        response: requests.Response = _zabbix_post(
+            zabbix_ip, zabbix_key, "hostinterface.delete", interface_ids
         )
         response_json = response.json()
 
@@ -282,25 +268,14 @@ def find_hostgroup_id(hostgroup_name: str) -> int:
         int: The ID of the hostgroup if found, otherwise -1.
     """
     log.logger.info("Finding Zabbix hostgroup ID for %s.", hostgroup_name)
-    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
-    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    zabbix_ip, zabbix_key = _zabbix_credentials()
     if zabbix_ip is None or zabbix_key is None:
-        log.logger.error("Zabbix IP or API key not set in environment variables.")
         return -1
-    headers: dict[str, str] = {
-        "Authorization": f"Bearer {zabbix_key}",
-        "Content-Type": "application/json-rpc",
-    }
-    response: requests.Response = requests.post(
-        zabbix_ip + "/api_jsonrpc.php",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT,
-        json={
-            "jsonrpc": "2.0",
-            "method": "hostgroup.get",
-            "params": {"filter": {"name": [hostgroup_name]}},
-            "id": 1,
-        },
+    response: requests.Response = _zabbix_post(
+        zabbix_ip,
+        zabbix_key,
+        "hostgroup.get",
+        {"filter": {"name": [hostgroup_name]}},
     )
     if response.status_code == 200:
         data = response.json()
@@ -327,32 +302,21 @@ def resolve_inventory_link_conflicts(
     template's item can claim it without Zabbix rejecting the link.
     Only clears the inventory_link property — never deletes items or history.
     """
-    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
-    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    zabbix_ip, zabbix_key = _zabbix_credentials()
     if zabbix_ip is None or zabbix_key is None:
-        log.logger.error("Zabbix IP or API key not set in environment variables.")
         return
-    headers: dict[str, str] = {
-        "Authorization": f"Bearer {zabbix_key}",
-        "Content-Type": "application/json-rpc",
-    }
     valid_template_ids = [tid for tid in new_template_ids if tid and tid != -1]
     if not valid_template_ids:
         return
 
     # 1. Which inventory fields will the new templates try to claim?
-    new_items_resp: requests.Response = requests.post(
-        zabbix_ip + "/api_jsonrpc.php",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT,
-        json={
-            "jsonrpc": "2.0",
-            "method": "item.get",
-            "params": {
-                "templateids": valid_template_ids,
-                "output": ["itemid", "inventory_link"],
-            },
-            "id": 1,
+    new_items_resp: requests.Response = _zabbix_post(
+        zabbix_ip,
+        zabbix_key,
+        "item.get",
+        {
+            "templateids": valid_template_ids,
+            "output": ["itemid", "inventory_link"],
         },
     )
     new_items_json: dict = new_items_resp.json()
@@ -371,18 +335,13 @@ def resolve_inventory_link_conflicts(
         return  # new templates don't populate any inventory field
 
     # 2. Which items already on the host claim those same fields?
-    host_items_resp: requests.Response = requests.post(
-        zabbix_ip + "/api_jsonrpc.php",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT,
-        json={
-            "jsonrpc": "2.0",
-            "method": "item.get",
-            "params": {
-                "hostids": hostid,
-                "output": ["itemid", "inventory_link", "key_"],
-            },
-            "id": 1,
+    host_items_resp: requests.Response = _zabbix_post(
+        zabbix_ip,
+        zabbix_key,
+        "item.get",
+        {
+            "hostids": hostid,
+            "output": ["itemid", "inventory_link", "key_"],
         },
     )
     host_items_json: dict = host_items_resp.json()
@@ -401,16 +360,11 @@ def resolve_inventory_link_conflicts(
 
     # 3. Free the inventory field on each conflicting item — item and history are untouched
     for item in conflicting_items:
-        clear_resp: requests.Response = requests.post(
-            zabbix_ip + "/api_jsonrpc.php",
-            headers=headers,
-            timeout=REQUEST_TIMEOUT,
-            json={
-                "jsonrpc": "2.0",
-                "method": "item.update",
-                "params": {"itemid": item["itemid"], "inventory_link": 0},
-                "id": 1,
-            },
+        clear_resp: requests.Response = _zabbix_post(
+            zabbix_ip,
+            zabbix_key,
+            "item.update",
+            {"itemid": item["itemid"], "inventory_link": 0},
         )
         result: dict = clear_resp.json()
         if "error" in result:
@@ -430,25 +384,14 @@ def find_template_ids(template_name: str) -> int:
         int: The ID of the template if found, otherwise -1.
     """
     log.logger.info("Finding Zabbix template ID for %s.", template_name)
-    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
-    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    zabbix_ip, zabbix_key = _zabbix_credentials()
     if zabbix_ip is None or zabbix_key is None:
-        log.logger.error("Zabbix IP or API key not set in environment variables.")
         return -1
-    headers: dict[str, str] = {
-        "Authorization": f"Bearer {zabbix_key}",
-        "Content-Type": "application/json-rpc",
-    }
-    response: requests.Response = requests.post(
-        zabbix_ip + "/api_jsonrpc.php",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT,
-        json={
-            "jsonrpc": "2.0",
-            "method": "template.get",
-            "params": {"filter": {"host": [template_name]}},
-            "id": 1,
-        },
+    response: requests.Response = _zabbix_post(
+        zabbix_ip,
+        zabbix_key,
+        "template.get",
+        {"filter": {"host": [template_name]}},
     )
     if response.status_code == 200:
         data: Any = response.json()
@@ -488,48 +431,32 @@ def apply_differences(
             return field.split("(")[0].strip()
         return field.strip()
 
-    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
-    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    zabbix_ip, zabbix_key = _zabbix_credentials()
     if zabbix_ip is None or zabbix_key is None:
-        log.logger.error("Zabbix IP or API key not set in environment variables.")
-        had_errors = True
-        return
-    headers: dict[str, str] = {
-        "Authorization": f"Bearer {zabbix_key}",
-        "Content-Type": "application/json-rpc",
-    }
+        msg = "Zabbix IP or API key not set in environment variables."
+        sync_output.add_difference_output(msg)
+        raise RuntimeError(msg)
     hostid: str | None = None
-    response: requests.Response = requests.post(
-        zabbix_ip + "/api_jsonrpc.php",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT,
-        json={
-            "jsonrpc": "2.0",
-            "method": "host.get",
-            "params": {"filter": {"host": [zb_device.name]}},
-            "id": 1,
-        },
+    response: requests.Response = _zabbix_post(
+        zabbix_ip,
+        zabbix_key,
+        "host.get",
+        {"filter": {"host": [zb_device.name]}},
     )
     if response.status_code == 200:
         data = response.json()
         if "error" in data:
-            sync_output.add_difference_output(
-                f"Error in Zabbix API response: {data['error']}"
-            )
+            msg = f"Error in Zabbix API response: {data['error']}"
+            sync_output.add_difference_output(msg)
             log.logger.error("Error in Zabbix API response: %s", data["error"])
-            had_errors = True
-            return
+            raise RuntimeError(msg)
         if data["result"]:
             hostid = data["result"][0]["hostid"]
     if not hostid:
-        sync_output.add_difference_output(
-            f"Failed to find Zabbix hostid for {zb_device.name}, cannot update device."
-        )
-        log.logger.error(
-            "Failed to find Zabbix hostid for %s, cannot update device.", zb_device.name
-        )
-        had_errors = True
-        return
+        msg = f"Failed to find Zabbix hostid for {zb_device.name}, cannot update device."
+        sync_output.add_difference_output(msg)
+        log.logger.error(msg)
+        raise RuntimeError(msg)
     log.logger.info(
         "Zabbix Device before update %s", device_service.print_device(zb_device)
     )
@@ -760,7 +687,7 @@ def apply_differences(
         find_template_ids(template) for template in template_source if template
     ]
     template_field_changed = any(
-    	extract_field_name(field) == "templates" for field in different_fields
+        extract_field_name(field) == "templates" for field in different_fields
     )
     if template_field_changed:
         resolve_inventory_link_conflicts(hostid, templateids, sync_output)
@@ -820,18 +747,9 @@ def apply_differences(
                     break
 
         if interface_update_params:
-            interface_update_data_zabbix = {
-                "jsonrpc": "2.0",
-                "method": "hostinterface.update",
-                "params": interface_update_params,
-                "id": 1,
-            }
-            log.logger.info(interface_update_data_zabbix)
-            interface_response: requests.Response = requests.post(
-                zabbix_ip + "/api_jsonrpc.php",
-                headers=headers,
-                timeout=REQUEST_TIMEOUT,
-                json=interface_update_data_zabbix,
+            log.logger.info("Interface update params: %s", interface_update_params)
+            interface_response: requests.Response = _zabbix_post(
+                zabbix_ip, zabbix_key, "hostinterface.update", interface_update_params
             )
             interface_response_json = interface_response.json()
             if "error" not in interface_response_json:
@@ -860,11 +778,12 @@ def apply_differences(
             )
 
     log.logger.info(update_data_zabbix)
-    response: requests.Response = requests.post(
-        zabbix_ip + "/api_jsonrpc.php",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT,
-        json=update_data_zabbix,
+    response = _zabbix_post(
+        zabbix_ip,
+        zabbix_key,
+        update_data_zabbix["method"],
+        update_data_zabbix["params"],
+        request_id=update_data_zabbix.get("id", 1),
     )
     response_json = response.json()
     if "error" in response_json:
@@ -892,22 +811,17 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
         device (device_model): The device model to create in Zabbix.
     """
     log.logger.info("Creating device %s in Zabbix.", device.name)
-    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
-    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    zabbix_ip, zabbix_key = _zabbix_credentials()
     if zabbix_ip is None or zabbix_key is None:
-        log.logger.error("Zabbix IP or API key not set in environment variables.")
         return
-    headers: dict[str, str] = {
-        "Authorization": f"Bearer {zabbix_key}",
-        "Content-Type": "application/json-rpc",
-    }
     if not isinstance(device.hostgroup, list):
         device.hostgroup = [device.hostgroup]
     default_hostgroup: str = os.environ.get("ZABBIX_DEFAULT_HOSTGROUP", "Netbox")
-    if not default_hostgroup in device.hostgroup:
-        device.hostgroup = device.hostgroup.append(default_hostgroup) or [
-            default_hostgroup
-        ]
+    if default_hostgroup not in device.hostgroup:
+        # list.append() mutates in place and returns None; assigning its
+        # return value here previously replaced device.hostgroup with just
+        # [default_hostgroup], silently discarding every other hostgroup.
+        device.hostgroup.append(default_hostgroup)
     hostgroupids: list[int] = find_zabbix_hostgroup_ids(device.hostgroup)
     if not hostgroupids or -1 in hostgroupids:
         sync_output.add_zabbix_output(
@@ -937,11 +851,12 @@ def create_zabbix_device(device: device_model, sync_output: sync_output_model):
         hostgroupids=hostgroupids, templateids=templateids
     )
     log.logger.info("Data to be sent to Zabbix: %s", data_zabbix)
-    response: requests.Response = requests.post(
-        zabbix_ip + "/api_jsonrpc.php",
-        headers=headers,
-        timeout=REQUEST_TIMEOUT,
-        json=data_zabbix,
+    response: requests.Response = _zabbix_post(
+        zabbix_ip,
+        zabbix_key,
+        data_zabbix["method"],
+        data_zabbix["params"],
+        request_id=data_zabbix.get("id", 1),
     )
     reponse_json: Any = response.json()
     if "error" in reponse_json:
@@ -1005,27 +920,16 @@ def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
         names_to_check = [default_hostgroup]
 
     group_ids: list[int] = []
-    zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
-    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
+    zabbix_ip, zabbix_key = _zabbix_credentials()
     if zabbix_ip is None or zabbix_key is None:
-        log.logger.error("Zabbix IP or API key not set in environment variables.")
         return [-1] * len(names_to_check)
-    headers: dict[str, str] = {
-        "Authorization": f"Bearer {zabbix_key}",
-        "Content-Type": "application/json-rpc",
-    }
     for hostgroup_name in names_to_check:
         log.logger.info("Finding Zabbix hostgroup ID for %s.", hostgroup_name)
-        response = requests.post(
-            zabbix_ip + "/api_jsonrpc.php",
-            headers=headers,
-            timeout=REQUEST_TIMEOUT,
-            json={
-                "jsonrpc": "2.0",
-                "method": "hostgroup.get",
-                "params": {"filter": {"name": [hostgroup_name]}},
-                "id": 1,
-            },
+        response = _zabbix_post(
+            zabbix_ip,
+            zabbix_key,
+            "hostgroup.get",
+            {"filter": {"name": [hostgroup_name]}},
         )
         log.logger.info(
             "Response from Zabbix for hostgroup get: %s, status code: %s",
@@ -1046,16 +950,11 @@ def find_zabbix_hostgroup_ids(hostgroup_names) -> list[int]:
                     "Found Zabbix hostgroup ID: %s for %s.", group_id, hostgroup_name
                 )
             else:
-                create_response = requests.post(
-                    zabbix_ip + "/api_jsonrpc.php",
-                    headers=headers,
-                    timeout=REQUEST_TIMEOUT,
-                    json={
-                        "jsonrpc": "2.0",
-                        "method": "hostgroup.create",
-                        "params": {"name": hostgroup_name},
-                        "id": 1,
-                    },
+                create_response = _zabbix_post(
+                    zabbix_ip,
+                    zabbix_key,
+                    "hostgroup.create",
+                    {"name": hostgroup_name},
                 )
                 create_json = create_response.json()
                 if create_response.status_code == 200 and "error" not in create_json:
@@ -1092,7 +991,18 @@ def sync_netbox_zabbix_devices(
             "Device %s found in Netbox but not in Zabbix, creating in Zabbix.",
             netbox_device.name,
         )
-        create_zabbix_device(netbox_device, sync_output)
+        try:
+            create_zabbix_device(netbox_device, sync_output)
+        except Exception as e:  # pylint: disable=broad-except
+            # Don't let one bad device abort the whole batch; record it and
+            # keep going so the rest of the devices still get synchronized.
+            log.logger.error(
+                "Failed to create Zabbix device for %s: %s",
+                netbox_device.name, e, exc_info=True,
+            )
+            sync_output.add_difference_output(
+                f"Failed to create {netbox_device.name} in Zabbix: {e}"
+            )
     device_service.map_port_type_device(netbox_devices, zabbix_devices, numbered=True)
     for diffrence in differences:
         device_service.map_port_type_device(
@@ -1104,7 +1014,18 @@ def sync_netbox_zabbix_devices(
             difference.nb_device.name,
             difference.zb_device.name,
         )
-        apply_differences(difference, sync_output)
+        try:
+            apply_differences(difference, sync_output)
+        except Exception as e:  # pylint: disable=broad-except
+            # Same reasoning as above: one device's failure shouldn't stop
+            # the rest of the batch from being synchronized.
+            log.logger.error(
+                "Failed to synchronize %s: %s",
+                difference.zb_device.name, e, exc_info=True,
+            )
+            sync_output.add_difference_output(
+                f"Failed to synchronize {difference.zb_device.name}: {e}"
+            )
 
     log.logger.info("Synchronization of Netbox and Zabbix devices completed.")
     return sync_output

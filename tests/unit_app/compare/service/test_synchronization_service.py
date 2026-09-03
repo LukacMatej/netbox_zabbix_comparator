@@ -134,10 +134,73 @@ class SynchronizationServiceTests(unittest.TestCase):
             any("created successfully" in item for item in out.synchronization_output_zabbix)
         )
 
+    @patch.dict(
+        "os.environ",
+        {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k", "ZABBIX_DEFAULT_HOSTGROUP": "DefaultHG"},
+        clear=False,
+    )
+    @patch("app.compare.service.synchronization_service.requests.post")
+    @patch("app.compare.service.synchronization_service.find_template_ids", return_value=200)
+    @patch(
+        "app.compare.service.synchronization_service.find_zabbix_hostgroup_ids",
+        return_value=[24, 50],
+    )
+    def test_create_zabbix_device_preserves_existing_hostgroups(
+        self, hg_mock, _tpl_mock, post_mock
+    ):
+        """Regression test: adding the missing default hostgroup must not discard the
+        device's existing hostgroups. list.append() mutates in place and returns
+        None, so assigning that return value used to replace device.hostgroup with
+        just [default_hostgroup]."""
+        response = Mock(status_code=200)
+        response.json.return_value = {"result": {"hostids": ["1"]}}
+        post_mock.return_value = response
+
+        device = _device("r1")  # hostgroup=[{"name": "HG"}]
+        out = SyncOutput()
+        ss.create_zabbix_device(device, out)
+
+        hg_mock.assert_called_once()
+        passed_hostgroups = hg_mock.call_args.args[0]
+        self.assertEqual(passed_hostgroups, [{"name": "HG"}, "DefaultHG"])
+
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.apply_differences")
+    @patch("app.compare.service.synchronization_service.create_zabbix_device")
+    @patch("app.compare.service.synchronization_service.device_service.map_port_type_device")
+    def test_sync_netbox_zabbix_devices_continues_after_device_failure(
+        self, _map_mock, create_mock, apply_mock
+    ):
+        """Regression test: one device failing to create/sync must not abort the
+        rest of the batch. apply_differences/create_zabbix_device now raise on
+        failure (see the apply_differences fix), so the batch loop must catch
+        and record errors instead of letting them propagate and stop early."""
+        nb1 = _device("nb1")
+        nb2 = _device("nb2")
+        create_mock.side_effect = [RuntimeError("boom"), None]
+
+        diff1 = DeviceDifference(_device("d1"), _device("d1"), (["name"], []))
+        diff2 = DeviceDifference(_device("d2"), _device("d2"), (["name"], []))
+        apply_mock.side_effect = [RuntimeError("kaboom"), None]
+
+        out = ss.sync_netbox_zabbix_devices(
+            differences=[diff1, diff2], netbox_devices=[nb1, nb2], zabbix_devices=[]
+        )
+
+        self.assertEqual(create_mock.call_count, 2)
+        self.assertEqual(apply_mock.call_count, 2)
+        self.assertTrue(
+            any("Failed to create nb1" in item for item in out.synchronization_output_differences)
+        )
+        self.assertTrue(
+            any("Failed to synchronize d1" in item for item in out.synchronization_output_differences)
+        )
+
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
     @patch("app.compare.service.synchronization_service.requests.post")
     def test_apply_differences_missing_hostid(self, post_mock):
-        """Missing hostid should prevent update and append difference output error."""
+        """Missing hostid should prevent update, append an error, and raise so the
+        caller (and thus the UI/webhook response) doesn't report a false success."""
         host_get = Mock(status_code=200)
         host_get.json.return_value = {"result": []}
         post_mock.return_value = host_get
@@ -147,7 +210,8 @@ class SynchronizationServiceTests(unittest.TestCase):
         diff = DeviceDifference(nb, zb, (["name", "address"], []))
         out = SyncOutput()
 
-        ss.apply_differences(diff, out)
+        with self.assertRaises(RuntimeError):
+            ss.apply_differences(diff, out)
         self.assertTrue(
             any("cannot update device" in item for item in out.synchronization_output_differences)
         )
