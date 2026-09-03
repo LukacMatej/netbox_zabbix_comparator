@@ -1,5 +1,9 @@
 fastapi==0.115.12
 uvicorn==0.34.2
+# Not used directly by application code: fastapi.testclient.TestClient (used in
+# tests/test_server.py) requires httpx to be installed. CI installs only from
+# this file before running tests, so it has to stay here rather than in a
+# dev-only requirements file.
 httpx==0.28.1
 requests==2.31.0
 jinja2==3.1.3
