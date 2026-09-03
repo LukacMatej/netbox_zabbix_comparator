@@ -146,6 +146,49 @@ class QueryZabbixForHostTests(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class MapPortTypesTests(unittest.TestCase):
+    """Tests for map_port_types."""
+
+    def test_maps_names_and_codes(self):
+        """Both port type names and their numeric codes should map to the same set."""
+        self.assertEqual(vs.map_port_types(["Agent", "2"]), {"1", "2"})
+
+    def test_returns_none_for_unknown_port_type(self):
+        """An unrecognized port type should make the whole mapping fail."""
+        self.assertIsNone(vs.map_port_types(["Agent", "bogus"]))
+
+
+class QueryZabbixTemplateItemsTests(unittest.TestCase):
+    """Tests for query_zabbix_template_items."""
+
+    def test_returns_empty_list_for_no_template_names(self):
+        """No template names means nothing to look up."""
+        self.assertEqual(vs.query_zabbix_template_items([]), [])
+
+    def test_resolves_template_names_to_items(self):
+        """Should resolve template names to IDs, then fetch their items."""
+        with patch(
+            "app.device.service.validator_service._zabbix_post",
+            side_effect=[
+                [{"templateid": "500", "host": "APC UPS by SNMP"}],
+                [{"itemid": "1", "name": "SNMP item", "type": "20"}],
+            ],
+        ) as post_mock:
+            result = vs.query_zabbix_template_items(["APC UPS by SNMP"])
+
+        self.assertEqual(result, [{"itemid": "1", "name": "SNMP item", "type": "20"}])
+        self.assertEqual(post_mock.call_args_list[0].args[0], "template.get")
+        self.assertEqual(post_mock.call_args_list[1].args[0], "item.get")
+        self.assertEqual(post_mock.call_args_list[1].args[1]["templateids"], ["500"])
+
+    def test_returns_empty_list_when_template_not_found(self):
+        """Should return [] when no matching template exists in Zabbix."""
+        with patch("app.device.service.validator_service._zabbix_post", return_value=[]):
+            result = vs.query_zabbix_template_items(["Nonexistent Template"])
+
+        self.assertEqual(result, [])
+
+
 class CheckNewPortTypeCompatibilityTests(unittest.TestCase):
     """Tests for check_new_port_type_compatibility function."""
 
@@ -235,7 +278,7 @@ class FindZabbixHostTests(unittest.TestCase):
         data = {"data": {"name": "test-host"}}
         zabbix_result = {
             "hostid": "10001",
-            "groups": [{"groupid": "10"}, {"groupid": "20"}],
+            "hostgroups": [{"groupid": "10"}, {"groupid": "20"}],
             "parentTemplates": [{"templateid": "100"}],
             "interfaces": [{"type": "1", "interfaceid": "1"}],
             "items": [{"type": "0", "interfaceid": "1"}],
@@ -566,6 +609,125 @@ class CanUpdateDeviceTests(unittest.TestCase):
         # Should reject because the new types do not include interface 1
         self.assertFalse(result["valid"])
         self.assertIn("incompatible", result["message"].lower())
+
+    def test_rejects_template_change_needing_interface_host_lacks(self):
+        """Regression test for the veeam incident: a template-only change
+        (zabbix_port_type absent from the update) must still be checked
+        against the host's *current* interfaces. Previously any update with
+        zabbix_templates but no zabbix_port_type was approved unconditionally,
+        letting an SNMP-only template through onto an Agent-only host, which
+        Zabbix then rejected at actual sync time."""
+        data = {
+            "data": {
+                "name": "veeam",
+                "custom_fields": {"zabbix_templates": ["APC UPS by SNMP"]},
+            }
+        }
+        validator = vs.DeviceModelValidator(
+            "10795",
+            ["10"],
+            ["100"],
+            [{"type": "1"}],  # host only has an Agent interface
+            [],
+        )
+        new_items = [
+            {"name": "SNMP item", "type": str(ItemTypes.SNMP_AGENT.value)},
+        ]
+
+        with patch(
+            "app.device.service.validator_service.find_zabbix_host",
+            return_value=(validator, {"items": validator.items, "interfaces": validator.interfaces}),
+        ), patch(
+            "app.device.service.validator_service.query_zabbix_template_items",
+            return_value=new_items,
+        ):
+            result = vs.can_update_device(data)
+
+        self.assertFalse(result["valid"])
+        self.assertIn("interface", result["message"].lower())
+
+    def test_allows_template_change_compatible_with_existing_interfaces(self):
+        """A template-only change should be approved when the new template's
+        items are satisfied by the host's existing interfaces."""
+        data = {
+            "data": {
+                "name": "test-host",
+                "custom_fields": {"zabbix_templates": ["Remote Zabbix server health"]},
+            }
+        }
+        validator = vs.DeviceModelValidator(
+            "10001",
+            ["10"],
+            ["100"],
+            [{"type": "1"}],  # Agent interface
+            [],
+        )
+        new_items = [
+            {"name": "Agent item", "type": str(ItemTypes.ZABBIX_AGENT.value)},
+        ]
+
+        with patch(
+            "app.device.service.validator_service.find_zabbix_host",
+            return_value=(validator, {"items": validator.items, "interfaces": validator.interfaces}),
+        ), patch(
+            "app.device.service.validator_service.query_zabbix_template_items",
+            return_value=new_items,
+        ):
+            result = vs.can_update_device(data)
+
+        self.assertTrue(result["valid"])
+
+    def test_hostgroups_only_change_skips_validation(self):
+        """A hostgroups-only change (no port type, no templates) should never
+        trigger a Zabbix compatibility check."""
+        data = {
+            "data": {
+                "name": "test-host",
+                "custom_fields": {"zabbix_hostgroups": ["group1", "group2"]},
+            }
+        }
+
+        result = vs.can_update_device(data)
+
+        self.assertTrue(result["valid"])
+        self.assertIn("no port type", result["message"].lower())
+
+    def test_combined_port_type_and_template_change_checks_both(self):
+        """When both zabbix_port_type and zabbix_templates change together,
+        the new template's items must be satisfied by the *new* port types,
+        not the host's old ones."""
+        data = {
+            "data": {
+                "name": "test-host",
+                "custom_fields": {
+                    "zabbix_port_type": ["2"],  # switching to SNMP
+                    "zabbix_templates": ["SNMP Template"],
+                },
+            }
+        }
+        validator = vs.DeviceModelValidator(
+            "10001",
+            ["10"],
+            ["100"],
+            [{"type": "1"}],  # currently Agent only
+            [],
+        )
+        new_items = [
+            {"name": "SNMP item", "type": str(ItemTypes.SNMP_AGENT.value)},
+        ]
+
+        with patch(
+            "app.device.service.validator_service.find_zabbix_host",
+            return_value=(validator, {"items": validator.items, "interfaces": validator.interfaces}),
+        ), patch(
+            "app.device.service.validator_service.query_zabbix_template_items",
+            return_value=new_items,
+        ):
+            result = vs.can_update_device(data)
+
+        # New port types (SNMP) satisfy the new template's item, so this
+        # should be valid even though the host's *current* interface is Agent.
+        self.assertTrue(result["valid"])
 
 
 if __name__ == "__main__":
