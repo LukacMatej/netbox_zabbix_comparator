@@ -168,8 +168,12 @@ Zabbix has many dependencies regarding the Port Type - Templates relationship. F
 
 ##### Procedure:
 
-* Place `device_zabbix_validator.py` into the NetBox root folder
-* Insert the following into `configuration/extra.py`:
+Where to place `device_zabbix_validator.py` and how to reference it in `CUSTOM_VALIDATORS` depends on how NetBox itself is installed — the two setups resolve Python modules differently.
+
+**Bare-metal / venv install**
+
+* Place `device_zabbix_validator.py` into the NetBox root folder (`netbox/netbox/`, alongside the real `configuration.py`) — that directory is on NetBox's Python path, so the file becomes importable as a plain top-level module.
+* Insert into `configuration/extra.py` (or `configuration.py` directly):
 
 ```python
 CUSTOM_VALIDATORS = {
@@ -178,6 +182,22 @@ CUSTOM_VALIDATORS = {
     )
 }
 ```
+
+**[netbox-docker](https://github.com/netbox-community/netbox-docker) install**
+
+* Place `device_zabbix_validator.py` into the same host folder that's bind-mounted to `/etc/netbox/config/` (typically `configuration/`, alongside `configuration.py`/`extra.py`) — the folder is not on `sys.path` directly, though.
+* netbox-docker's configuration loader (`docker/configuration.docker.py`, which becomes the real `configuration.py` inside the image) imports every `.py` file it finds in that mounted folder, but registers each one under a **flattened module name**: `netbox.configuration.<filename>` with every dot replaced by an underscore. For `device_zabbix_validator.py` that resolves to `netbox_configuration_device_zabbix_validator` — not the bare filename.
+* Insert into `configuration/extra.py`:
+
+```python
+CUSTOM_VALIDATORS = {
+    'dcim.device': (
+        'netbox_configuration_device_zabbix_validator.ZabbixCustomFieldValidator',
+    )
+}
+```
+
+* Recreate the NetBox containers so the mounted config is re-read: `docker compose up -d netbox netbox-worker` (a plain `restart` won't pick up a newly-added file since it doesn't change anything Compose considers part of the container's config).
 
 The custom validator calls the comparator's API endpoint `/validate_update` (port 7000, needs to be adjusted if a different one is used).
 

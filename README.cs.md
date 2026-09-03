@@ -92,16 +92,33 @@ Zabbix má mnoho závislostí ve vazbě Port Type - Templates, z toho důvodu by
 
 ##### Postup:
 
-* Vložit `device_zabbix_validator.py` do root složky netboxu
-* V `configuraton/extra.py` vložit
-  ```python
+Kam soubor `device_zabbix_validator.py` umístit a jak ho odkázat v `CUSTOM_VALIDATORS` závisí na tom, jak je NetBox nainstalovaný — obě varianty řeší importy Python modulů jinak.
 
+**Instalace bez Dockeru (venv)**
+
+* Vložit `device_zabbix_validator.py` do root složky netboxu (`netbox/netbox/`, vedle skutečného `configuration.py`) — tato složka je na Python path, takže je soubor importovatelný jako běžný top-level modul.
+* Do `configuration/extra.py` (nebo přímo do `configuration.py`) vložit:
+  ```python
   CUSTOM_VALIDATORS = {
       'dcim.device': (
           'device_zabbix_validator.ZabbixCustomFieldValidator',
       )
   }
   ```
+
+**Instalace přes [netbox-docker](https://github.com/netbox-community/netbox-docker)**
+
+* Vložit `device_zabbix_validator.py` do stejné hostitelské složky, která je připojená (bind-mount) do `/etc/netbox/config/` (typicky `configuration/`, vedle `configuration.py`/`extra.py`) — tato složka ale sama o sobě není na `sys.path`.
+* Loader konfigurace v netbox-docker (`docker/configuration.docker.py`, který se uvnitř image stává skutečným `configuration.py`) načte každý `.py` soubor z této připojené složky, ale zaregistruje ho pod **zploštělým názvem modulu**: `netbox.configuration.<název_souboru>`, kde je každá tečka nahrazena podtržítkem. Pro `device_zabbix_validator.py` je výsledný název `netbox_configuration_device_zabbix_validator` — ne holý název souboru.
+* Do `configuration/extra.py` vložit:
+  ```python
+  CUSTOM_VALIDATORS = {
+      'dcim.device': (
+          'netbox_configuration_device_zabbix_validator.ZabbixCustomFieldValidator',
+      )
+  }
+  ```
+* Restartovat (znovu vytvořit) kontejnery NetBoxu, aby se připojená konfigurace znovu načetla: `docker compose up -d netbox netbox-worker` (obyčejný `restart` nově přidaný soubor nenačte, protože z pohledu Compose se tím nic v konfiguraci kontejneru nemění).
 
 Custom validátor volá API endpoint porovnávače /validate_update (port 7000, potřeba upravit pokud se používá jiný)
 
