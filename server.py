@@ -31,9 +31,9 @@ Dependencies:
 from __future__ import annotations
 
 import argparse
-import asyncio
 import os
 import sys
+from typing import Any
 
 import requests
 import uvicorn
@@ -42,7 +42,6 @@ from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
     PlainTextResponse,
-    StreamingResponse,
 )
 from fastapi.templating import Jinja2Templates
 
@@ -126,11 +125,6 @@ def difference_to_dict(difference: DeviceDifference) -> dict:
 templates.env.globals["difference_to_dict"] = difference_to_dict
 
 
-@app.on_event("startup")
-async def startup_event():
-    log.broadcaster.set_loop(asyncio.get_running_loop())
-
-
 @app.get("/", response_class=HTMLResponse)
 def test(request: Request) -> HTMLResponse:
     """
@@ -147,36 +141,6 @@ def test(request: Request) -> HTMLResponse:
         {"request": request, "netbox_url": netbox_url, "zabbix_url": zabbix_url},
         status_code=200,
     )
-
-
-async def log_event_stream(from_start: bool = True):
-    q = log.broadcaster.subscribe()
-    try:
-        if from_start:
-            for line in list(log.broadcaster.buffer):
-                yield f"data: {line}\n\n"
-        while True:
-            line = await q.get()
-            yield f"data: {line}\n\n"
-    finally:
-        log.broadcaster.unsubscribe(q)
-
-
-@app.get("/logs/stream")
-async def stream_logs(from_start: bool = True):
-    return StreamingResponse(
-        log_event_stream(from_start=from_start),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
-@app.get("/logs", name="logs_page", response_class=HTMLResponse)
-async def logs_page(request: Request) -> Response:
-    return templates.TemplateResponse(request, "logs_fragment.html", {})
 
 @app.post(
     "/create_zabbix_device", name="create_zabbix_device", response_class=HTMLResponse
@@ -231,11 +195,6 @@ async def synchronize_zabbix_device(request: Request) -> Response:
     sync_output = sync_output_model()
     try:
         ss.apply_differences(differences=difference, sync_output=sync_output)
-        if "Exception " in sync_output.synchronization_output_differences:
-            raise Exception(
-                "Differences found: "
-                + ", ".join(sync_output.synchronization_output_differences)
-            )
         success = True
     except Exception as e:  # pylint: disable=broad-except
         log.logger.error(
@@ -385,9 +344,9 @@ def run_compare_sync(request: Request) -> Response:
             formatted_output_result
         )
     else:
-        display_differences: list[DeviceDifference] = differences
-        display_netbox_devices: list[Device] = netbox_devices
-        display_zabbix_devices: list[Device] = zabbix_devices
+        display_differences = differences
+        display_netbox_devices = netbox_devices
+        display_zabbix_devices = zabbix_devices
     template_name = (
         "compare_output_content.html"
         if request.headers.get("hx-request", "").lower() == "true"
@@ -413,7 +372,7 @@ def run_compare_sync(request: Request) -> Response:
 async def webhook_create(request: Request):
     """Handle webhook create event."""
     data = await request.json()
-    nb_device: Device = ds.parse_webhook_create(data)
+    nb_device: Device = ds.parse_webhook(data)
     log.logger.info("Webhook create event received: %s", data)
     log.logger.info(f"Creating Zabbix device for device_id: {nb_device.name}")
     try:
@@ -474,7 +433,7 @@ async def webhook_update(request: Request):
 async def webhook_delete(request: Request):
     """Handle webhook create event."""
     data = await request.json()
-    nb_device: Device = ds.parse_webhook_delete(data)
+    nb_device: Device = ds.parse_webhook(data)
     log.logger.info("Webhook delete event received: %s", data)
     log.logger.info(f"Deleting Zabbix device for device_id: {nb_device.name}")
     try:
@@ -586,7 +545,7 @@ def test_connection() -> tuple[str, int]:
         "Authorization": f"Bearer {zabbix_key}",
         "Content-Type": "application/json-rpc",
     }
-    data = {
+    data: dict[str, Any] = {
         "jsonrpc": "2.0",
         "method": "host.get",
         "params": [],
