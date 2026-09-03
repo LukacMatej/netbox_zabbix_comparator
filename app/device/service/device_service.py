@@ -1173,7 +1173,7 @@ def get_zabbix_device(name: str) -> device_model | None:
             "filter": {"host": [name]},
             "output": ["hostid", "host", "description", "status"],
             "selectInterfaces": ["interfaceid", "ip", "dns", "port", "type", "main"],
-            "selectGroups": ["name"],
+            "selectHostGroups": ["name"],
             "selectParentTemplates": ["name"],
         },
     )
@@ -1212,7 +1212,11 @@ def get_zabbix_device(name: str) -> device_model | None:
             )
         )
 
-    hostgroup: list[str] = [g["name"] for g in host.get("groups", []) if "name" in g]
+    # host.get returns hostgroups under "hostgroups" when selectHostGroups is
+    # requested (Zabbix >= 6.0; "groups"/selectGroups is the pre-6.0 naming and
+    # is silently ignored by newer Zabbix, which was returning an empty list
+    # here on every webhook-triggered sync).
+    hostgroup: list[str] = [g["name"] for g in host.get("hostgroups", []) if "name" in g]
     templates: list[str] = [
         t["name"] for t in host.get("parentTemplates", []) if "name" in t
     ]
@@ -1266,7 +1270,7 @@ def get_zabbix_hostid(name: str) -> str | None:
             "filter": {"host": [name]},
             "output": ["hostid", "host", "description", "status"],
             "selectInterfaces": ["interfaceid", "ip", "dns", "port", "type", "main"],
-            "selectGroups": ["name"],
+            "selectHostGroups": ["name"],
             "selectParentTemplates": ["name"],
         },
     )

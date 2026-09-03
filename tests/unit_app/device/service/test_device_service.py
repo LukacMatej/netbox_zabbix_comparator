@@ -97,6 +97,37 @@ class DeviceServiceTests(unittest.TestCase):
         post_mock.side_effect = requests.exceptions.RequestException("network")
         self.assertEqual(ds.find_hostinterface_ids("10"), [])
 
+    @patch("app.device.service.device_service.requests.post")
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb", "ZABBIX_KEY": "k"}, clear=False)
+    def test_get_zabbix_device_reads_hostgroups(self, post_mock):
+        """Regression test: get_zabbix_device must request selectHostGroups and
+        read the "hostgroups" key. Zabbix >= 6.0 doesn't populate "groups" from
+        the pre-6.0 selectGroups param, so using the old names silently made
+        every webhook-triggered device come back with hostgroup == []."""
+        response = Mock(status_code=200)
+        response.json.return_value = {
+            "result": [
+                {
+                    "hostid": "10795",
+                    "host": "veeam",
+                    "description": "",
+                    "status": "0",
+                    "interfaces": [],
+                    "hostgroups": [{"groupid": "2", "name": "Linux servers"}],
+                    "parentTemplates": [{"name": "APC UPS by SNMP"}],
+                }
+            ]
+        }
+        post_mock.return_value = response
+
+        device = ds.get_zabbix_device("veeam")
+
+        self.assertIsNotNone(device)
+        self.assertEqual(device.hostgroup, ["Linux servers"])
+        sent_params = post_mock.call_args.kwargs["json"]["params"]
+        self.assertIn("selectHostGroups", sent_params)
+        self.assertNotIn("selectGroups", sent_params)
+
     @patch("app.device.service.device_service.requests.get")
     @patch.dict("os.environ", {"NETBOX_IP": "http://nb", "NETBOX_KEY": "k"}, clear=False)
     def test_find_nb_identifiers(self, get_mock):
