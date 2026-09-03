@@ -10,6 +10,8 @@ Compares device configuration between NetBox and Zabbix and creates/updates Zabb
 ![FastAPI](https://img.shields.io/badge/framework-FastAPI-009688.svg)
 ![Docker](https://img.shields.io/badge/deploy-Docker-2496ED.svg)
 
+![Compare view showing NetBox and Zabbix devices side by side with differences highlighted](docs/screenshot.png)
+
 ## Table of Contents
 
 - [Features](#features)
