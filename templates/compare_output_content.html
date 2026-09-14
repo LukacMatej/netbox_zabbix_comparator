@@ -68,6 +68,9 @@
 		display: flex;
 		flex: 50% 50%;
 	}
+	.lines p {
+		margin: 0;
+	}
 	.button-create button{
 		display: flex;
 		justify-content: center;
@@ -147,28 +150,28 @@
 		{% if differences %}
 		<div class="lines">
 			{% for difference in differences %}
-			<div><strong>Netbox: {{ difference.nb_device.name }}</strong></div>
+			{% set diff_text = ' ' + (difference.differences[0] | join(' ')) + ' ' %}
+			<p style="background-color: {{ 'lightyellow' if ' name ' in diff_text else 'transparent' }};"><strong>Netbox: {{ difference.nb_device.name }}</strong></p>
 			<div class="interfaces">Interfaces:</div>
 			{% for interface in difference.nb_device.interfaces %}
 			<div class="tab-interface">
-				Interface: {{ interface.name }}, Port Type:{% if
+				<p style="background-color: {{ 'lightyellow' if ' port_type ' in diff_text else 'transparent' }};">Interface: {{ interface.name }}, Port Type: {% if
 				interface.port_type %} {{interface.port_type}} {% else %} None
-				{% endif %}
+				{% endif %}</p>
 			</div>
 			<div class="tab-interface">Addresses:</div>
 			{% for address in interface.addresses %}
 			<div class="tab-address">
-				IP address: {{ address.address }}, DNS Name: {{ address.dns_name
-				}}
+				<p style="background-color: {{ 'lightyellow' if (' address ' in diff_text or ' dns_name ' in diff_text) else 'transparent' }};">IP address: {{ address.address }}, DNS Name: {{ address.dns_name }}</p>
 			</div>
 			{% endfor %} {% endfor %}
-			<div>
+			<p style="background-color: {{ 'lightyellow' if ' hostgroup ' in diff_text else 'transparent' }};">
 				Hostgroup: {{ difference.nb_device.hostgroup }},{% if
 				difference.nb_device.description %} Description: {{
 				difference.nb_device.description }} ,{% endif %} Status: {{
 				difference.nb_device.status }}
-			</div>
-			<div>Templates: {{ difference.nb_device.templates }}</div>
+			</p>
+			<p style="background-color: {{ 'lightyellow' if ' templates ' in diff_text else 'transparent' }};">Templates: {{ difference.nb_device.templates }}</p>
 			<br />
 			<div class="differences">
 				<div>
@@ -180,33 +183,32 @@
 				<div>
 					<div><strong>Differences:</strong></div>
 					{% for difference in difference.differences[0] %}
-					<div class="tab-interface">{{ difference }}</div>
+					<p class="tab-interface" style="background-color: lightyellow;">{{ difference }}</p>
 					{% endfor %}
 				</div>
 			</div>
 			<br />
-			<div><strong>Zabbix: {{ difference.zb_device.name }}</strong></div>
+			<p style="background-color: {{ 'lightyellow' if ' name ' in diff_text else 'transparent' }};"><strong>Zabbix: {{ difference.zb_device.name }}</strong></p>
 			<div>Interfaces:</div>
 			{% for interface in difference.zb_device.interfaces %}
 			<div class="tab-interface">
-				Interface: {{ interface.name }}, Port Type: {% if
+				<p style="background-color: {{ 'lightyellow' if ' port_type ' in diff_text else 'transparent' }};">Interface: {{ interface.name }}, Port Type: {% if
 				interface.port_type %} {{interface.port_type}} {% else %} None
-				{% endif %}
+				{% endif %}</p>
 			</div>
 			<div class="tab-interface">Addresses:</div>
 			{% for address in interface.addresses %}
 			<div class="tab-address">
-				IP address: {{ address.address }}, DNS Name: {{ address.dns_name
-				}}
+				<p style="background-color: {{ 'lightyellow' if (' address ' in diff_text or ' dns_name ' in diff_text) else 'transparent' }};">IP address: {{ address.address }}, DNS Name: {{ address.dns_name }}</p>
 			</div>
 			{% endfor %} {% endfor %}
-			<div>
+			<p style="background-color: {{ 'lightyellow' if ' hostgroup ' in diff_text else 'transparent' }};">
 				Hostgroup: {{ difference.zb_device.hostgroup }}, {% if
 				difference.zb_device.description%} Description: {{
 				difference.zb_device.description }} ,{% endif %} Status: {{
 				difference.zb_device.status }}
-			</div>
-			<div>Templates: {{ difference.zb_device.templates }}</div>
+			</p>
+			<p style="background-color: {{ 'lightyellow' if ' templates ' in diff_text else 'transparent' }};">Templates: {{ difference.zb_device.templates }}</p>
 			<div class="button-create">
 				<button
 					type="button"
