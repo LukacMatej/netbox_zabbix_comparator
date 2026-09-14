@@ -162,15 +162,18 @@
 			<div class="tab-interface">Addresses:</div>
 			{% for address in interface.addresses %}
 			<div class="tab-address">
-				<p style="background-color: {{ 'lightyellow' if (' address ' in diff_text or ' dns_name ' in diff_text) else 'transparent' }};">IP address: {{ address.address }}, DNS Name: {{ address.dns_name }}</p>
+				{% if address.address %}<p style="background-color: {{ 'lightyellow' if (' address ' in diff_text or ' dns_name ' in diff_text) else 'transparent' }};">IP address: {{ address.address }}</p>
+				{% endif %}
+				{% if address.dns_name %}<p style="background-color: {{ 'lightyellow' if (' address ' in diff_text or ' dns_name ' in diff_text) else 'transparent' }};">DNS Name: {{ address.dns_name }}</p>
+				{% endif %}
 			</div>
 			{% endfor %} {% endfor %}
 			<p style="background-color: {{ 'lightyellow' if ' hostgroup ' in diff_text else 'transparent' }};">
-				Hostgroup: {{ difference.nb_device.hostgroup }},{% if
-				difference.nb_device.description %} Description: {{
-				difference.nb_device.description }} ,{% endif %} Status: {{
-				difference.nb_device.status }}
-			</p>
+				Hostgroup: {{ difference.nb_device.hostgroup }},</p>
+			{% if difference.nb_device.description %}
+				<p style="background-color: {{ 'lightyellow' if ' description ' in diff_text else 'transparent' }};">Description: {{ difference.nb_device.description }}</p>
+			{% endif %}
+			<p style="background-color: {{ 'lightyellow' if ' status ' in diff_text else 'transparent' }};">Status: {{ difference.nb_device.status }}</p>
 			<p style="background-color: {{ 'lightyellow' if ' templates ' in diff_text else 'transparent' }};">Templates: {{ difference.nb_device.templates }}</p>
 			<br />
 			<div class="differences">
@@ -192,21 +195,23 @@
 			<div>Interfaces:</div>
 			{% for interface in difference.zb_device.interfaces %}
 			<div class="tab-interface">
-				<p style="background-color: {{ 'lightyellow' if ' port_type ' in diff_text else 'transparent' }};">Interface: {{ interface.name }}, Port Type: {% if
+				<p style="background-color: {{ 'lightyellow' if ' port_type ' in diff_text else 'transparent' }};">Port Type: {% if
 				interface.port_type %} {{interface.port_type}} {% else %} None
 				{% endif %}</p>
 			</div>
 			<div class="tab-interface">Addresses:</div>
 			{% for address in interface.addresses %}
 			<div class="tab-address">
-				<p style="background-color: {{ 'lightyellow' if (' address ' in diff_text or ' dns_name ' in diff_text) else 'transparent' }};">IP address: {{ address.address }}, DNS Name: {{ address.dns_name }}</p>
+				<p style="background-color: {{ 'lightyellow' if (' address ' in diff_text) else 'transparent' }};">IP address: {{ address.address }}</p>
+				<p style="background-color: {{ 'lightyellow' if (' dns_name ' in diff_text) else 'transparent' }};">DNS Name: {{ address.dns_name }}</p>
 			</div>
 			{% endfor %} {% endfor %}
 			<p style="background-color: {{ 'lightyellow' if ' hostgroup ' in diff_text else 'transparent' }};">
-				Hostgroup: {{ difference.zb_device.hostgroup }}, {% if
-				difference.zb_device.description%} Description: {{
-				difference.zb_device.description }} ,{% endif %} Status: {{
-				difference.zb_device.status }}
+				Hostgroup: {{ difference.zb_device.hostgroup }},
+			{% if difference.zb_device.description %}
+				<p style="background-color: {{ 'lightyellow' if ' description ' in diff_text else 'transparent' }};">Description: {{ difference.zb_device.description }}</p>
+			{% endif %}
+			<p style="background-color: {{ 'lightyellow' if ' status ' in diff_text else 'transparent' }};">Status: {{ difference.zb_device.status }}</p>
 			</p>
 			<p style="background-color: {{ 'lightyellow' if ' templates ' in diff_text else 'transparent' }};">Templates: {{ difference.zb_device.templates }}</p>
 			<div class="button-create">
