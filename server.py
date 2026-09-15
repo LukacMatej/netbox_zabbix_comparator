@@ -66,7 +66,7 @@ if proxy_root_path and not proxy_root_path.startswith("/"):
     proxy_root_path = "/" + proxy_root_path
 app = FastAPI(root_path=proxy_root_path, title="NetBox Zabbix Compare")
 templates = Jinja2Templates(directory="templates")
-
+filter_hostgroup = ""
 
 def dict_to_address(data: dict) -> Address:
     return Address(address=data["address"], dns_name=data["dns_name"])
@@ -214,8 +214,8 @@ async def select_hostgroup(request: Request) -> Response:
     except ValueError:
         return PlainTextResponse("Invalid or missing JSON body", status_code=400)
 
-    hostgroup = payload.get("hostgroup")
-    log.logger.info("Selected Zabbix hostgroup: %s", hostgroup)
+    filter_hostgroup = payload.get("hostgroup")
+    log.logger.info("Selected Zabbix hostgroup: %s", filter_hostgroup)
     return PlainTextResponse("OK", status_code=200)
 
 @app.post(
@@ -334,14 +334,12 @@ def run_compare(request: Request) -> Response:
         Implicitly handles exceptions from the compare operation and returns
         them as error responses with status code 500.
     """
-    netbox_key: str | None = os.environ.get("NETBOX_KEY")
     netbox_ip: str | None = os.environ.get("NETBOX_IP")
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
-    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
     compare_output: (
         Exception | tuple[list[DeviceDifference], list[Device], list[Device]]
     ) = ct.compare(
-        nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key
+        hostgroup_filter=filter_hostgroup
     )
     if isinstance(compare_output, Exception):
         return PlainTextResponse(str(compare_output), status_code=500)
@@ -410,14 +408,12 @@ def run_compare_sync(request: Request) -> Response:
     """
     synchronization: bool = True
     sync_output: sync_output_model
-    netbox_key: str | None = os.environ.get("NETBOX_KEY")
     netbox_ip: str | None = os.environ.get("NETBOX_IP")
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
-    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
     compare_output: (
         Exception | tuple[list[DeviceDifference], list[Device], list[Device]]
     ) = ct.compare(
-        nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key
+    	hostgroup_filter=filter_hostgroup
     )
     if isinstance(compare_output, Exception):
         return PlainTextResponse(str(compare_output), status_code=500)

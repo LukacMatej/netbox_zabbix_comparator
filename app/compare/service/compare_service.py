@@ -22,6 +22,7 @@ Compare devices from NetBox and Zabbix sources using their connection parameters
 
 from __future__ import annotations
 
+import os
 import re
 
 from scipy.optimize import linear_sum_assignment
@@ -33,6 +34,12 @@ from app.device.models.interface_model import Interface as interface_model
 from app.device.models.difference_model import DeviceDifference as device_difference_model
 from app.device.models.address_model import Address as address_model
 
+def _credentials() -> tuple[str, str, str, str]:
+    nb_ip = os.environ.get("NETBOX_IP", "")
+    nb_key = os.environ.get("NETBOX_KEY", "")
+    zb_ip = os.environ.get("ZABBIX_IP", "")
+    zb_key = os.environ.get("ZABBIX_KEY", "")
+    return nb_ip, nb_key, zb_ip, zb_key
 
 def normalize_name(name: str) -> str:
     """Normalize device names for matching.
@@ -616,17 +623,12 @@ def compare_devices(
     return different_devices, nb_devices, zb_devices
 
 def compare(
-    nb_ip, nb_key, zb_ip, zb_key
+    hostgroup_filter: str,
 ) -> Exception | tuple[list[device_difference_model], list[device_model], list[device_model]]:
     """
     Compare devices between Netbox and Zabbix systems.
     Retrieves device lists from both Netbox and Zabbix, maps port types,
     and compares the devices to identify differences.
-    Args:
-        nb_ip (str): IP address or hostname of the Netbox server.
-        nb_key (str): API key for Netbox authentication.
-        zb_ip (str): IP address or hostname of the Zabbix server.
-        zb_key (str): API key for Zabbix authentication.
     Returns:
         Exception | tuple[list[device_difference_model], list[device_model], list[device_model]]:
             On success, returns a tuple containing:
@@ -638,6 +640,7 @@ def compare(
         Exception: If device retrieval from Netbox or Zabbix fails.
     """
     log.logger.info("Starting compare")
+    nb_ip, nb_key, zb_ip, zb_key = _credentials()
     nb_graphql = nb_ip + "/graphql/"
     log.logger.debug("Netbox IP: %s", nb_ip)
     log.logger.debug("Zabbix IP: %s", zb_ip)
@@ -648,7 +651,7 @@ def compare(
         return Exception(nb_device_list)
     log.logger.debug("Netbox Devices:")
     log.logger.debug(ds.print_devices(nb_device_list))
-    zb_device_list: list[device_model] | str = ds.get_zb_devices(zb_key, zb_ip)
+    zb_device_list: list[device_model] | str = ds.get_zb_devices(zb_key, zb_ip, hostgroup_filter)
     if isinstance(zb_device_list, str):
         log.logger.error("Error: %s", zb_device_list)
         return Exception(zb_device_list)

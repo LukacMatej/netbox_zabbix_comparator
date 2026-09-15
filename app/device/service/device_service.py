@@ -845,7 +845,7 @@ def find_primary_ip_interface(
     return primary_interface
 
 
-def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
+def get_zb_devices(key: str, ip: str, hostgroup_filter: str = "") -> list[device_model] | str:
     """
     Retrieve devices from a Zabbix instance via its API.
     Makes a JSON-RPC call to the Zabbix API to fetch all enabled hosts
@@ -871,7 +871,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
         "selectInterfaces": ["interfaceid", "dns", "ip", "type"],
         "selectHostGroups": ["groupid", "name"],
         "selectParentTemplates": ["templateid", "name"],
-        "filter": {"status": [0]},
+        "filter": {"status": [0], "hostgroup": [hostgroup_filter]},
     }
     try:
         zb_device_list: list[device_model] = []
