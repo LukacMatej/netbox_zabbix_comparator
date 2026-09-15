@@ -66,7 +66,7 @@ if proxy_root_path and not proxy_root_path.startswith("/"):
     proxy_root_path = "/" + proxy_root_path
 app = FastAPI(root_path=proxy_root_path, title="NetBox Zabbix Compare")
 templates = Jinja2Templates(directory="templates")
-
+filter_hostgroup = ""
 
 def dict_to_address(data: dict) -> Address:
     return Address(address=data["address"], dns_name=data["dns_name"])
@@ -189,6 +189,31 @@ def test(request: Request) -> HTMLResponse:
         status_code=200,
     )
 
+@app.get("/zabbix_hostgroups", name="zabbix_hostgroups", response_class=HTMLResponse)
+def zabbix_hostgroups(request: Request) -> HTMLResponse:
+    """Returns the nav-bar dropdown partial listing all Zabbix hostgroups."""
+    hostgroups = ss.list_zabbix_hostgroups()
+    error = hostgroups if isinstance(hostgroups, str) else None
+    return templates.TemplateResponse(
+        request,
+        "hostgroup_dropdown_content.html",
+        {"hostgroups": [] if error else hostgroups, "error": error},
+        status_code=200,
+    )
+
+@app.post("/select_hostgroup", name="select_hostgroup", response_class=PlainTextResponse)
+async def select_hostgroup(request: Request) -> Response:
+    """Sets the hostgroup to exclude, used by run_compare/run_compare_sync."""
+    global filter_hostgroup
+    try:
+        payload = await request.json()
+    except ValueError:
+        return PlainTextResponse("Invalid or missing JSON body", status_code=400)
+
+    filter_hostgroup = payload.get("hostgroup") or ""
+    log.logger.info("Selected Zabbix hostgroup: %s", filter_hostgroup)
+    return PlainTextResponse("OK", status_code=200)
+
 @app.post(
     "/delete_zabbix_device", name="delete_zabbix_device", response_class=HTMLResponse
 )
@@ -305,14 +330,12 @@ def run_compare(request: Request) -> Response:
         Implicitly handles exceptions from the compare operation and returns
         them as error responses with status code 500.
     """
-    netbox_key: str | None = os.environ.get("NETBOX_KEY")
     netbox_ip: str | None = os.environ.get("NETBOX_IP")
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
-    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
     compare_output: (
         Exception | tuple[list[DeviceDifference], list[Device], list[Device]]
     ) = ct.compare(
-        nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key
+        hostgroup_filter=filter_hostgroup
     )
     if isinstance(compare_output, Exception):
         return PlainTextResponse(str(compare_output), status_code=500)
@@ -381,14 +404,12 @@ def run_compare_sync(request: Request) -> Response:
     """
     synchronization: bool = True
     sync_output: sync_output_model
-    netbox_key: str | None = os.environ.get("NETBOX_KEY")
     netbox_ip: str | None = os.environ.get("NETBOX_IP")
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
-    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
     compare_output: (
         Exception | tuple[list[DeviceDifference], list[Device], list[Device]]
     ) = ct.compare(
-        nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key
+    	hostgroup_filter=filter_hostgroup
     )
     if isinstance(compare_output, Exception):
         return PlainTextResponse(str(compare_output), status_code=500)

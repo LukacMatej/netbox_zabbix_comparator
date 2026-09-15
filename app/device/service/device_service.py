@@ -845,7 +845,7 @@ def find_primary_ip_interface(
     return primary_interface
 
 
-def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
+def get_zb_devices(key: str, ip: str, hostgroup_filter: str = "") -> list[device_model] | str:
     """
     Retrieve devices from a Zabbix instance via its API.
     Makes a JSON-RPC call to the Zabbix API to fetch all enabled hosts
@@ -853,6 +853,11 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
     Args:
       key (str): API authentication token for Zabbix authorization.
       ip (str): Base URL or IP address of the Zabbix instance.
+      hostgroup_filter (str): Optional Zabbix hostgroup name to exclude from the
+        results - hosts belonging to this hostgroup are dropped. Applied
+        client-side after fetching, since Zabbix's host.get has no server-side
+        "exclude this group" filter (only "groupids", which is inclusion-only).
+        Empty string means no exclusion.
     Returns:
       list[device_model] | str: A list of device_model objects containing
         host information (name, hostgroups, description, templates, status, interfaces),
@@ -866,7 +871,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
       - Interfaces are mapped to address_model objects with their IP and DNS information.
       - Templates are extracted from parentTemplates and mapped to their names.
     """
-    params = {
+    params: dict[str, Any] = {
         "output": ["hostid", "host", "name", "status", "description"],
         "selectInterfaces": ["interfaceid", "dns", "ip", "type"],
         "selectHostGroups": ["groupid", "name"],
@@ -890,6 +895,10 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
         log.logger.debug(result)
         for host in result["result"]:
             try:
+                if hostgroup_filter and any(
+                    group["name"] == hostgroup_filter for group in host["hostgroups"]
+                ):
+                    continue
                 # Sort interfaces by port_type for consistent ordering
                 sorted_interfaces = sorted(host["interfaces"], key=lambda x: x["type"])
                 zb_device_list.append(

@@ -223,6 +223,63 @@ class DeviceServiceTests(unittest.TestCase):
         self.assertIsInstance(result, str)
         self.assertIn("Error in Zabbix API response", result)
 
+    @patch("app.device.service.device_service.requests.post")
+    def test_get_zb_devices_hostgroup_filter_excludes_matching_hosts(self, post_mock):
+        """Hosts belonging to the excluded hostgroup should be dropped client-side."""
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.text = json.dumps({
+            "result": [
+                {
+                    "host": "zb1",
+                    "description": "d",
+                    "parentTemplates": [{"name": "tpl"}],
+                    "status": "0",
+                    "hostgroups": [{"groupid": "1", "name": "Servers"}],
+                    "interfaces": [{"dns": "zb1.local", "ip": "10.0.0.2", "type": "2"}],
+                },
+                {
+                    "host": "zb2",
+                    "description": "d",
+                    "parentTemplates": [{"name": "tpl"}],
+                    "status": "0",
+                    "hostgroups": [{"groupid": "2", "name": "Network"}],
+                    "interfaces": [{"dns": "zb2.local", "ip": "10.0.0.3", "type": "2"}],
+                },
+            ]
+        })
+        post_mock.return_value = response
+
+        result = ds.get_zb_devices("k", "http://zb", hostgroup_filter="Servers")
+
+        self.assertEqual(post_mock.call_count, 1)
+        self.assertIsInstance(result, list)
+        self.assertEqual([device.name for device in result], ["zb2"])
+        params = post_mock.call_args.kwargs["json"]["params"]
+        self.assertNotIn("groupids", params)
+
+    @patch("app.device.service.device_service.requests.post")
+    def test_get_zb_devices_no_hostgroup_filter_keeps_all_hosts(self, post_mock):
+        """An empty hostgroup filter should exclude nothing."""
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.text = json.dumps({
+            "result": [
+                {
+                    "host": "zb1",
+                    "description": "d",
+                    "parentTemplates": [{"name": "tpl"}],
+                    "status": "0",
+                    "hostgroups": [{"groupid": "1", "name": "Servers"}],
+                    "interfaces": [{"dns": "zb1.local", "ip": "10.0.0.2", "type": "2"}],
+                },
+            ]
+        })
+        post_mock.return_value = response
+
+        result = ds.get_zb_devices("k", "http://zb")
+        self.assertEqual([device.name for device in result], ["zb1"])
+
 
 if __name__ == "__main__":
     unittest.main()

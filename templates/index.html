@@ -32,6 +32,18 @@
         #nav-links .menu-action:hover {
             background: #f0f0f0;
         }
+        #hostgroup-menu-panel .menu-action:hover {
+            background: #f0f0f0;
+        }
+        #hostgroup-menu-panel .menu-action {
+            overflow-wrap: anywhere;
+        }
+        #hostgroup-menu-panel .hostgroup-item.selected {
+            background: #cfe3fb;
+        }
+        #hostgroup-menu-panel .hostgroup-item.selected:hover {
+            background: #bcd6f7;
+        }
         .menu-action {
             text-decoration: none;
             padding: 12px 20px;
@@ -104,6 +116,18 @@
                 <span style="background: #e3e3e3; border-radius: 6px; padding: 6px 12px; font-size: 0.95em;">
                     Zabbix: {{ zabbix_url }}
                 </span>
+                <span style="position: relative; display: inline-block; margin-left: 8px;">
+                    <button type="button" id="hostgroup-menu-btn"
+                        style="background: #e3e3e3; border: none; border-radius: 6px; padding: 6px 12px; font-size: 0.95em; cursor: pointer;"
+                        hx-get="{{ url_for('zabbix_hostgroups') }}"
+                        hx-target="#hostgroup-menu-list"
+                        hx-trigger="click"
+                        hx-swap="innerHTML"
+                    >Exclude Hostgroup &#9662;</button>
+                    <div id="hostgroup-menu-panel" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border-radius: 8px; min-width: 200px; max-width: 280px; max-height: 320px; overflow-y: auto; overflow-x: hidden; z-index: 100;">
+                        <div id="hostgroup-menu-list">Loading&hellip;</div>
+                    </div>
+                </span>
             </div>
         </div>
         <div id="nav-links" style="display: none; flex-direction: column; position: absolute; top: 56px; left: 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border-radius: 8px; min-width: 180px; z-index: 100;">
@@ -143,6 +167,43 @@
             document.addEventListener('click', function(e) {
                 if (!burger.contains(e.target) && !navLinks.contains(e.target)) {
                     navLinks.style.display = 'none';
+                }
+            });
+
+            const hostgroupBtn = document.getElementById('hostgroup-menu-btn');
+            const hostgroupPanel = document.getElementById('hostgroup-menu-panel');
+            const hostgroupBtnDefaultLabel = hostgroupBtn.textContent;
+            let selectedHostgroup = null;
+
+            function applyHostgroupSelection() {
+                hostgroupPanel.querySelectorAll('.hostgroup-item').forEach(function(item) {
+                    item.classList.toggle('selected', item.dataset.hostgroup === selectedHostgroup);
+                });
+            }
+
+            hostgroupBtn.onclick = function() {
+                hostgroupPanel.style.display = hostgroupPanel.style.display === 'block' ? 'none' : 'block';
+            };
+            document.addEventListener('click', function(e) {
+                if (!hostgroupBtn.contains(e.target) && !hostgroupPanel.contains(e.target)) {
+                    hostgroupPanel.style.display = 'none';
+                }
+            });
+            hostgroupPanel.addEventListener('click', function(e) {
+                const item = e.target.closest('.hostgroup-item');
+                if (!item) {
+                    return;
+                }
+                selectedHostgroup = item.dataset.hostgroup;
+                hostgroupBtn.textContent = selectedHostgroup
+                    ? 'Hostgroup: ' + selectedHostgroup + ' ▾'
+                    : hostgroupBtnDefaultLabel;
+                applyHostgroupSelection();
+                hostgroupPanel.style.display = 'none';
+            });
+            document.body.addEventListener('htmx:afterSwap', function(e) {
+                if (e.target && e.target.id === 'hostgroup-menu-list') {
+                    applyHostgroupSelection();
                 }
             });
         </script>

@@ -86,7 +86,7 @@ class CompareServiceTests(unittest.TestCase):
         get_nb_mock.return_value = nb
         get_zb_mock.return_value = zb
 
-        result = cs.compare("http://nb", "nk", "http://zb", "zk")
+        result = cs.compare(hostgroup_filter="")
         self.assertEqual(result, ([], [], []))
         map_mock.assert_called_once_with(nb, zb)
         compare_devices_mock.assert_called_once_with(nb, zb)
@@ -94,7 +94,7 @@ class CompareServiceTests(unittest.TestCase):
     @patch("app.compare.service.compare_service.ds.get_nb_devices", return_value="boom")
     def test_compare_nb_error(self, _get_nb):
         """Compare should return Exception when NetBox retrieval returns an error string."""
-        result = cs.compare("http://nb", "nk", "http://zb", "zk")
+        result = cs.compare(hostgroup_filter="")
         self.assertIsInstance(result, Exception)
 
 
