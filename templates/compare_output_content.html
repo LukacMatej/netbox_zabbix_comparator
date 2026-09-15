@@ -164,7 +164,7 @@
 			{% for interface in difference.nb_device.interfaces %}
 			{% set zb_iface = safe_index(difference.zb_device.interfaces, loop.index0) %}
 			<div class="tab-interface">
-				Interface: {{ interface.name }}, <p>Port Type: {% if
+				Interface: {{ interface.name }} <p>Port Type: {% if
 				interface.port_type %} {{ diff_html(zb_iface.port_type if zb_iface else '', interface.port_type, 'new') if ' port_type ' in diff_text else interface.port_type }} {% else %} None
 				{% endif %}</p>
 			</div>
@@ -179,7 +179,7 @@
 			</div>
 			{% endfor %} {% endfor %}
 			<p>
-				Hostgroup: {{ diff_html(difference.zb_device.hostgroup, difference.nb_device.hostgroup, 'new') if ' hostgroup ' in diff_text else difference.nb_device.hostgroup }},</p>
+				Hostgroup: {{ diff_html(difference.zb_device.hostgroup, difference.nb_device.hostgroup, 'new') if ' hostgroup ' in diff_text else difference.nb_device.hostgroup }}</p>
 			{% if difference.nb_device.description %}
 				<p>Description: {{ diff_html(difference.zb_device.description, difference.nb_device.description, 'new') if ' description ' in diff_text else difference.nb_device.description }}</p>
 			{% endif %}
