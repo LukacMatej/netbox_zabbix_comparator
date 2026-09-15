@@ -190,6 +190,33 @@ def test(request: Request) -> HTMLResponse:
     )
 
 @app.post(
+    "/delete_zabbix_device", name="delete_zabbix_device", response_class=HTMLResponse
+)
+async def delete_zabbix_device(request: Request) -> Response:
+    try:
+        payload = await request.json()
+    except ValueError:
+        return PlainTextResponse("Invalid or missing JSON body", status_code=400)
+
+    device: Device = dict_to_device(payload)
+    log.logger.info(f"Deleting Zabbix device for device_id: {device.name}")
+    error_log = ""
+    try:
+        ds.delete_zabbix_device(device)
+        success = True
+    except Exception as e:
+        error_log = str(e)
+        log.logger.error(f"Failed to delete Zabbix device for device_id: {device.name}: {e}", exc_info=True)
+        success = False
+
+    return templates.TemplateResponse(
+        request,
+        "sync_button_result.html",
+        {"success": success, "error_log": error_log},
+        status_code=200,
+    )
+
+@app.post(
     "/create_zabbix_device", name="create_zabbix_device", response_class=HTMLResponse
 )
 async def create_zabbix_device(request: Request) -> Response:
