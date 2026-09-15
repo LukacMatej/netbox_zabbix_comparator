@@ -90,5 +90,54 @@ class ServerRoutesTests(unittest.TestCase):
         self.assertTrue(args.debug)
 
 
+class DiffHtmlTests(unittest.TestCase):
+    """Tests for the vim-diff-style character highlighting helper."""
+
+    def test_identical_values_have_no_spans(self):
+        """No highlighting is produced when both sides match."""
+        old_html = server.diff_html("router-01", "router-01", "old")
+        new_html = server.diff_html("router-01", "router-01", "new")
+        self.assertEqual(old_html, "router-01")
+        self.assertEqual(new_html, "router-01")
+        self.assertNotIn("<span", old_html)
+        self.assertNotIn("<span", new_html)
+
+    def test_single_character_change_is_highlighted(self):
+        """Only the differing character is wrapped, unchanged text stays bare."""
+        old_html = server.diff_html("router-01A", "router-01B", "old")
+        new_html = server.diff_html("router-01A", "router-01B", "new")
+        self.assertEqual(old_html, 'router-01<span class="diff-old">A</span>')
+        self.assertEqual(new_html, 'router-01<span class="diff-new">B</span>')
+
+    def test_none_and_empty_inputs_do_not_error(self):
+        """None is treated as an empty string on either side."""
+        self.assertEqual(server.diff_html(None, "new-value", "new"),
+                          '<span class="diff-new">new-value</span>')
+        self.assertEqual(server.diff_html("old-value", None, "old"),
+                          '<span class="diff-old">old-value</span>')
+        self.assertEqual(server.diff_html(None, None, "old"), "")
+
+    def test_values_are_html_escaped(self):
+        """Special HTML characters in the values don't break the markup."""
+        html = server.diff_html("A & <B>", "A & <B>!", "new")
+        self.assertIn("&amp;", html)
+        self.assertIn("&lt;B&gt;", html)
+        self.assertNotIn("<B>", html)
+
+
+class SafeIndexTests(unittest.TestCase):
+    """Tests for the bounds-safe list accessor used for interface pairing."""
+
+    def test_returns_item_in_range(self):
+        self.assertEqual(server.safe_index(["a", "b"], 1), "b")
+
+    def test_returns_none_out_of_range(self):
+        self.assertIsNone(server.safe_index(["a"], 5))
+
+    def test_returns_none_for_falsy_or_wrong_type_input(self):
+        self.assertIsNone(server.safe_index([], 0))
+        self.assertIsNone(server.safe_index(None, 0))
+
+
 if __name__ == "__main__":
     unittest.main()
