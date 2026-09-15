@@ -3,6 +3,8 @@
 import unittest
 from unittest.mock import Mock, patch
 
+import requests
+
 from app.compare.service import synchronization_service as ss
 from app.device.models.address_model import Address
 from app.device.models.device_model import Device
@@ -33,6 +35,61 @@ class SynchronizationServiceTests(unittest.TestCase):
         response.json.return_value = {"result": [{"groupid": "24"}]}
         post_mock.return_value = response
         self.assertEqual(ss.find_hostgroup_id("HG"), 24)
+
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_list_zabbix_hostgroups_success(self, post_mock):
+        """All hostgroup names should be returned sorted, as given by the API."""
+        response = Mock(status_code=200)
+        response.json.return_value = {"result": [{"name": "Netbox"}, {"name": "Servers"}]}
+        post_mock.return_value = response
+
+        result = ss.list_zabbix_hostgroups()
+
+        self.assertEqual(result, ["Netbox", "Servers"])
+        called_json = post_mock.call_args.kwargs["json"]
+        self.assertEqual(called_json["method"], "hostgroup.get")
+        self.assertNotIn("filter", called_json["params"])
+
+    @patch.dict("os.environ", {}, clear=True)
+    def test_list_zabbix_hostgroups_missing_credentials(self):
+        """Missing Zabbix credentials should return an error string, not raise."""
+        result = ss.list_zabbix_hostgroups()
+        self.assertIsInstance(result, str)
+        self.assertIn("not set", result)
+
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_list_zabbix_hostgroups_non_200(self, post_mock):
+        """A non-200 response should return an error string."""
+        response = Mock(status_code=500, text="server error")
+        post_mock.return_value = response
+
+        result = ss.list_zabbix_hostgroups()
+        self.assertIsInstance(result, str)
+        self.assertIn("server error", result)
+
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_list_zabbix_hostgroups_api_error(self, post_mock):
+        """A Zabbix API-level error in the response should return an error string."""
+        response = Mock(status_code=200)
+        response.json.return_value = {"error": {"message": "boom"}}
+        post_mock.return_value = response
+
+        result = ss.list_zabbix_hostgroups()
+        self.assertIsInstance(result, str)
+        self.assertIn("boom", result)
+
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_list_zabbix_hostgroups_request_exception(self, post_mock):
+        """A network failure should return an error string instead of raising."""
+        post_mock.side_effect = requests.exceptions.ConnectionError("unreachable")
+
+        result = ss.list_zabbix_hostgroups()
+        self.assertIsInstance(result, str)
+        self.assertIn("unreachable", result)
 
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
     @patch("app.compare.service.synchronization_service.requests.post")

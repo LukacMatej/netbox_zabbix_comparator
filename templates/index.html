@@ -32,6 +32,9 @@
         #nav-links .menu-action:hover {
             background: #f0f0f0;
         }
+        #hostgroup-menu-panel .menu-action:hover {
+            background: #f0f0f0;
+        }
         .menu-action {
             text-decoration: none;
             padding: 12px 20px;
@@ -104,6 +107,13 @@
                 <span style="background: #e3e3e3; border-radius: 6px; padding: 6px 12px; font-size: 0.95em;">
                     Zabbix: {{ zabbix_url }}
                 </span>
+                <button type="button" id="hostgroup-menu-btn"
+                    style="background: #e3e3e3; border: none; border-radius: 6px; padding: 6px 12px; font-size: 0.95em; cursor: pointer; margin-left: 8px;"
+                    hx-get="{{ url_for('zabbix_hostgroups') }}"
+                    hx-target="#hostgroup-menu-list"
+                    hx-trigger="click"
+                    hx-swap="innerHTML"
+                >Zabbix Hostgroups &#9662;</button>
             </div>
         </div>
         <div id="nav-links" style="display: none; flex-direction: column; position: absolute; top: 56px; left: 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border-radius: 8px; min-width: 180px; z-index: 100;">
@@ -129,6 +139,9 @@
                 hx-confirm="Synchronization will make changes based on comparison in Zabbix. Continue?"
             >Synchronize</button>
         </div>
+        <div id="hostgroup-menu-panel" style="display: none; position: absolute; top: 56px; right: 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border-radius: 8px; min-width: 200px; max-height: 320px; overflow-y: auto; z-index: 100;">
+            <div id="hostgroup-menu-list">Loading&hellip;</div>
+        </div>
         <script>
             const burger = document.getElementById('burger-menu');
             const navLinks = document.getElementById('nav-links');
@@ -143,6 +156,17 @@
             document.addEventListener('click', function(e) {
                 if (!burger.contains(e.target) && !navLinks.contains(e.target)) {
                     navLinks.style.display = 'none';
+                }
+            });
+
+            const hostgroupBtn = document.getElementById('hostgroup-menu-btn');
+            const hostgroupPanel = document.getElementById('hostgroup-menu-panel');
+            hostgroupBtn.onclick = function() {
+                hostgroupPanel.style.display = hostgroupPanel.style.display === 'block' ? 'none' : 'block';
+            };
+            document.addEventListener('click', function(e) {
+                if (!hostgroupBtn.contains(e.target) && !hostgroupPanel.contains(e.target)) {
+                    hostgroupPanel.style.display = 'none';
                 }
             });
         </script>

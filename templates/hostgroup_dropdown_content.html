@@ -1,0 +1,9 @@
+{% if error %}
+<div class="menu-action" style="color: #b00020; cursor: default;">{{ error }}</div>
+{% elif hostgroups %}
+{% for hostgroup in hostgroups %}
+<div class="menu-action" style="cursor: default;">{{ hostgroup }}</div>
+{% endfor %}
+{% else %}
+<div class="menu-action" style="cursor: default;">No hostgroups found</div>
+{% endif %}

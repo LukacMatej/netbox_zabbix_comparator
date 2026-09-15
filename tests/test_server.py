@@ -36,6 +36,21 @@ class ServerRoutesTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("NetBox Zabbix Comparison", response.text)
 
+    @patch("server.ss.list_zabbix_hostgroups", return_value=["Netbox", "Servers"])
+    def test_zabbix_hostgroups_success(self, _list_mock):
+        """Hostgroups route renders the returned names into the dropdown partial."""
+        response = self.client.get("/zabbix_hostgroups")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Netbox", response.text)
+        self.assertIn("Servers", response.text)
+
+    @patch("server.ss.list_zabbix_hostgroups", return_value="Zabbix IP or API key not set")
+    def test_zabbix_hostgroups_error(self, _list_mock):
+        """Hostgroups route renders the error message when the service call fails."""
+        response = self.client.get("/zabbix_hostgroups")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Zabbix IP or API key not set", response.text)
+
     @patch("server.ct.compare", return_value=Exception("boom"))
     def test_run_compare_error(self, _compare):
         """Compare route returns 500 when compare service raises error output."""

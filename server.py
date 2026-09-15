@@ -189,6 +189,18 @@ def test(request: Request) -> HTMLResponse:
         status_code=200,
     )
 
+@app.get("/zabbix_hostgroups", name="zabbix_hostgroups", response_class=HTMLResponse)
+def zabbix_hostgroups(request: Request) -> HTMLResponse:
+    """Returns the nav-bar dropdown partial listing all Zabbix hostgroups."""
+    hostgroups = ss.list_zabbix_hostgroups()
+    error = hostgroups if isinstance(hostgroups, str) else None
+    return templates.TemplateResponse(
+        request,
+        "hostgroup_dropdown_content.html",
+        {"hostgroups": [] if error else hostgroups, "error": error},
+        status_code=200,
+    )
+
 @app.post(
     "/delete_zabbix_device", name="delete_zabbix_device", response_class=HTMLResponse
 )
