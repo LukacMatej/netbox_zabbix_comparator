@@ -116,13 +116,18 @@
                 <span style="background: #e3e3e3; border-radius: 6px; padding: 6px 12px; font-size: 0.95em;">
                     Zabbix: {{ zabbix_url }}
                 </span>
-                <button type="button" id="hostgroup-menu-btn"
-                    style="background: #e3e3e3; border: none; border-radius: 6px; padding: 6px 12px; font-size: 0.95em; cursor: pointer; margin-left: 8px;"
-                    hx-get="{{ url_for('zabbix_hostgroups') }}"
-                    hx-target="#hostgroup-menu-list"
-                    hx-trigger="click"
-                    hx-swap="innerHTML"
-                >Zabbix Hostgroups &#9662;</button>
+                <span style="position: relative; display: inline-block; margin-left: 8px;">
+                    <button type="button" id="hostgroup-menu-btn"
+                        style="background: #e3e3e3; border: none; border-radius: 6px; padding: 6px 12px; font-size: 0.95em; cursor: pointer;"
+                        hx-get="{{ url_for('zabbix_hostgroups') }}"
+                        hx-target="#hostgroup-menu-list"
+                        hx-trigger="click"
+                        hx-swap="innerHTML"
+                    >Zabbix Hostgroups &#9662;</button>
+                    <div id="hostgroup-menu-panel" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border-radius: 8px; min-width: 200px; max-width: 280px; max-height: 320px; overflow-y: auto; overflow-x: hidden; z-index: 100;">
+                        <div id="hostgroup-menu-list">Loading&hellip;</div>
+                    </div>
+                </span>
             </div>
         </div>
         <div id="nav-links" style="display: none; flex-direction: column; position: absolute; top: 56px; left: 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border-radius: 8px; min-width: 180px; z-index: 100;">
@@ -147,9 +152,6 @@
                 hx-push-url="false"
                 hx-confirm="Synchronization will make changes based on comparison in Zabbix. Continue?"
             >Synchronize</button>
-        </div>
-        <div id="hostgroup-menu-panel" style="display: none; position: absolute; top: 56px; right: 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border-radius: 8px; min-width: 200px; max-width: 280px; max-height: 320px; overflow-y: auto; overflow-x: hidden; z-index: 100;">
-            <div id="hostgroup-menu-list">Loading&hellip;</div>
         </div>
         <script>
             const burger = document.getElementById('burger-menu');
