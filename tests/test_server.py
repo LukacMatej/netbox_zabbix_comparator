@@ -44,12 +44,27 @@ class ServerRoutesTests(unittest.TestCase):
         self.assertIn("Netbox", response.text)
         self.assertIn("Servers", response.text)
 
+    @patch("server.ss.list_zabbix_hostgroups", return_value=["Netbox", "Servers"])
+    def test_zabbix_hostgroups_includes_none_option(self, _list_mock):
+        """A 'None' entry with an empty hostgroup value should always be offered,
+        so a previously chosen exclusion can be cleared again."""
+        response = self.client.get("/zabbix_hostgroups")
+        self.assertIn('data-hostgroup=""', response.text)
+        self.assertIn('"hostgroup": ""', response.text)
+
     @patch("server.ss.list_zabbix_hostgroups", return_value="Zabbix IP or API key not set")
     def test_zabbix_hostgroups_error(self, _list_mock):
         """Hostgroups route renders the error message when the service call fails."""
         response = self.client.get("/zabbix_hostgroups")
         self.assertEqual(response.status_code, 200)
         self.assertIn("Zabbix IP or API key not set", response.text)
+
+    @patch("server.ss.list_zabbix_hostgroups", return_value="boom")
+    def test_zabbix_hostgroups_error_still_offers_none_option(self, _list_mock):
+        """The clear-selection option must stay available even when the hostgroup
+        list itself failed to load, so a stuck exclusion can still be cleared."""
+        response = self.client.get("/zabbix_hostgroups")
+        self.assertIn('data-hostgroup=""', response.text)
 
     def test_select_hostgroup_success(self):
         """Selecting a hostgroup is accepted and acknowledged."""

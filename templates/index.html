@@ -172,6 +172,7 @@
 
             const hostgroupBtn = document.getElementById('hostgroup-menu-btn');
             const hostgroupPanel = document.getElementById('hostgroup-menu-panel');
+            const hostgroupBtnDefaultLabel = hostgroupBtn.textContent;
             let selectedHostgroup = null;
 
             function applyHostgroupSelection() {
@@ -194,7 +195,9 @@
                     return;
                 }
                 selectedHostgroup = item.dataset.hostgroup;
-                hostgroupBtn.textContent = 'Hostgroup: ' + selectedHostgroup + ' ▾';
+                hostgroupBtn.textContent = selectedHostgroup
+                    ? 'Hostgroup: ' + selectedHostgroup + ' ▾'
+                    : hostgroupBtnDefaultLabel;
                 applyHostgroupSelection();
                 hostgroupPanel.style.display = 'none';
             });
