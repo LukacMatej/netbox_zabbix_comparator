@@ -204,7 +204,7 @@ async def delete_zabbix_device(request: Request) -> Response:
     try:
         ds.delete_zabbix_device(device)
         success = True
-    except Exception as e:
+    except Exception as e: # pylint: disable=broad-except
         error_log = str(e)
         log.logger.error(f"Failed to delete Zabbix device for device_id: {device.name}: {e}", exc_info=True)
         success = False

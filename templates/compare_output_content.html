@@ -323,7 +323,7 @@
 				<button
 					type="button"
 					hx-post="{{ url_for('delete_zabbix_device') }}"
-					hx-vals='{{ difference_to_dict(difference) | tojson }}'
+					hx-vals='{{ device_to_dict(device) | tojson }}'
 					hx-ext="json-enc"
 					hx-target="this"
 					hx-swap="outerHTML"
