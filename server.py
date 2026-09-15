@@ -201,6 +201,23 @@ def zabbix_hostgroups(request: Request) -> HTMLResponse:
         status_code=200,
     )
 
+@app.post("/select_hostgroup", name="select_hostgroup", response_class=PlainTextResponse)
+async def select_hostgroup(request: Request) -> Response:
+    """Receives the hostgroup picked from the nav-bar dropdown.
+
+    No further behavior is wired up yet - this just records the selection so
+    the frontend has somewhere to send it to; what happens with it is a
+    follow-up.
+    """
+    try:
+        payload = await request.json()
+    except ValueError:
+        return PlainTextResponse("Invalid or missing JSON body", status_code=400)
+
+    hostgroup = payload.get("hostgroup")
+    log.logger.info("Selected Zabbix hostgroup: %s", hostgroup)
+    return PlainTextResponse("OK", status_code=200)
+
 @app.post(
     "/delete_zabbix_device", name="delete_zabbix_device", response_class=HTMLResponse
 )

@@ -2,7 +2,12 @@
 <div class="menu-action" style="color: #b00020; cursor: default;">{{ error }}</div>
 {% elif hostgroups %}
 {% for hostgroup in hostgroups %}
-<div class="menu-action" style="cursor: default;">{{ hostgroup }}</div>
+<div class="menu-action hostgroup-item" data-hostgroup="{{ hostgroup }}"
+    hx-post="{{ url_for('select_hostgroup') }}"
+    hx-vals='{{ {"hostgroup": hostgroup} | tojson }}'
+    hx-ext="json-enc"
+    hx-swap="none"
+>{{ hostgroup }}</div>
 {% endfor %}
 {% else %}
 <div class="menu-action" style="cursor: default;">No hostgroups found</div>

@@ -51,6 +51,18 @@ class ServerRoutesTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Zabbix IP or API key not set", response.text)
 
+    def test_select_hostgroup_success(self):
+        """Selecting a hostgroup is accepted and acknowledged."""
+        response = self.client.post("/select_hostgroup", json={"hostgroup": "Servers"})
+        self.assertEqual(response.status_code, 200)
+
+    def test_select_hostgroup_invalid_json(self):
+        """A malformed body is rejected with a 400, matching the other POST routes."""
+        response = self.client.post(
+            "/select_hostgroup", content=b"not json", headers={"Content-Type": "application/json"}
+        )
+        self.assertEqual(response.status_code, 400)
+
     @patch("server.ct.compare", return_value=Exception("boom"))
     def test_run_compare_error(self, _compare):
         """Compare route returns 500 when compare service raises error output."""
