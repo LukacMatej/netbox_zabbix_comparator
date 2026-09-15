@@ -223,6 +223,59 @@ class DeviceServiceTests(unittest.TestCase):
         self.assertIsInstance(result, str)
         self.assertIn("Error in Zabbix API response", result)
 
+    @patch("app.device.service.device_service.requests.post")
+    def test_get_zb_devices_hostgroup_filter_resolves_to_groupids(self, post_mock):
+        """A hostgroup name filter should resolve to a groupid and scope host.get."""
+        hostgroup_lookup = Mock(status_code=200)
+        hostgroup_lookup.json.return_value = {"result": [{"groupid": "42"}]}
+
+        host_get = Mock()
+        host_get.raise_for_status.return_value = None
+        host_get.text = json.dumps({"result": []})
+
+        post_mock.side_effect = [hostgroup_lookup, host_get]
+
+        result = ds.get_zb_devices("k", "http://zb", hostgroup_filter="Servers")
+        self.assertEqual(result, [])
+        self.assertEqual(post_mock.call_count, 2)
+        host_get_params = post_mock.call_args_list[1].kwargs["json"]["params"]
+        self.assertEqual(host_get_params["groupids"], [42])
+
+    @patch("app.device.service.device_service.requests.post")
+    def test_get_zb_devices_unknown_hostgroup_filter_is_ignored(self, post_mock):
+        """An unresolvable hostgroup name should fall back to no filtering, not an error."""
+        hostgroup_lookup = Mock(status_code=200)
+        hostgroup_lookup.json.return_value = {"result": []}
+
+        host_get = Mock()
+        host_get.raise_for_status.return_value = None
+        host_get.text = json.dumps({"result": []})
+
+        post_mock.side_effect = [hostgroup_lookup, host_get]
+
+        result = ds.get_zb_devices("k", "http://zb", hostgroup_filter="Nonexistent")
+        self.assertEqual(result, [])
+        host_get_params = post_mock.call_args_list[1].kwargs["json"]["params"]
+        self.assertNotIn("groupids", host_get_params)
+
+    @patch("app.device.service.device_service.requests.post")
+    def test_find_zb_hostgroup_id_success(self, post_mock):
+        """Hostgroup name should resolve to its groupid."""
+        response = Mock(status_code=200)
+        response.json.return_value = {"result": [{"groupid": "7"}]}
+        post_mock.return_value = response
+
+        self.assertEqual(ds.find_zb_hostgroup_id("k", "http://zb", "Servers"), 7)
+
+    @patch("app.device.service.device_service.requests.post")
+    def test_find_zb_hostgroup_id_not_found(self, post_mock):
+        """Missing hostgroup should return -1, not raise."""
+        response = Mock(status_code=200)
+        response.json.return_value = {"result": []}
+        post_mock.return_value = response
+
+        self.assertEqual(ds.find_zb_hostgroup_id("k", "http://zb", "Nonexistent"), -1)
+
 
 if __name__ == "__main__":
     unittest.main()

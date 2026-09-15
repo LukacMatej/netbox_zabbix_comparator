@@ -203,18 +203,14 @@ def zabbix_hostgroups(request: Request) -> HTMLResponse:
 
 @app.post("/select_hostgroup", name="select_hostgroup", response_class=PlainTextResponse)
 async def select_hostgroup(request: Request) -> Response:
-    """Receives the hostgroup picked from the nav-bar dropdown.
-
-    No further behavior is wired up yet - this just records the selection so
-    the frontend has somewhere to send it to; what happens with it is a
-    follow-up.
-    """
+    """Sets the hostgroup filter used by run_compare/run_compare_sync."""
+    global filter_hostgroup
     try:
         payload = await request.json()
     except ValueError:
         return PlainTextResponse("Invalid or missing JSON body", status_code=400)
 
-    filter_hostgroup = payload.get("hostgroup")
+    filter_hostgroup = payload.get("hostgroup") or ""
     log.logger.info("Selected Zabbix hostgroup: %s", filter_hostgroup)
     return PlainTextResponse("OK", status_code=200)
 

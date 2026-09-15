@@ -53,8 +53,21 @@ class ServerRoutesTests(unittest.TestCase):
 
     def test_select_hostgroup_success(self):
         """Selecting a hostgroup is accepted and acknowledged."""
+        original = server.filter_hostgroup
+        self.addCleanup(setattr, server, "filter_hostgroup", original)
+
         response = self.client.post("/select_hostgroup", json={"hostgroup": "Servers"})
         self.assertEqual(response.status_code, 200)
+
+    def test_select_hostgroup_updates_module_level_filter(self):
+        """Regression: the selected hostgroup must actually update the shared
+        filter_hostgroup used by run_compare/run_compare_sync, not just a
+        same-named local variable that shadows it."""
+        original = server.filter_hostgroup
+        self.addCleanup(setattr, server, "filter_hostgroup", original)
+
+        self.client.post("/select_hostgroup", json={"hostgroup": "Servers"})
+        self.assertEqual(server.filter_hostgroup, "Servers")
 
     def test_select_hostgroup_invalid_json(self):
         """A malformed body is rejected with a 400, matching the other POST routes."""

@@ -845,6 +845,21 @@ def find_primary_ip_interface(
     return primary_interface
 
 
+def find_zb_hostgroup_id(key: str, ip: str, hostgroup_name: str) -> int:
+    """Resolves a Zabbix hostgroup name to its groupid.
+
+    Returns -1 if the hostgroup can't be found or the lookup fails, so
+    get_zb_devices can log a warning and fall back to no filtering.
+    """
+    response = _zabbix_post(ip, key, "hostgroup.get", {"filter": {"name": [hostgroup_name]}})
+    if response.status_code != 200:
+        return -1
+    data = response.json()
+    if "error" in data or not data.get("result"):
+        return -1
+    return int(data["result"][0]["groupid"])
+
+
 def get_zb_devices(key: str, ip: str, hostgroup_filter: str = "") -> list[device_model] | str:
     """
     Retrieve devices from a Zabbix instance via its API.
@@ -853,6 +868,10 @@ def get_zb_devices(key: str, ip: str, hostgroup_filter: str = "") -> list[device
     Args:
       key (str): API authentication token for Zabbix authorization.
       ip (str): Base URL or IP address of the Zabbix instance.
+      hostgroup_filter (str): Optional Zabbix hostgroup name to restrict results to.
+        Resolved to a groupid and passed as Zabbix's top-level "groupids" param
+        (the "filter" object only matches Host properties, not group membership).
+        Empty string means no filtering.
     Returns:
       list[device_model] | str: A list of device_model objects containing
         host information (name, hostgroups, description, templates, status, interfaces),
@@ -866,13 +885,22 @@ def get_zb_devices(key: str, ip: str, hostgroup_filter: str = "") -> list[device
       - Interfaces are mapped to address_model objects with their IP and DNS information.
       - Templates are extracted from parentTemplates and mapped to their names.
     """
-    params = {
+    params: dict[str, Any] = {
         "output": ["hostid", "host", "name", "status", "description"],
         "selectInterfaces": ["interfaceid", "dns", "ip", "type"],
         "selectHostGroups": ["groupid", "name"],
         "selectParentTemplates": ["templateid", "name"],
-        "filter": {"status": [0], "hostgroup": [hostgroup_filter]},
+        "filter": {"status": [0]},
     }
+    if hostgroup_filter:
+        group_id = find_zb_hostgroup_id(key, ip, hostgroup_filter)
+        if group_id == -1:
+            log.logger.warning(
+                "Hostgroup '%s' not found in Zabbix; ignoring hostgroup filter.",
+                hostgroup_filter,
+            )
+        else:
+            params["groupids"] = [group_id]
     try:
         zb_device_list: list[device_model] = []
         log.logger.debug(
