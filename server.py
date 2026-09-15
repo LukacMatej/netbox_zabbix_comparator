@@ -31,6 +31,7 @@ Dependencies:
 from __future__ import annotations
 
 import argparse
+import difflib
 import os
 import sys
 from typing import Any
@@ -44,6 +45,7 @@ from fastapi.responses import (
     PlainTextResponse,
 )
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup, escape
 
 from app.compare.service import compare_service as ct
 from app.compare.service import synchronization_service as ss
@@ -123,6 +125,51 @@ def difference_to_dict(difference: DeviceDifference) -> dict:
 
 
 templates.env.globals["difference_to_dict"] = difference_to_dict
+
+
+def diff_html(zabbix_value: Any, netbox_value: Any, side: str) -> Markup:
+    """Character-level diff highlighting between a Zabbix and a NetBox value.
+
+    Always takes (zabbix_value, netbox_value) in that order, regardless of which
+    side is being rendered. `side="old"` returns zabbix_value with its differing
+    characters wrapped for red highlighting; `side="new"` returns netbox_value
+    with its differing characters wrapped for green highlighting. Used by
+    compare_output_content.html to show exactly what changed between the two
+    sides, vim-diff style, instead of coloring the whole value.
+    """
+    old_str = "" if zabbix_value is None else str(zabbix_value)
+    new_str = "" if netbox_value is None else str(netbox_value)
+    css_class = "diff-old" if side == "old" else "diff-new"
+    matcher = difflib.SequenceMatcher(None, old_str, new_str, autojunk=False)
+    parts: list[str] = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        chunk = old_str[i1:i2] if side == "old" else new_str[j1:j2]
+        if not chunk:
+            continue
+        if tag == "equal":
+            parts.append(str(escape(chunk)))
+        else:
+            parts.append(f'<span class="{css_class}">{escape(chunk)}</span>')
+    return Markup("".join(parts))
+
+
+templates.env.globals["diff_html"] = diff_html
+
+
+def safe_index(seq: list, index: int) -> Any:
+    """Returns seq[index], or None if seq is falsy or index is out of range.
+
+    Used by compare_output_content.html to look up the "same position"
+    counterpart interface/address when the NetBox and Zabbix sides are
+    rendered in two separate loops.
+    """
+    try:
+        return seq[index]
+    except (IndexError, TypeError):
+        return None
+
+
+templates.env.globals["safe_index"] = safe_index
 
 
 @app.get("/", response_class=HTMLResponse)

@@ -26,6 +26,7 @@
 	.container {
 		display: flex;
 		flex-direction: row;
+		overflow-x: auto;
 	}
 	.column {
 		border-right: 1px solid black;
@@ -37,9 +38,48 @@
 	}
 	.header {
 		font-weight: bold;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
 	}
 	.header:first-child {
 		font-size: 1.5em;
+	}
+	.col-hide-btn {
+		cursor: pointer;
+		border: none;
+		background: none;
+		font-size: 1.1em;
+		line-height: 1;
+		padding: 0 4px;
+	}
+	.col-resizer {
+		flex: 0 0 6px;
+		cursor: col-resize;
+		background: transparent;
+	}
+	.col-resizer:hover,
+	.col-resizer.active {
+		background: #ccc;
+	}
+	.column.collapsed {
+		flex: 0 0 32px !important;
+		min-width: 32px;
+		overflow: hidden;
+		padding: 10px 4px;
+		cursor: pointer;
+	}
+	.column.collapsed > *:not(.header) {
+		display: none;
+	}
+	.column.collapsed .header {
+		writing-mode: vertical-rl;
+		text-orientation: mixed;
+		justify-content: flex-start;
+	}
+	.column.collapsed .col-hide-btn {
+		display: none;
 	}
 	.lines {
 		line-height: 2;
@@ -68,6 +108,9 @@
 		display: flex;
 		flex: 50% 50%;
 	}
+	.lines p {
+		margin: 0;
+	}
 	.button-create button{
 		display: flex;
 		justify-content: center;
@@ -90,10 +133,18 @@
 			transform: scale(0.99);
 		}
 	}
+	.diff-old {
+		background-color: lightcoral;
+		border-radius: 2px;
+	}
+	.diff-new {
+		background-color: lightgreen;
+		border-radius: 2px;
+	}
 </style>
 <div class="container">
 	<div class="column">
-		<div class="header">Netbox Devices</div>
+		<div class="header">Netbox Devices<button type="button" class="col-hide-btn" title="Hide column">&times;</button></div>
 		{% if netbox_devices %}
 		<div class="lines">
 			{% for device in netbox_devices %}
@@ -141,34 +192,40 @@
 		<div>Didn't find any extra Netbox devices</div>
 		{% endif %}
 	</div>
+	<div class="col-resizer"></div>
 
 	<div class="column">
-		<div class="header">Differences</div>
+		<div class="header">Differences<button type="button" class="col-hide-btn" title="Hide column">&times;</button></div>
 		{% if differences %}
 		<div class="lines">
 			{% for difference in differences %}
-			<div><strong>Netbox: {{ difference.nb_device.name }}</strong></div>
+			{% set diff_text = ' ' + (difference.differences[0] | join(' ')) + ' ' %}
+			<p><strong>Netbox: {{ diff_html(difference.zb_device.name, difference.nb_device.name, 'new') if ' name ' in diff_text else difference.nb_device.name }}</strong></p>
 			<div class="interfaces">Interfaces:</div>
 			{% for interface in difference.nb_device.interfaces %}
+			{% set zb_iface = safe_index(difference.zb_device.interfaces, loop.index0) %}
 			<div class="tab-interface">
-				Interface: {{ interface.name }}, Port Type:{% if
-				interface.port_type %} {{interface.port_type}} {% else %} None
-				{% endif %}
+				Interface: {{ interface.name }} <p>Port Type: {% if
+				interface.port_type %} {{ diff_html(zb_iface.port_type if zb_iface else '', interface.port_type, 'new') if ' port_type ' in diff_text else interface.port_type }} {% else %} None
+				{% endif %}</p>
 			</div>
 			<div class="tab-interface">Addresses:</div>
 			{% for address in interface.addresses %}
+			{% set zb_addr = safe_index(zb_iface.addresses, loop.index0) if zb_iface else none %}
 			<div class="tab-address">
-				IP address: {{ address.address }}, DNS Name: {{ address.dns_name
-				}}
+				{% if address.address %}<p>IP address: {{ diff_html(zb_addr.address if zb_addr else '', address.address, 'new') if ' address ' in diff_text else address.address }}</p>
+				{% endif %}
+				{% if address.dns_name %}<p>DNS Name: {{ diff_html(zb_addr.dns_name if zb_addr else '', address.dns_name, 'new') if ' dns_name ' in diff_text else address.dns_name }}</p>
+				{% endif %}
 			</div>
 			{% endfor %} {% endfor %}
-			<div>
-				Hostgroup: {{ difference.nb_device.hostgroup }},{% if
-				difference.nb_device.description %} Description: {{
-				difference.nb_device.description }} ,{% endif %} Status: {{
-				difference.nb_device.status }}
-			</div>
-			<div>Templates: {{ difference.nb_device.templates }}</div>
+			<p>
+				Hostgroup: {{ diff_html(difference.zb_device.hostgroup, difference.nb_device.hostgroup, 'new') if ' hostgroup ' in diff_text else difference.nb_device.hostgroup }}</p>
+			{% if difference.nb_device.description %}
+				<p>Description: {{ diff_html(difference.zb_device.description, difference.nb_device.description, 'new') if ' description ' in diff_text else difference.nb_device.description }}</p>
+			{% endif %}
+			<p>Status: {{ diff_html(difference.zb_device.status, difference.nb_device.status, 'new') if ' status ' in diff_text else difference.nb_device.status }}</p>
+			<p>Templates: {{ diff_html(difference.zb_device.templates, difference.nb_device.templates, 'new') if ' templates ' in diff_text else difference.nb_device.templates }}</p>
 			<br />
 			<div class="differences">
 				<div>
@@ -180,33 +237,37 @@
 				<div>
 					<div><strong>Differences:</strong></div>
 					{% for difference in difference.differences[0] %}
-					<div class="tab-interface">{{ difference }}</div>
+					<p class="tab-interface" style="background-color: lightcoral;">{{ difference }}</p>
 					{% endfor %}
 				</div>
 			</div>
 			<br />
-			<div><strong>Zabbix: {{ difference.zb_device.name }}</strong></div>
+			<p><strong>Zabbix: {{ diff_html(difference.zb_device.name, difference.nb_device.name, 'old') if ' name ' in diff_text else difference.zb_device.name }}</strong></p>
 			<div>Interfaces:</div>
 			{% for interface in difference.zb_device.interfaces %}
+			{% set nb_iface = safe_index(difference.nb_device.interfaces, loop.index0) %}
 			<div class="tab-interface">
-				Interface: {{ interface.name }}, Port Type: {% if
-				interface.port_type %} {{interface.port_type}} {% else %} None
-				{% endif %}
+				<p>Port Type: {% if
+				interface.port_type %} {{ diff_html(interface.port_type, nb_iface.port_type if nb_iface else '', 'old') if ' port_type ' in diff_text else interface.port_type }} {% else %} None
+				{% endif %}</p>
 			</div>
 			<div class="tab-interface">Addresses:</div>
 			{% for address in interface.addresses %}
+			{% set nb_addr = safe_index(nb_iface.addresses, loop.index0) if nb_iface else none %}
 			<div class="tab-address">
-				IP address: {{ address.address }}, DNS Name: {{ address.dns_name
-				}}
+				{% if address.address %}<p>IP address: {{ diff_html(address.address, nb_addr.address if nb_addr else '', 'old') if ' address ' in diff_text else address.address }}</p>
+				{% endif %}
+				{% if address.dns_name %}<p>DNS Name: {{ diff_html(address.dns_name, nb_addr.dns_name if nb_addr else '', 'old') if ' dns_name ' in diff_text else address.dns_name }}</p>
+				{% endif %}
 			</div>
 			{% endfor %} {% endfor %}
-			<div>
-				Hostgroup: {{ difference.zb_device.hostgroup }}, {% if
-				difference.zb_device.description%} Description: {{
-				difference.zb_device.description }} ,{% endif %} Status: {{
-				difference.zb_device.status }}
-			</div>
-			<div>Templates: {{ difference.zb_device.templates }}</div>
+			<p>
+				Hostgroup: {{ diff_html(difference.zb_device.hostgroup, difference.nb_device.hostgroup, 'old') if ' hostgroup ' in diff_text else difference.zb_device.hostgroup }}</p>
+			{% if difference.zb_device.description %}
+				<p>Description: {{ diff_html(difference.zb_device.description, difference.nb_device.description, 'old') if ' description ' in diff_text else difference.zb_device.description }}</p>
+			{% endif %}
+			<p>Status: {{ diff_html(difference.zb_device.status, difference.nb_device.status, 'old') if ' status ' in diff_text else difference.zb_device.status }}</p>
+			<p>Templates: {{ diff_html(difference.zb_device.templates, difference.nb_device.templates, 'old') if ' templates ' in diff_text else difference.zb_device.templates }}</p>
 			<div class="button-create">
 				<button
 					type="button"
@@ -230,9 +291,10 @@
 		<div>No differences found</div>
 		{% endif %}
 	</div>
+	<div class="col-resizer"></div>
 
 	<div class="column">
-		<div class="header">Zabbix Devices</div>
+		<div class="header">Zabbix Devices<button type="button" class="col-hide-btn" title="Hide column">&times;</button></div>
 		{% if zabbix_devices %}
 		<div class="lines">
 			{% for device in zabbix_devices %}
@@ -270,7 +332,7 @@
 <div class="line_sync">Oddeleni</div>
 <div class="container">
 	<div class="column">
-		<div class="header">Synchronization output from Netbox</div>
+		<div class="header">Synchronization output from Netbox<button type="button" class="col-hide-btn" title="Hide column">&times;</button></div>
 		{% if sync_output.synchronization_output_zabbix %}
 		<div class="lines">
 			{% for output in sync_output.synchronization_output_zabbix %}
@@ -281,8 +343,9 @@
 		<div>No synchronization output found</div>
 		{% endif %}
 	</div>
+	<div class="col-resizer"></div>
 	<div class="column">
-		<div class="header">Synchronization output from Differences</div>
+		<div class="header">Synchronization output from Differences<button type="button" class="col-hide-btn" title="Hide column">&times;</button></div>
 		{% if sync_output.synchronization_output_differences %}
 		<div class="lines">
 			{% for output in sync_output.synchronization_output_differences %}
@@ -293,8 +356,9 @@
 		<div>No synchronization output found</div>
 		{% endif %}
 	</div>
+	<div class="col-resizer"></div>
 	<div class="column">
-		<div class="header">Synchronization output from Zabbix</div>
+		<div class="header">Synchronization output from Zabbix<button type="button" class="col-hide-btn" title="Hide column">&times;</button></div>
 		{% if sync_output.synchronization_output_netbox %}
 		<div class="lines">
 			{% for output in sync_output.synchronization_output_netbox %}
@@ -307,3 +371,65 @@
 	</div>
 </div>
 {% endif %}
+
+<script>
+	(function () {
+		const MIN_COLUMN_WIDTH = 80;
+
+		function initResizers() {
+			document.querySelectorAll(".col-resizer").forEach(function (resizer) {
+				resizer.addEventListener("mousedown", function (e) {
+					const left = resizer.previousElementSibling;
+					const right = resizer.nextElementSibling;
+					if (!left || !right) {
+						return;
+					}
+					e.preventDefault();
+					const startX = e.clientX;
+					const leftStartWidth = left.getBoundingClientRect().width;
+					const rightStartWidth = right.getBoundingClientRect().width;
+					resizer.classList.add("active");
+					document.body.style.userSelect = "none";
+
+					function onMouseMove(moveEvent) {
+						const dx = moveEvent.clientX - startX;
+						const newLeft = Math.max(MIN_COLUMN_WIDTH, leftStartWidth + dx);
+						const newRight = Math.max(MIN_COLUMN_WIDTH, rightStartWidth - dx);
+						left.style.flex = "0 0 " + newLeft + "px";
+						right.style.flex = "0 0 " + newRight + "px";
+					}
+
+					function onMouseUp() {
+						resizer.classList.remove("active");
+						document.body.style.userSelect = "";
+						document.removeEventListener("mousemove", onMouseMove);
+						document.removeEventListener("mouseup", onMouseUp);
+					}
+
+					document.addEventListener("mousemove", onMouseMove);
+					document.addEventListener("mouseup", onMouseUp);
+				});
+			});
+		}
+
+		function initHideButtons() {
+			document.querySelectorAll(".col-hide-btn").forEach(function (btn) {
+				btn.addEventListener("click", function (e) {
+					e.stopPropagation();
+					btn.closest(".column").classList.add("collapsed");
+				});
+			});
+			document.querySelectorAll(".container").forEach(function (container) {
+				container.addEventListener("click", function (e) {
+					const header = e.target.closest(".column.collapsed .header");
+					if (header) {
+						header.closest(".column").classList.remove("collapsed");
+					}
+				});
+			});
+		}
+
+		initResizers();
+		initHideButtons();
+	})();
+</script>
