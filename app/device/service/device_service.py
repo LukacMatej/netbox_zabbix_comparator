@@ -845,21 +845,6 @@ def find_primary_ip_interface(
     return primary_interface
 
 
-def find_zb_hostgroup_id(key: str, ip: str, hostgroup_name: str) -> int:
-    """Resolves a Zabbix hostgroup name to its groupid.
-
-    Returns -1 if the hostgroup can't be found or the lookup fails, so
-    get_zb_devices can log a warning and fall back to no filtering.
-    """
-    response = _zabbix_post(ip, key, "hostgroup.get", {"filter": {"name": [hostgroup_name]}})
-    if response.status_code != 200:
-        return -1
-    data = response.json()
-    if "error" in data or not data.get("result"):
-        return -1
-    return int(data["result"][0]["groupid"])
-
-
 def get_zb_devices(key: str, ip: str, hostgroup_filter: str = "") -> list[device_model] | str:
     """
     Retrieve devices from a Zabbix instance via its API.
@@ -868,10 +853,11 @@ def get_zb_devices(key: str, ip: str, hostgroup_filter: str = "") -> list[device
     Args:
       key (str): API authentication token for Zabbix authorization.
       ip (str): Base URL or IP address of the Zabbix instance.
-      hostgroup_filter (str): Optional Zabbix hostgroup name to restrict results to.
-        Resolved to a groupid and passed as Zabbix's top-level "groupids" param
-        (the "filter" object only matches Host properties, not group membership).
-        Empty string means no filtering.
+      hostgroup_filter (str): Optional Zabbix hostgroup name to exclude from the
+        results - hosts belonging to this hostgroup are dropped. Applied
+        client-side after fetching, since Zabbix's host.get has no server-side
+        "exclude this group" filter (only "groupids", which is inclusion-only).
+        Empty string means no exclusion.
     Returns:
       list[device_model] | str: A list of device_model objects containing
         host information (name, hostgroups, description, templates, status, interfaces),
@@ -892,15 +878,6 @@ def get_zb_devices(key: str, ip: str, hostgroup_filter: str = "") -> list[device
         "selectParentTemplates": ["templateid", "name"],
         "filter": {"status": [0]},
     }
-    if hostgroup_filter:
-        group_id = find_zb_hostgroup_id(key, ip, hostgroup_filter)
-        if group_id == -1:
-            log.logger.warning(
-                "Hostgroup '%s' not found in Zabbix; ignoring hostgroup filter.",
-                hostgroup_filter,
-            )
-        else:
-            params["groupids"] = [group_id]
     try:
         zb_device_list: list[device_model] = []
         log.logger.debug(
@@ -918,6 +895,10 @@ def get_zb_devices(key: str, ip: str, hostgroup_filter: str = "") -> list[device
         log.logger.debug(result)
         for host in result["result"]:
             try:
+                if hostgroup_filter and any(
+                    group["name"] == hostgroup_filter for group in host["hostgroups"]
+                ):
+                    continue
                 # Sort interfaces by port_type for consistent ordering
                 sorted_interfaces = sorted(host["interfaces"], key=lambda x: x["type"])
                 zb_device_list.append(

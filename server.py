@@ -203,7 +203,7 @@ def zabbix_hostgroups(request: Request) -> HTMLResponse:
 
 @app.post("/select_hostgroup", name="select_hostgroup", response_class=PlainTextResponse)
 async def select_hostgroup(request: Request) -> Response:
-    """Sets the hostgroup filter used by run_compare/run_compare_sync."""
+    """Sets the hostgroup to exclude, used by run_compare/run_compare_sync."""
     global filter_hostgroup
     try:
         payload = await request.json()
