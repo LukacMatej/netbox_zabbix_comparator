@@ -94,11 +94,11 @@
 		}
 	}
 	.diff-old {
-		background-color: #ffa19d;
+		background-color: lightcoral;
 		border-radius: 2px;
 	}
 	.diff-new {
-		background-color: #99bfa2;
+		background-color: lightgreen;
 		border-radius: 2px;
 	}
 </style>
@@ -196,7 +196,7 @@
 				<div>
 					<div><strong>Differences:</strong></div>
 					{% for difference in difference.differences[0] %}
-					<p class="tab-interface" style="background-color: #d1adf8;">{{ difference }}</p>
+					<p class="tab-interface" style="background-color: lightcoral;">{{ difference }}</p>
 					{% endfor %}
 				</div>
 			</div>
