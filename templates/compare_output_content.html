@@ -144,8 +144,6 @@
 	.compare-table {
 		display: flex;
 		flex-direction: column;
-		--nb-col-width: 50%;
-		--zb-col-width: 50%;
 	}
 	.compare-header-row {
 		display: flex;
@@ -159,21 +157,7 @@
 		z-index: 1;
 	}
 	.compare-header-cell {
-		flex: 0 0 var(--nb-col-width);
-		cursor: pointer;
-		user-select: none;
-	}
-	.compare-header-cell[data-col="zb"] {
-		flex-basis: var(--zb-col-width);
-	}
-	.compare-col-resizer {
-		flex: 0 0 6px;
-		cursor: col-resize;
-		background: transparent;
-	}
-	.compare-col-resizer:hover,
-	.compare-col-resizer.active {
-		background: #ccc;
+		flex: 1 1 0;
 	}
 	.compare-section-label {
 		font-weight: bold;
@@ -196,26 +180,14 @@
 		min-width: 0;
 	}
 	.cell-nb {
-		flex: 0 0 var(--nb-col-width);
+		flex: 1 1 0;
 	}
 	.cell-zb {
-		flex: 0 0 var(--zb-col-width);
+		flex: 1 1 0;
 	}
 	.cell-empty {
 		color: #888;
 		font-style: italic;
-	}
-	.compare-table.hide-nb .cell-nb,
-	.compare-table.hide-nb .compare-header-cell[data-col="nb"] {
-		display: none;
-	}
-	.compare-table.hide-zb .cell-zb,
-	.compare-table.hide-zb .compare-header-cell[data-col="zb"] {
-		display: none;
-	}
-	.compare-table.hide-nb .cell-zb,
-	.compare-table.hide-zb .cell-nb {
-		flex: 1 1 auto;
 	}
 	.row--diff {
 		background: #fff8d6;
@@ -233,9 +205,8 @@
 </style>
 <div class="compare-table" id="compare-table">
 	<div class="compare-header-row">
-		<div class="compare-header-cell" data-col="nb" title="Click to hide/show column">NetBox Devices</div>
-		<div class="compare-col-resizer" id="compare-col-resizer"></div>
-		<div class="compare-header-cell" data-col="zb" title="Click to hide/show column">Zabbix Devices</div>
+		<div class="compare-header-cell" data-col="nb">NetBox Devices</div>
+		<div class="compare-header-cell" data-col="zb">Zabbix Devices</div>
 	</div>
 
 	{% if differences %}
@@ -532,53 +503,5 @@
 
 		initResizers();
 		initHideButtons();
-	})();
-</script>
-
-<script>
-	(function () {
-		const table = document.getElementById("compare-table");
-		if (!table) {
-			return;
-		}
-		const MIN_COL_PX = 80;
-
-		const resizer = document.getElementById("compare-col-resizer");
-		resizer.addEventListener("mousedown", function (e) {
-			e.preventDefault();
-			const headerRow = table.querySelector(".compare-header-row");
-			const leftCell = headerRow.querySelector('[data-col="nb"]');
-			const rightCell = headerRow.querySelector('[data-col="zb"]');
-			const startX = e.clientX;
-			const leftStartWidth = leftCell.getBoundingClientRect().width;
-			const rightStartWidth = rightCell.getBoundingClientRect().width;
-			resizer.classList.add("active");
-			document.body.style.userSelect = "none";
-
-			function onMouseMove(moveEvent) {
-				const dx = moveEvent.clientX - startX;
-				const newLeft = Math.max(MIN_COL_PX, leftStartWidth + dx);
-				const newRight = Math.max(MIN_COL_PX, rightStartWidth - dx);
-				table.style.setProperty("--nb-col-width", newLeft + "px");
-				table.style.setProperty("--zb-col-width", newRight + "px");
-			}
-
-			function onMouseUp() {
-				resizer.classList.remove("active");
-				document.body.style.userSelect = "";
-				document.removeEventListener("mousemove", onMouseMove);
-				document.removeEventListener("mouseup", onMouseUp);
-			}
-
-			document.addEventListener("mousemove", onMouseMove);
-			document.addEventListener("mouseup", onMouseUp);
-		});
-
-		table.querySelectorAll(".compare-header-cell").forEach(function (headerCell) {
-			headerCell.addEventListener("click", function () {
-				const col = headerCell.dataset.col;
-				table.classList.toggle(col === "nb" ? "hide-nb" : "hide-zb");
-			});
-		});
 	})();
 </script>
