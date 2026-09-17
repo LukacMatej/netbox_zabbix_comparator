@@ -213,11 +213,22 @@
 		<div class="compare-header-cell" data-col="zb">Zabbix Devices</div>
 	</div>
 
+
 	{% if differences %}
 	<div class="compare-section-label">Differences (update Zabbix)</div>
 	{% for difference in differences %}
 	{% set diff_text = ' ' + (difference.differences[0] | join(' ')) + ' ' %}
 	<div class="compare-row row--diff">
+	    <span style="background: #e3e3e3; border-radius: 6px; padding: 6px 12px; font-size: 0.95em; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <span style="display: flex; align-items: center; gap: 4px;">
+                <span style="width: 10px; height: 10px; border-radius: 50%; background: lightgreen; border: 1px solid lightgreen; display: inline-block;"></span>
+                Value will be applied to Zabbix device on synchronization
+            </span>
+            <span style="display: flex; align-items: center; gap: 4px;">
+                <span style="width: 10px; height: 10px; border-radius: 50%; background: lightcoral; border: 1px solid lightcoral; display: inline-block;"></span>
+                Value will be lost on synchronization
+            </span>
+        </span>
 		<div class="compare-row-cells">
 			<div class="cell cell-nb">
 				<p><strong>{{ diff_html(difference.zb_device.name, difference.nb_device.name, 'new') if ' name ' in diff_text else difference.nb_device.name }}</strong></p>
