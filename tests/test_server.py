@@ -36,60 +36,12 @@ class ServerRoutesTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("NetBox Zabbix Comparison", response.text)
 
-    @patch("server.ss.list_zabbix_hostgroups", return_value=["Netbox", "Servers"])
-    def test_zabbix_hostgroups_success(self, _list_mock):
-        """Hostgroups route renders the returned names into the dropdown partial."""
-        response = self.client.get("/zabbix_hostgroups")
+    @patch.dict("os.environ", {"EXCLUDED_HOSTGROUPS": "Servers"}, clear=False)
+    def test_root_route_shows_excluded_hostgroups(self):
+        """Root route should render the EXCLUDED_HOSTGROUPS env var into the nav bar."""
+        response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Netbox", response.text)
         self.assertIn("Servers", response.text)
-
-    @patch("server.ss.list_zabbix_hostgroups", return_value=["Netbox", "Servers"])
-    def test_zabbix_hostgroups_includes_none_option(self, _list_mock):
-        """A 'None' entry with an empty hostgroup value should always be offered,
-        so a previously chosen exclusion can be cleared again."""
-        response = self.client.get("/zabbix_hostgroups")
-        self.assertIn('data-hostgroup=""', response.text)
-        self.assertIn('"hostgroup": ""', response.text)
-
-    @patch("server.ss.list_zabbix_hostgroups", return_value="Zabbix IP or API key not set")
-    def test_zabbix_hostgroups_error(self, _list_mock):
-        """Hostgroups route renders the error message when the service call fails."""
-        response = self.client.get("/zabbix_hostgroups")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("Zabbix IP or API key not set", response.text)
-
-    @patch("server.ss.list_zabbix_hostgroups", return_value="boom")
-    def test_zabbix_hostgroups_error_still_offers_none_option(self, _list_mock):
-        """The clear-selection option must stay available even when the hostgroup
-        list itself failed to load, so a stuck exclusion can still be cleared."""
-        response = self.client.get("/zabbix_hostgroups")
-        self.assertIn('data-hostgroup=""', response.text)
-
-    def test_select_hostgroup_success(self):
-        """Selecting a hostgroup is accepted and acknowledged."""
-        original = server.filter_hostgroup
-        self.addCleanup(setattr, server, "filter_hostgroup", original)
-
-        response = self.client.post("/select_hostgroup", json={"hostgroup": "Servers"})
-        self.assertEqual(response.status_code, 200)
-
-    def test_select_hostgroup_updates_module_level_filter(self):
-        """Regression: the selected hostgroup must actually update the shared
-        filter_hostgroup used by run_compare/run_compare_sync, not just a
-        same-named local variable that shadows it."""
-        original = server.filter_hostgroup
-        self.addCleanup(setattr, server, "filter_hostgroup", original)
-
-        self.client.post("/select_hostgroup", json={"hostgroup": "Servers"})
-        self.assertEqual(server.filter_hostgroup, "Servers")
-
-    def test_select_hostgroup_invalid_json(self):
-        """A malformed body is rejected with a 400, matching the other POST routes."""
-        response = self.client.post(
-            "/select_hostgroup", content=b"not json", headers={"Content-Type": "application/json"}
-        )
-        self.assertEqual(response.status_code, 400)
 
     @patch("server.ct.compare", return_value=Exception("boom"))
     def test_run_compare_error(self, _compare):

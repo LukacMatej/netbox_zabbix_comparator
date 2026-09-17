@@ -223,6 +223,7 @@ class DeviceServiceTests(unittest.TestCase):
         self.assertIsInstance(result, str)
         self.assertIn("Error in Zabbix API response", result)
 
+    @patch.dict("os.environ", {"EXCLUDED_HOSTGROUPS": "Servers"}, clear=False)
     @patch("app.device.service.device_service.requests.post")
     def test_get_zb_devices_hostgroup_filter_excludes_matching_hosts(self, post_mock):
         """Hosts belonging to the excluded hostgroup should be dropped client-side."""
@@ -250,7 +251,7 @@ class DeviceServiceTests(unittest.TestCase):
         })
         post_mock.return_value = response
 
-        result = ds.get_zb_devices("k", "http://zb", hostgroup_filter="Servers")
+        result = ds.get_zb_devices("k", "http://zb")
 
         self.assertEqual(post_mock.call_count, 1)
         self.assertIsInstance(result, list)
@@ -258,6 +259,7 @@ class DeviceServiceTests(unittest.TestCase):
         params = post_mock.call_args.kwargs["json"]["params"]
         self.assertNotIn("groupids", params)
 
+    @patch.dict("os.environ", {"EXCLUDED_HOSTGROUPS": ""}, clear=False)
     @patch("app.device.service.device_service.requests.post")
     def test_get_zb_devices_no_hostgroup_filter_keeps_all_hosts(self, post_mock):
         """An empty hostgroup filter should exclude nothing."""

@@ -623,7 +623,6 @@ def compare_devices(
     return different_devices, nb_devices, zb_devices
 
 def compare(
-    hostgroup_filter: str,
 ) -> Exception | tuple[list[device_difference_model], list[device_model], list[device_model]]:
     """
     Compare devices between Netbox and Zabbix systems.
@@ -651,7 +650,7 @@ def compare(
         return Exception(nb_device_list)
     log.logger.debug("Netbox Devices:")
     log.logger.debug(ds.print_devices(nb_device_list))
-    zb_device_list: list[device_model] | str = ds.get_zb_devices(zb_key, zb_ip, hostgroup_filter)
+    zb_device_list: list[device_model] | str = ds.get_zb_devices(zb_key, zb_ip)
     if isinstance(zb_device_list, str):
         log.logger.error("Error: %s", zb_device_list)
         return Exception(zb_device_list)

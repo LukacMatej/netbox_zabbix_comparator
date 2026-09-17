@@ -66,7 +66,6 @@ if proxy_root_path and not proxy_root_path.startswith("/"):
     proxy_root_path = "/" + proxy_root_path
 app = FastAPI(root_path=proxy_root_path, title="NetBox Zabbix Compare")
 templates = Jinja2Templates(directory="templates")
-filter_hostgroup = ""
 
 def dict_to_address(data: dict) -> Address:
     return Address(address=data["address"], dns_name=data["dns_name"])
@@ -182,37 +181,18 @@ def test(request: Request) -> HTMLResponse:
     """
     netbox_url: str | None = os.environ.get("NETBOX_IP")
     zabbix_url: str | None = os.environ.get("ZABBIX_IP")
+    excluded_hostgroups: str = os.environ.get("EXCLUDED_HOSTGROUPS", "")
     return templates.TemplateResponse(
         request,
         "index.html",
-        {"request": request, "netbox_url": netbox_url, "zabbix_url": zabbix_url},
+        {
+            "request": request,
+            "netbox_url": netbox_url,
+            "zabbix_url": zabbix_url,
+            "excluded_hostgroups": excluded_hostgroups,
+        },
         status_code=200,
     )
-
-@app.get("/zabbix_hostgroups", name="zabbix_hostgroups", response_class=HTMLResponse)
-def zabbix_hostgroups(request: Request) -> HTMLResponse:
-    """Returns the nav-bar dropdown partial listing all Zabbix hostgroups."""
-    hostgroups = ss.list_zabbix_hostgroups()
-    error = hostgroups if isinstance(hostgroups, str) else None
-    return templates.TemplateResponse(
-        request,
-        "hostgroup_dropdown_content.html",
-        {"hostgroups": [] if error else hostgroups, "error": error},
-        status_code=200,
-    )
-
-@app.post("/select_hostgroup", name="select_hostgroup", response_class=PlainTextResponse)
-async def select_hostgroup(request: Request) -> Response:
-    """Sets the hostgroup to exclude, used by run_compare/run_compare_sync."""
-    global filter_hostgroup
-    try:
-        payload = await request.json()
-    except ValueError:
-        return PlainTextResponse("Invalid or missing JSON body", status_code=400)
-
-    filter_hostgroup = payload.get("hostgroup") or ""
-    log.logger.info("Selected Zabbix hostgroup: %s", filter_hostgroup)
-    return PlainTextResponse("OK", status_code=200)
 
 @app.post(
     "/delete_zabbix_device", name="delete_zabbix_device", response_class=HTMLResponse
@@ -334,9 +314,7 @@ def run_compare(request: Request) -> Response:
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
     compare_output: (
         Exception | tuple[list[DeviceDifference], list[Device], list[Device]]
-    ) = ct.compare(
-        hostgroup_filter=filter_hostgroup
-    )
+    ) = ct.compare()
     if isinstance(compare_output, Exception):
         return PlainTextResponse(str(compare_output), status_code=500)
     differences: list[DeviceDifference] = compare_output[0]
@@ -408,9 +386,7 @@ def run_compare_sync(request: Request) -> Response:
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
     compare_output: (
         Exception | tuple[list[DeviceDifference], list[Device], list[Device]]
-    ) = ct.compare(
-    	hostgroup_filter=filter_hostgroup
-    )
+    ) = ct.compare()
     if isinstance(compare_output, Exception):
         return PlainTextResponse(str(compare_output), status_code=500)
     differences: list[DeviceDifference] = compare_output[0]
