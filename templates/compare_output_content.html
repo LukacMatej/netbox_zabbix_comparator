@@ -326,7 +326,7 @@
 				<div class="tab-interface">Addresses:</div>
 				{% for address in interface.addresses %}
 				<div class="tab-address">
-					IP address: {{ address.address }}, {% if address.dns_name %}DNS Name: {{ address.dns_name }}{% endif %}
+					IP address: {{ address.address }}{% if address.dns_name %}, DNS Name: {{ address.dns_name }}{% endif %}
 				</div>
 				{% endfor %} {% endfor %}
 				<div>
@@ -378,7 +378,7 @@
 				<div class="tab-interface">Addresses:</div>
 				{% for address in interface.addresses %}
 				<div class="tab-address">
-					IP address: {{ address.address }}, {% if address.dns_name %}DNS Name: {{ address.dns_name }}{% endif %}
+					IP address: {{ address.address }}{% if address.dns_name %}, DNS Name: {{ address.dns_name }}{% endif %}
 				</div>
 				{% endfor %} {% endfor %}
 				<div>
