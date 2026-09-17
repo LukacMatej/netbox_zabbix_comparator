@@ -336,25 +336,25 @@
 				</div>
 				<div>Templates: {{ device.templates }}</div>
 			</div>
-			<div class="cell-actions">
-				<div class="button-create">
-					<button
-						type="button"
-						hx-post="{{ url_for('create_zabbix_device') }}"
-						hx-vals='{{ device_to_dict(device) | tojson }}'
-						hx-ext="json-enc"
-						hx-target="this"
-						hx-swap="outerHTML"
-						hx-indicator="#comparison-loading"
-						hx-push-url="false"
-					>
-						<strong
-							>Create Zabbix Device
-						</strong>
-					</button>
-				</div>
-			</div>
 			<div class="cell cell-zb cell-empty">Not present in Zabbix</div>
+		</div>
+		<div class="cell-actions">
+			<div class="button-create">
+				<button
+					type="button"
+					hx-post="{{ url_for('create_zabbix_device') }}"
+					hx-vals='{{ device_to_dict(device) | tojson }}'
+					hx-ext="json-enc"
+					hx-target="this"
+					hx-swap="outerHTML"
+					hx-indicator="#comparison-loading"
+					hx-push-url="false"
+				>
+					<strong
+						>Create Zabbix Device
+					</strong>
+				</button>
+			</div>
 		</div>
 	</div>
 	{% endfor %}
@@ -388,24 +388,24 @@
 				</div>
 				<div>Templates: {{ device.templates }}</div>
 			</div>
-			<div class="cell-actions">
-			    <div class="button-create">
-				    <button
-					    type="button"
-					    hx-post="{{ url_for('delete_zabbix_device') }}"
-					    hx-vals='{{ device_to_dict(device) | tojson }}'
-					    hx-ext="json-enc"
-					    hx-target="this"
-					    hx-swap="outerHTML"
-					    hx-indicator="#comparison-loading"
-					    hx-push-url="false"
-					    hx-confirm="Are you sure you want to delete this Zabbix device?"
-				    >
-					    <strong
-						    >Delete Zabbix Device
-					    </strong>
-				    </button>
-			    </div>
+		</div>
+		<div class="cell-actions">
+			<div class="button-create">
+				<button
+					type="button"
+					hx-post="{{ url_for('delete_zabbix_device') }}"
+					hx-vals='{{ device_to_dict(device) | tojson }}'
+					hx-ext="json-enc"
+					hx-target="this"
+					hx-swap="outerHTML"
+					hx-indicator="#comparison-loading"
+					hx-push-url="false"
+					hx-confirm="Are you sure you want to delete this Zabbix device?"
+				>
+					<strong
+						>Delete Zabbix Device
+					</strong>
+				</button>
 			</div>
 		</div>
 	</div>
