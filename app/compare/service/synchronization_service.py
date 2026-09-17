@@ -294,40 +294,6 @@ def find_hostgroup_id(hostgroup_name: str) -> int:
     return -1
 
 
-def list_zabbix_hostgroups() -> list[str] | str:
-    """Lists all Zabbix hostgroup names, sorted alphabetically.
-
-    Returns an error message string on missing credentials or a failed
-    API call, matching device_service.get_zb_devices()'s list|str convention.
-    """
-    log.logger.info("Listing all Zabbix hostgroups.")
-    zabbix_ip, zabbix_key = _zabbix_credentials()
-    if zabbix_ip is None or zabbix_key is None:
-        return "Zabbix IP or API key not set in environment variables."
-    try:
-        response: requests.Response = _zabbix_post(
-            zabbix_ip,
-            zabbix_key,
-            "hostgroup.get",
-            {"output": ["name"], "sortfield": "name"},
-        )
-    except requests.exceptions.RequestException as e:
-        log.logger.error("Failed to fetch hostgroups from Zabbix: %s", e)
-        return f"Failed to fetch hostgroups from Zabbix: {e}"
-    if response.status_code != 200:
-        log.logger.error(
-            "Failed to fetch hostgroups from Zabbix: %s", response.text
-        )
-        return f"Failed to fetch hostgroups from Zabbix: {response.text}"
-    data = response.json()
-    if "error" in data:
-        log.logger.error("Error in Zabbix API response: %s", data["error"])
-        return f"Error in Zabbix API response: {data['error']}"
-    hostgroups = [group["name"] for group in data.get("result", [])]
-    log.logger.info("Found %d Zabbix hostgroup(s).", len(hostgroups))
-    return hostgroups
-
-
 def resolve_inventory_link_conflicts(
     hostid: str, new_template_ids: list[int], sync_output: sync_output_model
 ) -> None:

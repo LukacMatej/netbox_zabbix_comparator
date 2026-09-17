@@ -32,18 +32,6 @@
         #nav-links .menu-action:hover {
             background: #f0f0f0;
         }
-        #hostgroup-menu-panel .menu-action:hover {
-            background: #f0f0f0;
-        }
-        #hostgroup-menu-panel .menu-action {
-            overflow-wrap: anywhere;
-        }
-        #hostgroup-menu-panel .hostgroup-item.selected {
-            background: #cfe3fb;
-        }
-        #hostgroup-menu-panel .hostgroup-item.selected:hover {
-            background: #bcd6f7;
-        }
         .menu-action {
             text-decoration: none;
             padding: 12px 20px;
@@ -102,14 +90,14 @@
 </head>
 <body>
     <nav>
-        <div style="display: flex; align-items: center; max-width: 1100px; margin-left: 2; width: 100%;">
-            <div id="burger-menu" style="width: 36px; height: 36px; display: flex; flex-direction: column; justify-content: center; cursor: pointer;">
+        <div style="display: flex; align-items: center; margin-left: 2; width: 100%;">
+            <div id="burger-menu" style="width: 3%; height: 4vh; display: flex; flex-direction: column; justify-content: center; cursor: pointer;">
                 <span style="height: 4px; background:rgb(0, 0, 0); margin: 4px 0; border-radius: 2px; display: block;"></span>
                 <span style="height: 4px; background:rgb(0, 0, 0); margin: 4px 0; border-radius: 2px; display: block;"></span>
                 <span style="height: 4px; background:rgb(0, 0, 0); margin: 4px 0; border-radius: 2px; display: block;"></span>
             </div>
-            <div style="flex: 1;"></div>
-            <div style="margin-left: 24px;">
+            <div style="margin-left: 34px; width: 430px;"><h1>Comparison&Synchronization of Netbox devices to Zabbix</h1></div>
+            <div style="display: flex; flex-direction: row; width: 90vw;">
                 <span style="background: #e3e3e3; border-radius: 6px; padding: 6px 12px; font-size: 0.95em; margin-right: 8px;">
                     Netbox: {{ netbox_url }}
                 </span>
@@ -117,16 +105,21 @@
                     Zabbix: {{ zabbix_url }}
                 </span>
                 <span style="position: relative; display: inline-block; margin-left: 8px;">
-                    <button type="button" id="hostgroup-menu-btn"
-                        style="background: #e3e3e3; border: none; border-radius: 6px; padding: 6px 12px; font-size: 0.95em; cursor: pointer;"
-                        hx-get="{{ url_for('zabbix_hostgroups') }}"
-                        hx-target="#hostgroup-menu-list"
-                        hx-trigger="click"
-                        hx-swap="innerHTML"
-                    >Exclude Hostgroup &#9662;</button>
-                    <div id="hostgroup-menu-panel" style="display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border-radius: 8px; min-width: 200px; max-width: 280px; max-height: 320px; overflow-y: auto; overflow-x: hidden; z-index: 100;">
-                        <div id="hostgroup-menu-list">Loading&hellip;</div>
-                    </div>
+                	Excluded hostgroup: {{ excluded_hostgroups }}
+                </span>
+                <span style="background: #e3e3e3; border-radius: 6px; padding: 6px 12px; font-size: 0.95em; margin-left: 8px; display: flex; align-items: center; gap: 10px;">
+                    <span style="display: flex; align-items: center; gap: 4px;">
+                        <span style="width: 10px; height: 10px; border-radius: 50%; background: #e6f9ec; border: 1px solid #7bc79e; display: inline-block;"></span>
+                        Create in Zabbix
+                    </span>
+                    <span style="display: flex; align-items: center; gap: 4px;">
+                        <span style="width: 10px; height: 10px; border-radius: 50%; background: #fdecea; border: 1px solid #e08a86; display: inline-block;"></span>
+                        Delete in Zabbix
+                    </span>
+                    <span style="display: flex; align-items: center; gap: 4px;">
+                        <span style="width: 10px; height: 10px; border-radius: 50%; background: #fff8d6; border: 1px solid #d9c46a; display: inline-block;"></span>
+                        Update Zabbix values
+                    </span>
                 </span>
             </div>
         </div>
@@ -167,43 +160,6 @@
             document.addEventListener('click', function(e) {
                 if (!burger.contains(e.target) && !navLinks.contains(e.target)) {
                     navLinks.style.display = 'none';
-                }
-            });
-
-            const hostgroupBtn = document.getElementById('hostgroup-menu-btn');
-            const hostgroupPanel = document.getElementById('hostgroup-menu-panel');
-            const hostgroupBtnDefaultLabel = hostgroupBtn.textContent;
-            let selectedHostgroup = null;
-
-            function applyHostgroupSelection() {
-                hostgroupPanel.querySelectorAll('.hostgroup-item').forEach(function(item) {
-                    item.classList.toggle('selected', item.dataset.hostgroup === selectedHostgroup);
-                });
-            }
-
-            hostgroupBtn.onclick = function() {
-                hostgroupPanel.style.display = hostgroupPanel.style.display === 'block' ? 'none' : 'block';
-            };
-            document.addEventListener('click', function(e) {
-                if (!hostgroupBtn.contains(e.target) && !hostgroupPanel.contains(e.target)) {
-                    hostgroupPanel.style.display = 'none';
-                }
-            });
-            hostgroupPanel.addEventListener('click', function(e) {
-                const item = e.target.closest('.hostgroup-item');
-                if (!item) {
-                    return;
-                }
-                selectedHostgroup = item.dataset.hostgroup;
-                hostgroupBtn.textContent = selectedHostgroup
-                    ? 'Hostgroup: ' + selectedHostgroup + ' ▾'
-                    : hostgroupBtnDefaultLabel;
-                applyHostgroupSelection();
-                hostgroupPanel.style.display = 'none';
-            });
-            document.body.addEventListener('htmx:afterSwap', function(e) {
-                if (e.target && e.target.id === 'hostgroup-menu-list') {
-                    applyHostgroupSelection();
                 }
             });
         </script>

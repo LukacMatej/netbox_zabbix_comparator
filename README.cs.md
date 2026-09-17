@@ -10,6 +10,7 @@ docker run -d \
   -e LISTEN_ADDRESS=<IP adresa> \
   -e HTTP_PORT=<port> \
   -e ZABBIX_DEFAULT_HOSTGROUP=<název defaultní hostgroupy> \
+  -e EXCLUDED_HOSTGROUPS=<název hostgroupy vyloučené z porovnání> \
   -e NETBOX_IP=<IP Adresa Netboxu s http:/> \
   -e NETBOX_KEY=<Netbox API klíč> \
   -e ZABBIX_IP=<IP Adresa Zabbixu s http:/> \
@@ -83,6 +84,13 @@ Je připraven Netbox script, který synchronizuje Custom Field Choices s názvem
 - Custom Field Choices napojit na Custom Field s názvem `zabbix_hostgroups`
 - Nastavit jako multi-select na DCIM > DEVICE
 - Defaultní host group v Zabbixu je nastavena na "Netbox" pro kontrolu všech zařízení vytvořených synchronizací
+
+### Vyloučené Hostgroupy
+
+- `EXCLUDED_HOSTGROUPS` volitelně určuje jednu Zabbix hostgroupu, která se vyloučí z porovnání
+- Zabbix zařízení patřící do této hostgroupy jsou z výsledků porovnání zcela vynechána (nejsou zobrazena jako "pouze v Zabbixu", nejsou párována s Netboxem ani synchronizována)
+- Nesouvisí s `ZABBIX_DEFAULT_HOSTGROUP`, ta pouze určuje, do jaké hostgroupy se zařadí nově vytvořené zařízení v Zabbixu
+- Ponechte nevyplněné (nebo prázdné), pokud chcete zahrnout všechna zařízení
 
 ### Custom Validation
 

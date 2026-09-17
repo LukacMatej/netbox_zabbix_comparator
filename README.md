@@ -10,6 +10,7 @@ docker run -d \
   -e LISTEN_ADDRESS=<IP address> \
   -e HTTP_PORT=<port> \
   -e ZABBIX_DEFAULT_HOSTGROUP=<default hostgroup name> \
+  -e EXCLUDED_HOSTGROUPS=<Zabbix hostgroup name to exclude from comparison> \
   -e NETBOX_IP=<Netbox IP address with http://> \
   -e NETBOX_KEY=<Netbox API key> \
   -e ZABBIX_IP=<Zabbix IP address with http://> \
@@ -85,6 +86,13 @@ A Netbox script is available to synchronize Custom Field Choices named `zabbix_h
 * Link Custom Field Choices to a Custom Field named `zabbix_hostgroups`
 * Set it as multi-select on DCIM > DEVICE
 * The default host group in Zabbix is set to "Netbox" to keep track of all devices created by the synchronization
+
+### Excluded Hostgroups
+
+* `EXCLUDED_HOSTGROUPS` optionally names a single Zabbix hostgroup to exclude from comparison
+* Zabbix hosts belonging to that hostgroup are dropped from the comparison results entirely (they are neither shown as "Zabbix-only", nor matched against NetBox, nor synchronized)
+* This is unrelated to `ZABBIX_DEFAULT_HOSTGROUP`, which only controls which hostgroup a newly-created Zabbix host is assigned to
+* Leave unset (or empty) to include all hosts
 
 ### Custom Validation
 
