@@ -80,6 +80,7 @@ def dict_to_interface(data: dict) -> Interface:
         addresses=[dict_to_address(a) for a in data["addresses"]],
         mac_address=data["mac_address"],
         port_type=data["port_type"],
+        snmp_version=data.get("snmp_version", ""),
     )
 
 
@@ -107,6 +108,7 @@ def device_to_dict(device: Device) -> dict:
                 "name": interface.name,
                 "mac_address": interface.mac_address,
                 "port_type": interface.port_type,
+                "snmp_version": interface.snmp_version,
                 "addresses": [address.to_dict() for address in interface.addresses],
             }
             for interface in device.interfaces

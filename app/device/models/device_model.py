@@ -15,7 +15,13 @@ Functions:
         Convert InterfaceModel objects to Zabbix API interface dictionaries for host creation.
     dict_interfaces_zb_id(interfaces: list[InterfaceModel], interface_id) -> list[dict]:
         Convert InterfaceModel objects to Zabbix API interface dictionaries for host updates.
+    map_port_type_default_port(port_type: str) -> str:
+        Look up the env-configurable default Zabbix interface port for a port type.
+    build_snmp_details(snmp_version: str) -> dict[str, str]:
+        Build the Zabbix interface `details` object for an SNMP interface from env vars.
 """
+
+import os
 
 from app.device.models.interface_model import Interface as InterfaceModel
 
@@ -120,24 +126,27 @@ class Device:
     def update_interface_data_zabbix(self, interface_ids) -> dict:
         """Creates a dictionary representation for Zabbix host interface update."""
 
+        type_map = {"Agent": "1", "SNMP": "2", "IPMI": "3", "JMX": "4"}
         params = []
         for index, interface_id in enumerate(interface_ids):
-            params.append(
-                {
-                    "interfaceid": interface_id,
-                    "type": self.interfaces[index].port_type,
-                    "main": _is_main_interface(self.interfaces, index),
-                    "useip": 1,
-                    "ip": (
-                        str(self.interfaces[index].addresses[0].address).split("/", maxsplit=1)[0]
-                        if self.interfaces[index].addresses
-                        else ""
-                    ),
-                    "dns": self.interfaces[index].addresses[0].dns_name if self.interfaces[index].addresses else "",
-                    "port": map_port_type_default_port(self.interfaces[index].port_type),
-                    "details": {"version": 3},
-                }
-            )
+            interface = self.interfaces[index]
+            zabbix_type = type_map.get(interface.port_type, interface.port_type)
+            entry: dict = {
+                "interfaceid": interface_id,
+                "type": zabbix_type,
+                "main": _is_main_interface(self.interfaces, index),
+                "useip": 1,
+                "ip": (
+                    str(interface.addresses[0].address).split("/", maxsplit=1)[0]
+                    if interface.addresses
+                    else ""
+                ),
+                "dns": interface.addresses[0].dns_name if interface.addresses else "",
+                "port": map_port_type_default_port(interface.port_type),
+            }
+            if zabbix_type == "2":
+                entry["details"] = build_snmp_details(interface.snmp_version)
+            params.append(entry)
         return {
             "jsonrpc": "2.0",
             "method": "hostinterface.update",
@@ -257,58 +266,42 @@ def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
     result = []
     for index, interface in enumerate(interfaces):
         zabbix_type = type_map.get(interface.port_type, interface.port_type)
-        if zabbix_type == "1":
-            result.append({
-                "type": zabbix_type,
-                "main": _is_main_interface(interfaces, index),
-                "useip": 1,
-                "ip": (str(interface.addresses[0].address).split("/", maxsplit=1)[0] if interface.addresses else ""),
-                "dns": interface.addresses[0].dns_name if interface.addresses else "",
-                "port": map_port_type_default_port(interface.port_type),
-            })
-        elif zabbix_type == "2":
-            result.append({
-                "type": zabbix_type,
-                "main": _is_main_interface(interfaces, index),
-                "useip": 1,
-                "ip": (str(interface.addresses[0].address).split("/", maxsplit=1)[0] if interface.addresses else ""),
-                "dns": interface.addresses[0].dns_name if interface.addresses else "",
-                "port": map_port_type_default_port(interface.port_type),
-                "details": {"version": 3},
-            })
-        else:
-            result.append({
-                "type": zabbix_type,
-                "main": _is_main_interface(interfaces, index),
-                "useip": 1,
-                "ip": (str(interface.addresses[0].address).split("/", maxsplit=1)[0] if interface.addresses else ""),
-                "dns": interface.addresses[0].dns_name if interface.addresses else "",
-                "port": map_port_type_default_port(interface.port_type),
-                "details": {"version": 3},
-            })
+        entry = {
+            "type": zabbix_type,
+            "main": _is_main_interface(interfaces, index),
+            "useip": 1,
+            "ip": (str(interface.addresses[0].address).split("/", maxsplit=1)[0] if interface.addresses else ""),
+            "dns": interface.addresses[0].dns_name if interface.addresses else "",
+            "port": map_port_type_default_port(interface.port_type),
+        }
+        if zabbix_type == "2":
+            entry["details"] = build_snmp_details(interface.snmp_version)
+        result.append(entry)
     return result
 
 
 def dict_interfaces_zb_id(interfaces: list[InterfaceModel], interface_id) -> list[dict]:
     """Converts a list of InterfaceModel objects to a list of dictionaries."""
+    type_map = {"Agent": "1", "SNMP": "2", "IPMI": "3", "JMX": "4"}
     result = []
     for index, interface in enumerate(interfaces):
-        result.append(
-            {
-                "type": interface.port_type,
-                "interfaceid": interface_id,
-                "main": _is_main_interface(interfaces, index),
-                "useip": 1,
-                "ip": (
-                    str(interface.addresses[0].address).split("/", maxsplit=1)[0]
-                    if interface.addresses
-                    else ""
-                ),
-                "dns": interface.addresses[0].dns_name if interface.addresses else "",
-                "port": map_port_type_default_port(interface.port_type),
-                "details": {"version": 3},
-            }
-        )
+        zabbix_type = type_map.get(interface.port_type, interface.port_type)
+        entry = {
+            "type": zabbix_type,
+            "interfaceid": interface_id,
+            "main": _is_main_interface(interfaces, index),
+            "useip": 1,
+            "ip": (
+                str(interface.addresses[0].address).split("/", maxsplit=1)[0]
+                if interface.addresses
+                else ""
+            ),
+            "dns": interface.addresses[0].dns_name if interface.addresses else "",
+            "port": map_port_type_default_port(interface.port_type),
+        }
+        if zabbix_type == "2":
+            entry["details"] = build_snmp_details(interface.snmp_version)
+        result.append(entry)
     return result
 
 def map_port_type_default_port(port_type: str) -> str:
@@ -319,14 +312,43 @@ def map_port_type_default_port(port_type: str) -> str:
     Returns:
         str: The default port number corresponding to the given port type.
     """
+    agent_port = os.environ.get("ZABBIX_AGENT_PORT", "10050")
+    snmp_port = os.environ.get("ZABBIX_SNMP_PORT", "161")
+    ipmi_port = os.environ.get("ZABBIX_IPMI_PORT", "623")
+    jmx_port = os.environ.get("ZABBIX_JMX_PORT", "12345")
     port_map = {
-        "1": "10050",
-        "2": "161",
-        "3": "623",
-        "4": "12345",
-        "Agent": "10050",
-        "SNMP": "161",
-        "IPMI": "623",
-        "JMX": "12345",
+        "1": agent_port,
+        "2": snmp_port,
+        "3": ipmi_port,
+        "4": jmx_port,
+        "Agent": agent_port,
+        "SNMP": snmp_port,
+        "IPMI": ipmi_port,
+        "JMX": jmx_port,
     }
-    return port_map.get(port_type, "161")
+    return port_map.get(port_type, snmp_port)
+
+
+def build_snmp_details(snmp_version: str) -> dict[str, str]:
+    """Builds the Zabbix interface `details` object for an SNMP interface.
+
+    `snmp_version == "3"` builds SNMPv3 security details from environment
+    variables; anything else (including "" for not-yet-migrated data)
+    defaults to SNMPv2, matching this app's prior de facto behavior.
+    """
+    if snmp_version == "3":
+        return {
+            "version": "3",
+            "securityname": os.environ.get("ZABBIX_SNMPV3_SECURITY_NAME", ""),
+            "securitylevel": os.environ.get("ZABBIX_SNMPV3_SECURITY_LEVEL", "2"),
+            "authprotocol": os.environ.get("ZABBIX_SNMPV3_AUTH_PROTOCOL", "1"),
+            "authpassphrase": os.environ.get("ZABBIX_SNMPV3_AUTH_PASSPHRASE", ""),
+            "privprotocol": os.environ.get("ZABBIX_SNMPV3_PRIV_PROTOCOL", "1"),
+            "privpassphrase": os.environ.get("ZABBIX_SNMPV3_PRIV_PASSPHRASE", ""),
+            "contextname": os.environ.get("ZABBIX_SNMPV3_CONTEXT_NAME", ""),
+        }
+    return {
+        "version": "2",
+        "bulk": "1",
+        "community": os.environ.get("SNMPV2_MACRO", "{$SNMP_COMMUNITY}"),
+    }

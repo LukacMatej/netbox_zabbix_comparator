@@ -9,10 +9,12 @@ from app.device.models.device_model import Device
 from app.device.models.interface_model import Interface
 
 
-def _device(name: str, address: str, dns: str, port_type: str = "1") -> Device:
+def _device(
+    name: str, address: str, dns: str, port_type: str = "1", snmp_version: str = ""
+) -> Device:
     return Device(
         name=name,
-        interfaces=[Interface("eth0", [Address(address, dns)], "aa", port_type)],
+        interfaces=[Interface("eth0", [Address(address, dns)], "aa", port_type, snmp_version)],
         hostgroup="g",
         description="d",
         templates=["t"],
@@ -42,6 +44,20 @@ class CompareServiceTests(unittest.TestCase):
         self.assertEqual(tag, 1)
         self.assertTrue(any("name (r1 != r2)" in item for item in different))
         self.assertTrue(any("address" in item for item in different))
+
+    def test_find_differences_snmp_version_mismatch_not_missing_interface(self):
+        """A NetBox SNMPv3 vs Zabbix SNMPv2 interface should diff by version,
+
+        not be reported as a missing/extra interface (both share port_type "SNMP").
+        """
+        nb = _device("r1", "10.0.0.1", "r1.local", port_type="SNMP", snmp_version="3")
+        zb = _device("r1", "10.0.0.1", "r1.local", port_type="SNMP", snmp_version="2")
+
+        tag, _, (different, _) = cs.find_differences(nb, zb)
+        self.assertEqual(tag, 1)
+        self.assertTrue(any("snmp_version (3 != 2)" in item for item in different))
+        self.assertFalse(any("missing in Zabbix" in item for item in different))
+        self.assertFalse(any("extra in Zabbix" in item for item in different))
 
     def test_compare_devices_lists(self):
         """Unmatched devices should be reported in source-specific lists."""

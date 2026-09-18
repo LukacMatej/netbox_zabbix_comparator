@@ -15,7 +15,19 @@ docker run -d \
   -e NETBOX_KEY=<Netbox API key> \
   -e ZABBIX_IP=<Zabbix IP address with http://> \
   -e ZABBIX_KEY=<Zabbix API key> \
-  -e PROXY_ROOT_PATH=<dev|prod>
+  -e PROXY_ROOT_PATH=<dev|prod> \
+  -e ZABBIX_AGENT_PORT=<Zabbix Agent interface port, default 10050> \
+  -e ZABBIX_SNMP_PORT=<Zabbix SNMP interface port, default 161> \
+  -e ZABBIX_IPMI_PORT=<Zabbix IPMI interface port, default 623> \
+  -e ZABBIX_JMX_PORT=<Zabbix JMX interface port, default 12345> \
+  -e SNMPV2_MACRO=<SNMPv2 community string or Zabbix macro, default {$SNMP_COMMUNITY}> \
+  -e ZABBIX_SNMPV3_SECURITY_NAME=<SNMPv3 security name> \
+  -e ZABBIX_SNMPV3_SECURITY_LEVEL=<SNMPv3 security level: 0=noAuthNoPriv, 1=authNoPriv, 2=authPriv, default 2> \
+  -e ZABBIX_SNMPV3_AUTH_PROTOCOL=<SNMPv3 auth protocol code, default 1 (SHA1)> \
+  -e ZABBIX_SNMPV3_AUTH_PASSPHRASE=<SNMPv3 auth passphrase> \
+  -e ZABBIX_SNMPV3_PRIV_PROTOCOL=<SNMPv3 priv protocol code, default 1 (AES128)> \
+  -e ZABBIX_SNMPV3_PRIV_PASSPHRASE=<SNMPv3 priv passphrase> \
+  -e ZABBIX_SNMPV3_CONTEXT_NAME=<SNMPv3 context name>
   netbox-zabbix
 
 ```
@@ -71,7 +83,8 @@ In Netbox, you can set an inheritable config context for device roles, which is 
 ### Port Type
 
 * Specifies the port type for communication with Zabbix
-* Supported types: Agent, SNMP, JMX, IPMI
+* Supported types: Agent, SNMPv2, SNMPv3, JMX, IPMI
+* Plain `SNMP` is no longer a valid choice — update the `zabbix_port_type` Custom Field Choices in NetBox to `SNMPv2`/`SNMPv3` instead. A device/role still configured with the old `SNMP` value is treated as if no port type were set until it's updated.
 
 ### Primary IP Address
 
@@ -93,6 +106,27 @@ A Netbox script is available to synchronize Custom Field Choices named `zabbix_h
 * Zabbix hosts belonging to that hostgroup are dropped from the comparison results entirely (they are neither shown as "Zabbix-only", nor matched against NetBox, nor synchronized)
 * This is unrelated to `ZABBIX_DEFAULT_HOSTGROUP`, which only controls which hostgroup a newly-created Zabbix host is assigned to
 * Leave unset (or empty) to include all hosts
+
+### Zabbix Interface Ports
+
+* `ZABBIX_AGENT_PORT`, `ZABBIX_SNMP_PORT`, `ZABBIX_IPMI_PORT`, `ZABBIX_JMX_PORT` set the port used when creating/updating the corresponding Zabbix interface type
+* `ZABBIX_SNMP_PORT` is shared by both SNMPv2 and SNMPv3 — Zabbix has one port per interface type, not per SNMP version
+* Default to Zabbix's own defaults (10050, 161, 623, 12345) if unset
+
+### SNMPv2/SNMPv3 Configuration
+
+Since `SNMPv2`/`SNMPv3` are deployment-wide credentials (not per-device), they're read from environment variables rather than NetBox:
+
+* `SNMPV2_MACRO` — the community string (or Zabbix user macro, e.g. `{$SNMP_COMMUNITY}`) used for SNMPv2 interfaces. Defaults to `{$SNMP_COMMUNITY}` if unset.
+* `ZABBIX_SNMPV3_SECURITY_NAME` — SNMPv3 security name
+* `ZABBIX_SNMPV3_SECURITY_LEVEL` — SNMPv3 security level: `0`=noAuthNoPriv, `1`=authNoPriv, `2`=authPriv (default `2`)
+* `ZABBIX_SNMPV3_AUTH_PROTOCOL` — SNMPv3 auth protocol, Zabbix's numeric code (default `1` = SHA1)
+* `ZABBIX_SNMPV3_AUTH_PASSPHRASE` — SNMPv3 auth passphrase
+* `ZABBIX_SNMPV3_PRIV_PROTOCOL` — SNMPv3 priv protocol, Zabbix's numeric code (default `1` = AES128)
+* `ZABBIX_SNMPV3_PRIV_PASSPHRASE` — SNMPv3 priv passphrase
+* `ZABBIX_SNMPV3_CONTEXT_NAME` — SNMPv3 context name (optional)
+
+See Zabbix's API documentation for the full list of `authprotocol`/`privprotocol` numeric codes.
 
 ### Custom Validation
 

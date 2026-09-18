@@ -35,6 +35,18 @@ class DeviceServiceTests(unittest.TestCase):
         self.assertEqual(ds.uniform_port_type("2"), "SNMP")
         self.assertEqual(ds.uniform_port_type("SNMP"), "SNMP")
 
+    def test_split_snmp_port_type(self):
+        """SNMPv2/SNMPv3 should resolve to generic SNMP + version; SNMP (bare) is dropped."""
+        self.assertEqual(ds.split_snmp_port_type("SNMPv2"), ("SNMP", "2"))
+        self.assertEqual(ds.split_snmp_port_type("SNMPv3"), ("SNMP", "3"))
+        self.assertEqual(ds.split_snmp_port_type("Agent"), ("Agent", ""))
+        self.assertEqual(ds.split_snmp_port_type("1"), ("Agent", ""))
+        self.assertEqual(ds.split_snmp_port_type("IPMI"), ("IPMI", ""))
+        self.assertEqual(ds.split_snmp_port_type("JMX"), ("JMX", ""))
+        self.assertIsNone(ds.split_snmp_port_type("SNMP"))
+        self.assertIsNone(ds.split_snmp_port_type("2"))
+        self.assertIsNone(ds.split_snmp_port_type("bogus"))
+
     def test_map_port_type_device_and_uniform_output_text(self):
         """Port type mapping and output text normalization should update list values."""
         nb = [self._device("nb", port_type="1")]
@@ -152,7 +164,7 @@ class DeviceServiceTests(unittest.TestCase):
                         "name": "sw1",
                         "description": "d",
                         "status": "active",
-                        "config_context": {"zabbix": {"templates": ["tpl"], "port_type": "SNMP"}},
+                        "config_context": {"zabbix": {"templates": ["tpl"], "port_type": ["SNMPv2"]}},
                         "custom_fields": {"zabbix_hostgroups": None, "zabbix_templates": None, "zabbix_port_type": None},
                         "primary_ip4": {"address": "10.0.0.1/24", "dns_name": "sw1.local"},
                         "interfaces": [
@@ -176,6 +188,8 @@ class DeviceServiceTests(unittest.TestCase):
         self.assertIsInstance(result, list)
         self.assertEqual(result[0].name, "sw1")
         self.assertEqual(result[0].interfaces[0].addresses[0].address, "10.0.0.1")
+        self.assertEqual(result[0].interfaces[0].port_type, "SNMP")
+        self.assertEqual(result[0].interfaces[0].snmp_version, "2")
 
     @patch("app.device.service.device_service.requests.post")
     def test_get_nb_devices_error_status(self, post_mock):
@@ -201,7 +215,15 @@ class DeviceServiceTests(unittest.TestCase):
                     "parentTemplates": [{"name": "tpl"}],
                     "status": "0",
                     "hostgroups": [{"groupid": "1", "name": "HG"}],
-                    "interfaces": [{"dns": "zb1.local", "ip": "10.0.0.2", "type": "2"}],
+                    "interfaces": [
+                        {"dns": "zb1.local", "ip": "10.0.0.2", "type": "2"},
+                        {
+                            "dns": "zb1-v3.local",
+                            "ip": "10.0.0.3",
+                            "type": "2",
+                            "details": {"version": "3"},
+                        },
+                    ],
                 }
             ]
         })
@@ -210,6 +232,8 @@ class DeviceServiceTests(unittest.TestCase):
         result = ds.get_zb_devices("k", "http://zb")
         self.assertIsInstance(result, list)
         self.assertEqual(result[0].name, "zb1")
+        self.assertEqual(result[0].interfaces[0].snmp_version, "2")  # no details -> defaults to v2
+        self.assertEqual(result[0].interfaces[1].snmp_version, "3")
 
     @patch("app.device.service.device_service.requests.post")
     def test_get_zb_devices_api_error(self, post_mock):

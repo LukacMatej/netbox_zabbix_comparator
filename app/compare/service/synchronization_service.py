@@ -32,7 +32,7 @@ import requests
 
 from app.device.models.address_model import Address as address_model
 from app.device.models.device_model import Device as device_model
-from app.device.models.device_model import map_port_type_default_port
+from app.device.models.device_model import build_snmp_details, map_port_type_default_port
 from app.device.models.difference_model import (
     DeviceDifference as device_difference_model,
 )
@@ -174,11 +174,7 @@ def add_interface_to_zabbix(
             "port": port,
         }
         if port_type == "2":  # SNMP
-            interface_data["details"] = {
-                "version": "2",
-                "bulk": "1",
-                "community": "{$SNMP_COMMUNITY}",
-            }
+            interface_data["details"] = build_snmp_details(interface.snmp_version)
         interface_params.append(interface_data)
     log.logger.info("Params payload: %s", interface_params)
     try:

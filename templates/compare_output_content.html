@@ -238,7 +238,7 @@
 				{% set zb_iface = safe_index(difference.zb_device.interfaces, loop.index0) %}
 				<div class="tab-interface">
 					<p>Port Type: {% if
-					interface.port_type %} {{ diff_html(zb_iface.port_type if zb_iface else '', interface.port_type, 'new') if ' port_type ' in diff_text else interface.port_type }} {% else %} None
+					interface.port_type %} {{ diff_html(zb_iface.port_type if zb_iface else '', interface.port_type, 'new') if ' port_type ' in diff_text else interface.port_type }}{% if interface.snmp_version %}v{{ interface.snmp_version }}{% endif %} {% else %} None
 					{% endif %}</p>
 				</div>
 				<div class="tab-interface">Addresses:</div>
@@ -266,7 +266,7 @@
 				{% set nb_iface = safe_index(difference.nb_device.interfaces, loop.index0) %}
 				<div class="tab-interface">
 					<p>Port Type: {% if
-					interface.port_type %} {{ diff_html(interface.port_type, nb_iface.port_type if nb_iface else '', 'old') if ' port_type ' in diff_text else interface.port_type }} {% else %} None
+					interface.port_type %} {{ diff_html(interface.port_type, nb_iface.port_type if nb_iface else '', 'old') if ' port_type ' in diff_text else interface.port_type }}{% if interface.snmp_version %}v{{ interface.snmp_version }}{% endif %} {% else %} None
 					{% endif %}</p>
 				</div>
 				<div class="tab-interface">Addresses:</div>
@@ -321,7 +321,7 @@
 				{% for interface in device.interfaces %}
 				<div class="tab-interface">
 					<p>Port Type: {% if
-					interface.port_type %} {{interface.port_type}} {% else %} None
+					interface.port_type %} {{interface.port_type}}{% if interface.snmp_version %}v{{ interface.snmp_version }}{% endif %} {% else %} None
 					{% endif %}</p>
 				</div>
 				<div class="tab-interface">Addresses:</div>
@@ -373,7 +373,7 @@
 				{% for interface in device.interfaces %}
 				<div class="tab-interface">
 					<p>Port Type: {% if
-					interface.port_type %} {{interface.port_type}} {% else %} None
+					interface.port_type %} {{interface.port_type}}{% if interface.snmp_version %}v{{ interface.snmp_version }}{% endif %} {% else %} None
 					{% endif %}</p>
 				</div>
 				<div class="tab-interface">Addresses:</div>

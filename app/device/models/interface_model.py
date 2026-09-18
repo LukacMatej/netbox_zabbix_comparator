@@ -26,21 +26,27 @@ class Interface:
         addresses (list[addr]): A list of IP addresses assigned to this interface.
         mac_address (str): The MAC (Media Access Control) address of the interface.
         port_type (str): The type of port (e.g., 'ethernet', 'virtual', 'loopback').
+        snmp_version (str): SNMP version ("2" or "3") when port_type is "SNMP", else "".
     """
 
     name: str = ""
     addresses: list[addr] = []
     mac_address: str = ""
     port_type: str = ""
+    snmp_version: str = ""
 
-    def __init__(self, name, addresses, mac_address, port_type) -> None:
+    def __init__(self, name, addresses, mac_address, port_type, snmp_version="") -> None:
         self.name = name
         self.addresses = addresses
         self.mac_address = mac_address
         self.port_type = port_type
+        self.snmp_version = snmp_version
 
     def __str__(self) -> str:
-        return f"{self.name} {self.addresses} {self.mac_address} {self.port_type}"
+        return (
+            f"{self.name} {self.addresses} {self.mac_address} "
+            f"{self.port_type} {self.snmp_version}"
+        )
 
     @staticmethod
     def get_interface_fields() -> list[str]:

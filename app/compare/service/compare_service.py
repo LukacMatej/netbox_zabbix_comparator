@@ -231,7 +231,7 @@ def _compare_interface_fields(
     same: list[str] = []
     fields_counter = 0
     same_count = 0
-    interface_fields = ["port_type"]
+    interface_fields = ["port_type", "snmp_version"]
 
     nb_interfaces: list[interface_model] = nb_device.interfaces or []
     zb_interfaces: list[interface_model] = zb_device.interfaces or []

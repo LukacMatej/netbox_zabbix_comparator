@@ -21,7 +21,7 @@ INTERFACE_TYPE_NAMES = {
 }
 
 PORT_TYPE_MAPPING: dict[str, str] = {
-    "Agent": "1", "SNMP": "2", "IPMI": "3", "JMX": "4",
+    "Agent": "1", "SNMPv2": "2", "SNMPv3": "2", "IPMI": "3", "JMX": "4",
     "1": "1", "2": "2", "3": "3", "4": "4",
 }
 

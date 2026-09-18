@@ -216,6 +216,31 @@ class SynchronizationServiceTests(unittest.TestCase):
             any("cannot update device" in item for item in out.synchronization_output_differences)
         )
 
+    @patch.dict(
+        "os.environ",
+        {
+            "ZABBIX_IP": "http://zb/",
+            "ZABBIX_KEY": "k",
+            "ZABBIX_SNMPV3_SECURITY_NAME": "myuser",
+        },
+        clear=False,
+    )
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_add_interface_to_zabbix_builds_snmpv3_details(self, post_mock):
+        """add_interface_to_zabbix should build SNMPv3 details from the interface's snmp_version."""
+        response = Mock(status_code=200)
+        response.json.return_value = {"result": {"interfaceids": ["1"]}}
+        post_mock.return_value = response
+
+        iface = Interface("eth0", [Address("10.0.0.1", "host.local")], "", "SNMP", "3")
+        out = SyncOutput()
+
+        ss.add_interface_to_zabbix("9001", [iface], out)
+
+        sent_params = post_mock.call_args.kwargs["json"]["params"]
+        self.assertEqual(sent_params[0]["details"]["version"], "3")
+        self.assertEqual(sent_params[0]["details"]["securityname"], "myuser")
+
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
     @patch("app.compare.service.synchronization_service.get_zabbix_host_interfaces")
     @patch("app.compare.service.synchronization_service.device_service.find_hostinterface_ids")
