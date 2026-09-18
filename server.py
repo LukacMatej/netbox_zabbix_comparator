@@ -449,16 +449,22 @@ def view_logs(request: Request) -> Response:
     """
     Render recent application log lines (most recent 1000).
 
-    Returns the full page on a direct navigation, or just the log fragment
-    (used both for the initial HTMX swap and for the fragment's own polling)
-    when requested via HTMX.
+    Three cases, distinguished by the HTMX request headers:
+      - No HTMX request: full page (nav bar + fragment).
+      - HTMX request targeting "page-content": initial nav-click swap,
+        returns the fragment (container + polling <pre>).
+      - HTMX request targeting "log-output": the <pre>'s own poll, returns
+        just the bare lines so only its innerHTML is refreshed in place
+        (avoids destroying/recreating the container every 2s).
     """
     lines = log_buffer.snapshot()
-    template_name = (
-        "logs_content.html"
-        if request.headers.get("hx-request", "").lower() == "true"
-        else "logs.html"
-    )
+    is_htmx = request.headers.get("hx-request", "").lower() == "true"
+    if not is_htmx:
+        template_name = "logs.html"
+    elif request.headers.get("hx-target") == "log-output":
+        template_name = "logs_lines.html"
+    else:
+        template_name = "logs_content.html"
     return templates.TemplateResponse(
         request, template_name, {"lines": lines}, status_code=200
     )
