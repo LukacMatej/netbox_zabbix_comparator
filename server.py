@@ -8,10 +8,12 @@ Routes:
     / (GET): Renders the index page.
     /run_comparison (GET): Compares devices between NetBox and Zabbix.
     /run_comparison_sync (GET): Compares and synchronizes devices.
+    /logs (GET): Renders recent application log lines (full page or HTMX partial).
 Functions:
     test(): Renders an index template with actions for compare/sync.
     run_compare(): Returns comparison output in full page or HTMX partial mode.
     run_compare_sync(): Returns synchronized output in full page or HTMX partial mode.
+    view_logs(): Returns recent log lines in full page or HTMX partial mode.
     parser_init(): Initializes and returns an argument parser for server configuration.
 Usage:
     Run the script with optional arguments to start the server in development or production mode.
@@ -59,6 +61,7 @@ from app.device.models.synchonization_output_model import (
 from app.device.service import device_service as ds
 from app.device.service import validator_service as validator
 from app.logger import logger_conf as log
+from app.logger.log_buffer import log_buffer
 
 proxy_root_path: str = os.environ.get("PROXY_ROOT_PATH", "")
 # Ensure root_path starts with / if provided
@@ -436,6 +439,26 @@ def run_compare_sync(request: Request) -> Response:
             "zabbix_url": zabbix_ip,
         },
         status_code=200,
+    )
+
+
+@app.get("/logs", name="view_logs", response_class=HTMLResponse)
+def view_logs(request: Request) -> Response:
+    """
+    Render recent application log lines (most recent 1000).
+
+    Returns the full page on a direct navigation, or just the log fragment
+    (used both for the initial HTMX swap and for the fragment's own polling)
+    when requested via HTMX.
+    """
+    lines = log_buffer.snapshot()
+    template_name = (
+        "logs_content.html"
+        if request.headers.get("hx-request", "").lower() == "true"
+        else "logs.html"
+    )
+    return templates.TemplateResponse(
+        request, template_name, {"lines": lines}, status_code=200
     )
 
 

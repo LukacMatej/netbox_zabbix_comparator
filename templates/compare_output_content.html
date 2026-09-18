@@ -162,6 +162,7 @@
 	}
 	.compare-header-cell {
 		flex: 1 1 0;
+		font-size: 2em;
 	}
 	.compare-section-label {
 		font-weight: bold;
@@ -319,22 +320,22 @@
 				<div>Interfaces:</div>
 				{% for interface in device.interfaces %}
 				<div class="tab-interface">
-					Port Type: {% if
+					<p>Port Type: {% if
 					interface.port_type %} {{interface.port_type}} {% else %} None
-					{% endif %}
+					{% endif %}</p>
 				</div>
 				<div class="tab-interface">Addresses:</div>
 				{% for address in interface.addresses %}
 				<div class="tab-address">
-					IP address: {{ address.address }}{% if address.dns_name %}, DNS Name: {{ address.dns_name }}{% endif %}
+					<p>IP address: {{ address.address }}{% if address.dns_name %}, DNS Name: {{ address.dns_name }}{% endif %}</p>
 				</div>
 				{% endfor %} {% endfor %}
-				<div>
+				<p>
 					Hostgroup: {{ device.hostgroup }}, {% if device.description%}
 					Description: {{ device.description }} ,{% endif %} Status: {{
 					device.status }}
-				</div>
-				<div>Templates: {{ device.templates }}</div>
+				</p>
+				<p>Templates: {{ device.templates }}</p>
 			</div>
 			<div class="cell cell-zb cell-empty">Not present in Zabbix</div>
 		</div>
@@ -371,22 +372,22 @@
 				<div>Interfaces:</div>
 				{% for interface in device.interfaces %}
 				<div class="tab-interface">
-					Port Type: {% if
+					<p>Port Type: {% if
 					interface.port_type %} {{interface.port_type}} {% else %} None
-					{% endif %}
+					{% endif %}</p>
 				</div>
 				<div class="tab-interface">Addresses:</div>
 				{% for address in interface.addresses %}
 				<div class="tab-address">
-					IP address: {{ address.address }}{% if address.dns_name %}, DNS Name: {{ address.dns_name }}{% endif %}
+					<p>IP address: {{ address.address }}{% if address.dns_name %}, DNS Name: {{ address.dns_name }}{% endif %}</p>
 				</div>
 				{% endfor %} {% endfor %}
-				<div>
+				<p>
 					Hostgroup: {{ device.hostgroup }}, {% if device.description%}
 					Description: {{ device.description }} ,{% endif %} Status: {{
 					device.status }}
-				</div>
-				<div>Templates: {{ device.templates }}</div>
+				</p>
+				<p>Templates: {{ device.templates }}</p>
 			</div>
 		</div>
 		<div class="cell-actions">

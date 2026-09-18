@@ -16,6 +16,12 @@ class LoggerConfTests(unittest.TestCase):
         self.assertTrue(
             any(isinstance(h, logging.StreamHandler) for h in logger_conf.logger.handlers)
         )
+        self.assertTrue(
+            any(
+                isinstance(h, logger_conf.RingBufferHandler)
+                for h in logger_conf.logger.handlers
+            )
+        )
 
 
 if __name__ == "__main__":

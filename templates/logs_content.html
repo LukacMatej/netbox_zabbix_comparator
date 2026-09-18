@@ -1,0 +1,15 @@
+<div id="logs-container"
+     hx-get="{{ url_for('view_logs') }}"
+     hx-trigger="every 2s"
+     hx-target="#logs-container"
+     hx-swap="outerHTML">
+    <h2>Application Logs</h2>
+    <pre id="log-output" class="log-output">{% for line in lines %}{{ line }}
+{% endfor %}</pre>
+</div>
+<script>
+    (function () {
+        const el = document.getElementById('log-output');
+        if (el) { el.scrollTop = el.scrollHeight; }
+    })();
+</script>
