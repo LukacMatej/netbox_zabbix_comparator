@@ -300,5 +300,108 @@ class SynchronizationServiceTests(unittest.TestCase):
             any("updated successfully" in item for item in out.synchronization_output_differences)
         )
 
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.resolve_inventory_link_conflicts")
+    @patch("app.compare.service.synchronization_service.find_template_ids", return_value=101)
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_synchronize_templates_to_zabbix_success(
+        self, post_mock, _tpl_mock, _resolve_mock
+    ):
+        """NetBox -> Zabbix template sync should push a templates-only host.update."""
+        host_get = Mock(status_code=200)
+        host_get.json.return_value = {"result": [{"hostid": "9001"}]}
+        host_update = Mock(status_code=200)
+        host_update.json.return_value = {"result": {"hostids": ["9001"]}}
+        post_mock.side_effect = [host_get, host_update]
+
+        nb = _device("nb")
+        zb = _device("zb")
+        out = SyncOutput()
+
+        self.assertTrue(ss.synchronize_templates(nb, zb, 1, out))
+
+        update_payload = post_mock.call_args_list[1].kwargs["json"]
+        self.assertEqual(update_payload["method"], "host.update")
+        self.assertEqual(update_payload["params"], {"hostid": "9001", "templates": [{"templateid": 101}]})
+        self.assertTrue(
+            any("updated successfully" in item for item in out.synchronization_output_differences)
+        )
+
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.resolve_inventory_link_conflicts")
+    @patch("app.compare.service.synchronization_service.find_template_ids", return_value=101)
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_synchronize_templates_to_zabbix_api_error(
+        self, post_mock, _tpl_mock, _resolve_mock
+    ):
+        """A Zabbix API error on host.update should return False and log the error."""
+        host_get = Mock(status_code=200)
+        host_get.json.return_value = {"result": [{"hostid": "9001"}]}
+        host_update = Mock(status_code=200)
+        host_update.json.return_value = {"error": {"data": "boom"}}
+        post_mock.side_effect = [host_get, host_update]
+
+        out = SyncOutput()
+        self.assertFalse(ss.synchronize_templates(_device("nb"), _device("zb"), 1, out))
+        self.assertTrue(
+            any("Error in Zabbix API response" in item for item in out.synchronization_output_differences)
+        )
+
+    @patch.dict("os.environ", {}, clear=True)
+    def test_synchronize_templates_to_zabbix_missing_credentials(self):
+        """Missing Zabbix credentials should return False without any API call."""
+        out = SyncOutput()
+        self.assertFalse(ss.synchronize_templates(_device("nb"), _device("zb"), 1, out))
+
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    def test_synchronize_templates_to_zabbix_no_templates(self):
+        """Empty NetBox templates should return False without any API call."""
+        nb = _device("nb")
+        nb.templates = []
+        out = SyncOutput()
+        self.assertFalse(ss.synchronize_templates(nb, _device("zb"), 1, out))
+
+    @patch.dict("os.environ", {"NETBOX_IP": "http://nb/", "NETBOX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.requests.patch")
+    @patch("app.compare.service.synchronization_service.device_service.find_nb_device_id", return_value=5)
+    def test_synchronize_templates_to_netbox_success(self, _find_id_mock, patch_mock):
+        """Zabbix -> NetBox template sync should PATCH only the zabbix_templates custom field."""
+        patch_mock.return_value = Mock(status_code=200)
+
+        out = SyncOutput()
+        self.assertTrue(ss.synchronize_templates(_device("nb"), _device("zb"), 2, out))
+
+        called_url = patch_mock.call_args.args[0]
+        called_json = patch_mock.call_args.kwargs["json"]
+        self.assertEqual(called_url, "http://nb//api/dcim/devices/5/")
+        self.assertEqual(called_json, {"custom_fields": {"zabbix_templates": ["TPL"]}})
+        self.assertTrue(
+            any("updated successfully" in item for item in out.synchronization_output_differences)
+        )
+
+    @patch.dict("os.environ", {"NETBOX_IP": "http://nb/", "NETBOX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.requests.patch")
+    @patch("app.compare.service.synchronization_service.device_service.find_nb_device_id", return_value=-1)
+    def test_synchronize_templates_to_netbox_device_not_found(self, _find_id_mock, patch_mock):
+        """Missing NetBox device should return False without issuing a PATCH."""
+        out = SyncOutput()
+        self.assertFalse(ss.synchronize_templates(_device("nb"), _device("zb"), 2, out))
+        patch_mock.assert_not_called()
+
+    @patch.dict("os.environ", {}, clear=True)
+    def test_synchronize_templates_to_netbox_missing_credentials(self):
+        """Missing NetBox credentials should return False without any API call."""
+        out = SyncOutput()
+        self.assertFalse(ss.synchronize_templates(_device("nb"), _device("zb"), 2, out))
+
+    @patch.dict("os.environ", {"NETBOX_IP": "http://nb/", "NETBOX_KEY": "k"}, clear=False)
+    def test_synchronize_templates_to_netbox_no_templates(self):
+        """Empty Zabbix templates should return False without any API call."""
+        zb = _device("zb")
+        zb.templates = []
+        out = SyncOutput()
+        self.assertFalse(ss.synchronize_templates(_device("nb"), zb, 2, out))
+
+
 if __name__ == "__main__":
     unittest.main()

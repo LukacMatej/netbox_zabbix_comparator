@@ -176,6 +176,76 @@ def safe_index(seq: list, index: int) -> Any:
 templates.env.globals["safe_index"] = safe_index
 
 
+@app.post(
+    "/synchronize_zabbix_templates",
+    name="synchronize_zabbix_templates",
+    response_class=HTMLResponse,
+)
+async def synchronize_zabbix_templates(request: Request) -> Response:
+    try:
+        payload = await request.json()
+    except ValueError:
+        return PlainTextResponse("Invalid or missing JSON body", status_code=400)
+
+    nb_device = dict_to_device(payload["nb_device"])
+    zb_device = dict_to_device(payload["zb_device"])
+    log.logger.info(f"Synchronizing Zabbix templates: {nb_device.name} -> {zb_device.name}")
+    error_log = ""
+    sync_output = sync_output_model()
+    try:
+        success = ss.synchronize_templates(nb_device, zb_device, 1, sync_output)
+        if not success:
+            error_log = str(sync_output)
+    except Exception as e:  # pylint: disable=broad-except
+        log.logger.error(
+            "Failed to synchronize Zabbix templates for %s: %s", nb_device.name, e, exc_info=True
+        )
+        success = False
+        error_log = str(e)
+
+    return templates.TemplateResponse(
+        request,
+        "sync_button_result.html",
+        {"success": success, "error_log": error_log},
+        status_code=200,
+    )
+
+
+@app.post(
+    "/synchronize_netbox_templates",
+    name="synchronize_netbox_templates",
+    response_class=HTMLResponse,
+)
+async def synchronize_netbox_templates(request: Request) -> Response:
+    try:
+        payload = await request.json()
+    except ValueError:
+        return PlainTextResponse("Invalid or missing JSON body", status_code=400)
+
+    nb_device = dict_to_device(payload["nb_device"])
+    zb_device = dict_to_device(payload["zb_device"])
+    log.logger.info(f"Synchronizing Netbox templates: {zb_device.name} -> {nb_device.name}")
+    error_log = ""
+    sync_output = sync_output_model()
+    try:
+        success = ss.synchronize_templates(nb_device, zb_device, 2, sync_output)
+        if not success:
+            error_log = str(sync_output)
+    except Exception as e:  # pylint: disable=broad-except
+        log.logger.error(
+            "Failed to synchronize Netbox templates for %s: %s", nb_device.name, e, exc_info=True
+        )
+        success = False
+        error_log = str(e)
+
+    return templates.TemplateResponse(
+        request,
+        "sync_button_result.html",
+        {"success": success, "error_log": error_log},
+        status_code=200,
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
 def test(request: Request) -> HTMLResponse:
     """

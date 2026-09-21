@@ -211,6 +211,31 @@ def find_nb_device_role_id(device_role: str) -> int:
     return -1
 
 
+def find_nb_device_id(name: str) -> int:
+    """Finds the Netbox device ID based on the provided device name.
+    Args:
+        name (str): The name of the device to find.
+    Returns:
+        int: The ID of the device if found, otherwise -1.
+    """
+    log.logger.info("Finding Netbox device ID for %s.", name)
+    nb_ip = os.environ.get("NETBOX_IP")
+    nb_key = os.environ.get("NETBOX_KEY")
+    response = requests.get(
+        f"{nb_ip}/api/dcim/devices/?name={name}",
+        headers=_netbox_headers(nb_key),
+        timeout=REQUEST_TIMEOUT,
+    )
+    if response.status_code == 200:
+        data = json.loads(response.text)
+        if data["count"] > 0:
+            device_id = data["results"][0]["id"]
+            log.logger.info("Found Netbox device ID: %s for %s.", device_id, name)
+            return int(device_id)
+    log.logger.error("Failed to find Netbox device ID for %s: %s", name, response.text)
+    return -1
+
+
 def format_address(address: str) -> str:
     """
     Extract the IP address from a CIDR notation string.

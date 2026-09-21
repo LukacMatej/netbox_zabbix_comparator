@@ -151,6 +151,17 @@ class DeviceServiceTests(unittest.TestCase):
         self.assertEqual(ds.find_nb_site_id("S1"), 7)
         self.assertEqual(ds.find_nb_device_type_id("C9300"), 7)
         self.assertEqual(ds.find_nb_device_role_id("Switch"), 7)
+        self.assertEqual(ds.find_nb_device_id("sw1"), 7)
+
+    @patch("app.device.service.device_service.requests.get")
+    @patch.dict("os.environ", {"NETBOX_IP": "http://nb", "NETBOX_KEY": "k"}, clear=False)
+    def test_find_nb_device_id_not_found(self, get_mock):
+        """A device name with no matching NetBox device should return -1."""
+        response = Mock(status_code=200)
+        response.text = json.dumps({"count": 0, "results": []})
+        get_mock.return_value = response
+
+        self.assertEqual(ds.find_nb_device_id("missing"), -1)
 
     @patch("app.device.service.device_service.requests.post")
     def test_get_nb_devices_success(self, post_mock):

@@ -46,6 +46,154 @@ from app.logger import logger_conf as log
 REQUEST_TIMEOUT = 30
 
 
+def _netbox_credentials() -> tuple[str | None, str | None]:
+    """Reads NETBOX_IP/NETBOX_KEY from the environment, logging if either is unset."""
+    netbox_ip: str | None = os.environ.get("NETBOX_IP")
+    netbox_key: str | None = os.environ.get("NETBOX_KEY")
+    if netbox_ip is None or netbox_key is None:
+        log.logger.error("Netbox IP or API key not set in environment variables.")
+    return netbox_ip, netbox_key
+
+
+def _synchronize_templates_to_zabbix(
+    nb_device: device_model, zb_device: device_model, sync_output: sync_output_model
+) -> bool:
+    """Pushes the NetBox device's templates into Zabbix, touching only the templates field."""
+    template_source = nb_device.templates
+    template_source = template_source if isinstance(template_source, list) else [template_source]
+    template_source = [template for template in template_source if template]
+    if not template_source:
+        msg = f"No Netbox templates to synchronize to Zabbix for {nb_device.name}."
+        log.logger.info(msg)
+        sync_output.add_difference_output(msg)
+        return False
+
+    zabbix_ip, zabbix_key = _zabbix_credentials()
+    if zabbix_ip is None or zabbix_key is None:
+        msg = "Zabbix IP or API key not set in environment variables."
+        sync_output.add_difference_output(msg)
+        return False
+
+    host_response = _zabbix_post(
+        zabbix_ip, zabbix_key, "host.get", {"filter": {"host": [zb_device.name]}}
+    )
+    host_data = host_response.json()
+    if "error" in host_data:
+        msg = f"Error in Zabbix API response: {host_data['error']}"
+        log.logger.error(msg)
+        sync_output.add_difference_output(msg)
+        return False
+    if not host_data["result"]:
+        msg = f"Failed to find Zabbix hostid for {zb_device.name}, cannot synchronize templates."
+        log.logger.error(msg)
+        sync_output.add_difference_output(msg)
+        return False
+    hostid = host_data["result"][0]["hostid"]
+
+    templateids = [find_template_ids(template) for template in template_source]
+    templateids = [tid for tid in templateids if tid and tid != -1]
+    resolve_inventory_link_conflicts(hostid, templateids, sync_output)
+
+    update_response = _zabbix_post(
+        zabbix_ip,
+        zabbix_key,
+        "host.update",
+        {"hostid": hostid, "templates": [{"templateid": tid} for tid in templateids]},
+    )
+    update_data = update_response.json()
+    if "error" in update_data:
+        msg = f"Error in Zabbix API response: {update_data['error']}"
+        log.logger.error(msg)
+        sync_output.add_difference_output(msg)
+        return False
+
+    msg = f"Templates for {zb_device.name} updated successfully in Zabbix."
+    log.logger.info(msg)
+    sync_output.add_difference_output(msg)
+    return True
+
+
+def _synchronize_templates_to_netbox(
+    nb_device: device_model, zb_device: device_model, sync_output: sync_output_model
+) -> bool:
+    """Pushes the Zabbix device's templates into NetBox's zabbix_templates custom field."""
+    template_source = zb_device.templates
+    template_source = template_source if isinstance(template_source, list) else [template_source]
+    template_source = [template for template in template_source if template]
+    if not template_source:
+        msg = f"No Zabbix templates to synchronize to Netbox for {zb_device.name}."
+        log.logger.info(msg)
+        sync_output.add_difference_output(msg)
+        return False
+
+    netbox_ip, netbox_key = _netbox_credentials()
+    if netbox_ip is None or netbox_key is None:
+        msg = "Netbox IP or API key not set in environment variables."
+        sync_output.add_difference_output(msg)
+        return False
+
+    device_id = device_service.find_nb_device_id(nb_device.name)
+    if device_id == -1:
+        msg = f"Failed to find Netbox device id for {nb_device.name}, cannot synchronize templates."
+        log.logger.error(msg)
+        sync_output.add_difference_output(msg)
+        return False
+
+    response = requests.patch(
+        f"{netbox_ip}/api/dcim/devices/{device_id}/",
+        headers={
+            "Authorization": f"Token {netbox_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        json={"custom_fields": {"zabbix_templates": template_source}},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if response.status_code != 200:
+        msg = f"Failed to update Netbox templates for {nb_device.name}: {response.text}"
+        log.logger.error(msg)
+        sync_output.add_difference_output(msg)
+        return False
+
+    msg = f"Templates for {nb_device.name} updated successfully in Netbox."
+    log.logger.info(msg)
+    sync_output.add_difference_output(msg)
+    return True
+
+
+def synchronize_templates(
+    nb_device: device_model,
+    zb_device: device_model,
+    direction: int,
+    sync_output: sync_output_model,
+) -> bool:
+    """
+    Synchronizes templates between NetBox and Zabbix.
+
+    Args:
+        nb_device (device_model): The NetBox device.
+        zb_device (device_model): The Zabbix device.
+        direction (int): The synchronization direction (1 for NetBox to Zabbix, 2 for Zabbix to NetBox).
+        sync_output (sync_output_model): The synchronization output model to log the results.
+
+    Returns:
+        bool: True if synchronization was successful, False otherwise.
+    """
+    try:
+        if direction == 1:
+            return _synchronize_templates_to_zabbix(nb_device, zb_device, sync_output)
+        if direction == 2:
+            return _synchronize_templates_to_netbox(nb_device, zb_device, sync_output)
+        msg = f"Unknown template synchronization direction: {direction}."
+        log.logger.error(msg)
+        sync_output.add_difference_output(msg)
+        return False
+    except Exception as e:  # pylint: disable=broad-except
+        log.logger.error(f"Error synchronizing templates: {e}")
+        sync_output.add_difference_output(f"Error synchronizing templates: {e}")
+        return False
+
+
 def _zabbix_credentials() -> tuple[str | None, str | None]:
     """Reads ZABBIX_IP/ZABBIX_KEY from the environment, logging if either is unset.
 
