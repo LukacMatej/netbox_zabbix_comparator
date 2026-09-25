@@ -189,7 +189,7 @@ async def synchronize_zabbix_templates(request: Request) -> Response:
 
     nb_device = dict_to_device(payload["nb_device"])
     zb_device = dict_to_device(payload["zb_device"])
-    log.logger.info(f"Synchronizing Zabbix templates: {nb_device.name} -> {zb_device.name}")
+    log.logger.info(f"Synchronizing Netbox -> Zabbix templates: {nb_device.name} -> {zb_device.name}")
     error_log = ""
     sync_output = sync_output_model()
     try:
@@ -198,7 +198,7 @@ async def synchronize_zabbix_templates(request: Request) -> Response:
             error_log = str(sync_output)
     except Exception as e:  # pylint: disable=broad-except
         log.logger.error(
-            "Failed to synchronize Zabbix templates for %s: %s", nb_device.name, e, exc_info=True
+            "Failed to synchronize Netbox -> Zabbix templates for %s: %s", nb_device.name, e, exc_info=True
         )
         success = False
         error_log = str(e)
@@ -224,7 +224,7 @@ async def synchronize_netbox_templates(request: Request) -> Response:
 
     nb_device = dict_to_device(payload["nb_device"])
     zb_device = dict_to_device(payload["zb_device"])
-    log.logger.info(f"Synchronizing Netbox templates: {zb_device.name} -> {nb_device.name}")
+    log.logger.info(f"Synchronizing Zabbix -> Netbox templates: {zb_device.name} -> {nb_device.name}")
     error_log = ""
     sync_output = sync_output_model()
     try:
@@ -233,7 +233,7 @@ async def synchronize_netbox_templates(request: Request) -> Response:
             error_log = str(sync_output)
     except Exception as e:  # pylint: disable=broad-except
         log.logger.error(
-            "Failed to synchronize Netbox templates for %s: %s", nb_device.name, e, exc_info=True
+            "Failed to synchronize Zabbix -> Netbox templates for %s: %s", nb_device.name, e, exc_info=True
         )
         success = False
         error_log = str(e)
