@@ -157,6 +157,15 @@ class MapPortTypesTests(unittest.TestCase):
         """An unrecognized port type should make the whole mapping fail."""
         self.assertIsNone(vs.map_port_types(["Agent", "bogus"]))
 
+    def test_maps_snmpv2_and_snmpv3_to_interface_type_2(self):
+        """SNMPv2 and SNMPv3 should both map to Zabbix interface type '2'."""
+        self.assertEqual(vs.map_port_types(["SNMPv2"]), {"2"})
+        self.assertEqual(vs.map_port_types(["SNMPv3"]), {"2"})
+
+    def test_returns_none_for_removed_plain_snmp(self):
+        """The removed plain 'SNMP' choice should no longer map to anything."""
+        self.assertIsNone(vs.map_port_types(["SNMP"]))
+
 
 class QueryZabbixTemplateItemsTests(unittest.TestCase):
     """Tests for query_zabbix_template_items."""
@@ -207,7 +216,7 @@ class CheckNewPortTypeCompatibilityTests(unittest.TestCase):
             ],
         }
 
-        result = vs.check_new_port_type_compatibility(host, ["SNMP"])
+        result = vs.check_new_port_type_compatibility(host, ["SNMPv2"])
 
         self.assertTrue(result)
 
@@ -362,7 +371,7 @@ class CanUpdateDeviceTests(unittest.TestCase):
         data = {
             "data": {
                 "name": "test-host",
-                "custom_fields": {"zabbix_port_type": "SNMP"},
+                "custom_fields": {"zabbix_port_type": "SNMPv2"},
             }
         }
 
@@ -401,7 +410,7 @@ class CanUpdateDeviceTests(unittest.TestCase):
         data = {
             "data": {
                 "name": "test-host",
-                "custom_fields": {"zabbix_port_type": "SNMP"},
+                "custom_fields": {"zabbix_port_type": "SNMPv2"},
             }
         }
         validator = vs.DeviceModelValidator(

@@ -1,0 +1,8 @@
+service:
+  netbox_zabbix:
+    image: netbox_zabbix:{version}
+
+    env_file:
+      - .env
+    ports:
+      - "7000:7000"

@@ -83,6 +83,18 @@
                 left: 36px;
             }
         }
+        .log-output {
+            background: #111;
+            color: #ddd;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 0.85em;
+            padding: 16px;
+            border-radius: 8px;
+            max-height: 75vh;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
     </style>
 </head>
 <body>
@@ -142,6 +154,17 @@
                 hx-push-url="false"
                 hx-confirm="Synchronization will make changes based on comparison in Zabbix. Continue?"
             >Synchronize</button>
+            <button
+                type="button"
+                class="menu-action"
+                hx-get="{{ url_for('view_logs') }}"
+                hx-target="#page-content"
+                hx-swap="innerHTML"
+                hx-indicator="#comparison-loading"
+                hx-push-url="false"
+            >
+                View Logs
+            </button>
         </div>
         <script>
             const burger = document.getElementById('burger-menu');

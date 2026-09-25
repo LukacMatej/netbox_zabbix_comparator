@@ -162,6 +162,7 @@
 	}
 	.compare-header-cell {
 		flex: 1 1 0;
+		font-size: 2em;
 	}
 	.compare-section-label {
 		font-weight: bold;
@@ -205,6 +206,8 @@
 	.cell-actions {
 		text-align: center;
 		margin-top: 10px;
+		margin-left: 1em;
+		margin-right: 1em;
 	}
 </style>
 <div class="compare-table" id="compare-table">
@@ -237,7 +240,7 @@
 				{% set zb_iface = safe_index(difference.zb_device.interfaces, loop.index0) %}
 				<div class="tab-interface">
 					<p>Port Type: {% if
-					interface.port_type %} {{ diff_html(zb_iface.port_type if zb_iface else '', interface.port_type, 'new') if ' port_type ' in diff_text else interface.port_type }} {% else %} None
+					interface.port_type %} {{ diff_html(zb_iface.port_type if zb_iface else '', interface.port_type, 'new') if ' port_type ' in diff_text else interface.port_type }}{% if interface.snmp_version %}v{{ interface.snmp_version }}{% endif %} {% else %} None
 					{% endif %}</p>
 				</div>
 				<div class="tab-interface">Addresses:</div>
@@ -265,7 +268,7 @@
 				{% set nb_iface = safe_index(difference.nb_device.interfaces, loop.index0) %}
 				<div class="tab-interface">
 					<p>Port Type: {% if
-					interface.port_type %} {{ diff_html(interface.port_type, nb_iface.port_type if nb_iface else '', 'old') if ' port_type ' in diff_text else interface.port_type }} {% else %} None
+					interface.port_type %} {{ diff_html(interface.port_type, nb_iface.port_type if nb_iface else '', 'old') if ' port_type ' in diff_text else interface.port_type }}{% if interface.snmp_version %}v{{ interface.snmp_version }}{% endif %} {% else %} None
 					{% endif %}</p>
 				</div>
 				<div class="tab-interface">Addresses:</div>
@@ -287,23 +290,65 @@
 				<p>Templates: {{ diff_html(difference.zb_device.templates, difference.nb_device.templates, 'old') if ' templates ' in diff_text else difference.zb_device.templates }}</p>
 			</div>
 		</div>
-		<div class="cell-actions">
-			<div class="button-create">
-				<button
-					type="button"
-					hx-post="{{ url_for('synchronize_zabbix_device') }}"
-					hx-vals='{{ difference_to_dict(difference) | tojson }}'
-					hx-ext="json-enc"
-					hx-target="this"
-					hx-swap="outerHTML"
-					hx-indicator="#comparison-loading"
-					hx-push-url="false"
-				>
-					<strong
-						>Synchronize Zabbix Device
-					</strong>
-				</button>
-			</div>
+		<div style="display: flex; flex-direction: row; justify-content: center;">
+		    <div class="cell-actions">
+				{% if ' templates ' in diff_text %}
+		        <div class="button-create">
+				    <button
+					    type="button"
+					    hx-post="{{ url_for('synchronize_netbox_templates') }}"
+					    hx-vals='{{ difference_to_dict(difference) | tojson }}'
+					    hx-ext="json-enc"
+					    hx-target="this"
+					    hx-swap="outerHTML"
+					    hx-indicator="#comparison-loading"
+					    hx-push-url="false"
+				    >
+					    <strong
+						    >Synchronize Templates Zabbix -> Netbox
+					    </strong>
+				    </button>
+			    </div>
+				{% endif %}
+		    </div>
+		    <div class="cell-actions">
+			    <div class="button-create">
+				    <button
+					    type="button"
+					    hx-post="{{ url_for('synchronize_zabbix_device') }}"
+					    hx-vals='{{ difference_to_dict(difference) | tojson }}'
+					    hx-ext="json-enc"
+					    hx-target="this"
+					    hx-swap="outerHTML"
+					    hx-indicator="#comparison-loading"
+					    hx-push-url="false"
+				    >
+					    <strong
+						    >Synchronize Zabbix Device
+					    </strong>
+				    </button>
+			    </div>
+		    </div>
+		    {% if ' templates ' in diff_text %}
+		    <div class="cell-actions">
+			    <div class="button-create">
+				    <button
+					    type="button"
+					    hx-post="{{ url_for('synchronize_zabbix_templates') }}"
+					    hx-vals='{{ difference_to_dict(difference) | tojson }}'
+					    hx-ext="json-enc"
+					    hx-target="this"
+					    hx-swap="outerHTML"
+					    hx-indicator="#comparison-loading"
+					    hx-push-url="false"
+				    >
+					    <strong
+						    >Synchronize Templates Netbox -> Zabbix
+					    </strong>
+				    </button>
+			    </div>
+		    </div>
+		    {% endif %}
 		</div>
 	</div>
 	{% endfor %}
@@ -319,22 +364,22 @@
 				<div>Interfaces:</div>
 				{% for interface in device.interfaces %}
 				<div class="tab-interface">
-					Port Type: {% if
-					interface.port_type %} {{interface.port_type}} {% else %} None
-					{% endif %}
+					<p>Port Type: {% if
+					interface.port_type %} {{interface.port_type}}{% if interface.snmp_version %}v{{ interface.snmp_version }}{% endif %} {% else %} None
+					{% endif %}</p>
 				</div>
 				<div class="tab-interface">Addresses:</div>
 				{% for address in interface.addresses %}
 				<div class="tab-address">
-					IP address: {{ address.address }}{% if address.dns_name %}, DNS Name: {{ address.dns_name }}{% endif %}
+					<p>IP address: {{ address.address }}{% if address.dns_name %}, DNS Name: {{ address.dns_name }}{% endif %}</p>
 				</div>
 				{% endfor %} {% endfor %}
-				<div>
+				<p>
 					Hostgroup: {{ device.hostgroup }}, {% if device.description%}
 					Description: {{ device.description }} ,{% endif %} Status: {{
 					device.status }}
-				</div>
-				<div>Templates: {{ device.templates }}</div>
+				</p>
+				<p>Templates: {{ device.templates }}</p>
 			</div>
 			<div class="cell cell-zb cell-empty">Not present in Zabbix</div>
 		</div>
@@ -371,22 +416,22 @@
 				<div>Interfaces:</div>
 				{% for interface in device.interfaces %}
 				<div class="tab-interface">
-					Port Type: {% if
-					interface.port_type %} {{interface.port_type}} {% else %} None
-					{% endif %}
+					<p>Port Type: {% if
+					interface.port_type %} {{interface.port_type}}{% if interface.snmp_version %}v{{ interface.snmp_version }}{% endif %} {% else %} None
+					{% endif %}</p>
 				</div>
 				<div class="tab-interface">Addresses:</div>
 				{% for address in interface.addresses %}
 				<div class="tab-address">
-					IP address: {{ address.address }}{% if address.dns_name %}, DNS Name: {{ address.dns_name }}{% endif %}
+					<p>IP address: {{ address.address }}{% if address.dns_name %}, DNS Name: {{ address.dns_name }}{% endif %}</p>
 				</div>
 				{% endfor %} {% endfor %}
-				<div>
+				<p>
 					Hostgroup: {{ device.hostgroup }}, {% if device.description%}
 					Description: {{ device.description }} ,{% endif %} Status: {{
 					device.status }}
-				</div>
-				<div>Templates: {{ device.templates }}</div>
+				</p>
+				<p>Templates: {{ device.templates }}</p>
 			</div>
 		</div>
 		<div class="cell-actions">

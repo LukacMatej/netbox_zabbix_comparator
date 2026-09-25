@@ -211,6 +211,31 @@ def find_nb_device_role_id(device_role: str) -> int:
     return -1
 
 
+def find_nb_device_id(name: str) -> int:
+    """Finds the Netbox device ID based on the provided device name.
+    Args:
+        name (str): The name of the device to find.
+    Returns:
+        int: The ID of the device if found, otherwise -1.
+    """
+    log.logger.info("Finding Netbox device ID for %s.", name)
+    nb_ip = os.environ.get("NETBOX_IP")
+    nb_key = os.environ.get("NETBOX_KEY")
+    response = requests.get(
+        f"{nb_ip}/api/dcim/devices/?name={name}",
+        headers=_netbox_headers(nb_key),
+        timeout=REQUEST_TIMEOUT,
+    )
+    if response.status_code == 200:
+        data = json.loads(response.text)
+        if data["count"] > 0:
+            device_id = data["results"][0]["id"]
+            log.logger.info("Found Netbox device ID: %s for %s.", device_id, name)
+            return int(device_id)
+    log.logger.error("Failed to find Netbox device ID for %s: %s", name, response.text)
+    return -1
+
+
 def format_address(address: str) -> str:
     """
     Extract the IP address from a CIDR notation string.
@@ -554,6 +579,11 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                 port_types = get_port_types(
                     custom_fields, device, device_role_port_type_map
                 )
+                resolved_port_types = [
+                    resolved
+                    for raw_port_type in sorted(port_types)
+                    if (resolved := split_snmp_port_type(raw_port_type)) is not None
+                ] if port_types else []
                 primary_ip, primary_dns = get_primary_ip_info(device)
                 mac_address = get_mac_address(primary_ip_interface)
 
@@ -576,7 +606,8 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                                 if primary_ip_interface
                                 else "",
                                 mac_address=mac_address,
-                                port_type=port_type,
+                                port_type=resolved_port_type,
+                                snmp_version=resolved_snmp_version,
                                 addresses=[
                                     address_model(
                                         address=primary_ip,
@@ -584,8 +615,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                                     )
                                 ],
                             )
-                            for port_type in sorted(port_types)
-                            if port_types
+                            for resolved_port_type, resolved_snmp_version in resolved_port_types
                         ],
                     )
                 )
@@ -845,6 +875,19 @@ def find_primary_ip_interface(
     return primary_interface
 
 
+def _zb_snmp_version(interface: dict) -> str:
+    """Derives the SNMP version from a Zabbix interface's `details.version`.
+
+    Only meaningful for type "2" (SNMP) interfaces. Zabbix reports "3" for
+    SNMPv3; anything else (missing, "1", "2") defaults to SNMPv2, matching
+    this app's own default.
+    """
+    if interface["type"] != "2":
+        return ""
+    version = str(interface.get("details", {}).get("version", ""))
+    return "3" if version == "3" else "2"
+
+
 def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
     """
     Retrieve devices from a Zabbix instance via its API.
@@ -868,10 +911,9 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
     """
     params: dict[str, Any] = {
         "output": ["hostid", "host", "name", "status", "description"],
-        "selectInterfaces": ["interfaceid", "dns", "ip", "type"],
+        "selectInterfaces": ["interfaceid", "dns", "ip", "type", "details"],
         "selectHostGroups": ["groupid", "name"],
         "selectParentTemplates": ["templateid", "name"],
-        "filter": {"status": [0]},
     }
     try:
         zb_device_list: list[device_model] = []
@@ -911,6 +953,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
                                 name=interface["dns"],
                                 mac_address="",
                                 port_type=interface["type"],
+                                snmp_version=_zb_snmp_version(interface),
                                 addresses=[
                                     address_model(
                                         address=interface["ip"],
@@ -929,6 +972,33 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
         log.logger.error("Request failed: %s", e)
         return f"Request failed: {e}"
     return zb_device_list
+
+
+_SNMP_VERSION_CHOICES = {"SNMPv2": "2", "SNMPv3": "3"}
+_PORT_TYPE_PASSTHROUGH = {
+    "Agent": "Agent",
+    "1": "Agent",
+    "IPMI": "IPMI",
+    "3": "IPMI",
+    "JMX": "JMX",
+    "4": "JMX",
+}
+
+
+def split_snmp_port_type(raw_port_type: str) -> tuple[str, str] | None:
+    """Resolves a NetBox `zabbix_port_type` choice into (port_type, snmp_version).
+
+    "SNMPv2"/"SNMPv3" resolve to ("SNMP", "2"/"3"). "Agent"/"IPMI"/"JMX" (by
+    name or by Zabbix's own numeric code) pass through unchanged with no SNMP
+    version. Anything else — including the removed plain "SNMP"/"2" choice —
+    is unrecognized: returns None so the caller drops it, treating the device
+    as if that port type were never configured.
+    """
+    if raw_port_type in _SNMP_VERSION_CHOICES:
+        return "SNMP", _SNMP_VERSION_CHOICES[raw_port_type]
+    if raw_port_type in _PORT_TYPE_PASSTHROUGH:
+        return _PORT_TYPE_PASSTHROUGH[raw_port_type], ""
+    return None
 
 
 def uniform_port_type(port_type: str, numbered: bool = False) -> str:
@@ -1047,11 +1117,16 @@ def parse_webhook_update(data: dict) -> device_model:
     postchange = data["snapshots"].get("postchange") or {}
 
     custom_fields = postchange.get("custom_fields") or device_data.get("custom_fields", {})
-    # zabbix_port_type is a NetBox multi-select custom field, e.g. ["1"]
+    # zabbix_port_type is a NetBox multi-select custom field, e.g. ["SNMPv2"]
     zabbix_port_type_list = custom_fields.get("zabbix_port_type") or []
-    zabbix_port_type = zabbix_port_type_list[0] if zabbix_port_type_list else "1"
+    raw_port_type = zabbix_port_type_list[0] if zabbix_port_type_list else "1"
+    resolved_port_type = split_snmp_port_type(raw_port_type)
 
-    primary_interface = get_primary_interface(device_data, zabbix_port_type)
+    primary_interface = (
+        get_primary_interface(device_data, resolved_port_type[0], resolved_port_type[1])
+        if resolved_port_type is not None
+        else None
+    )
     interfaces = [primary_interface] if primary_interface else []
     role_data = device_data.get("role")
     role = role_data.get("name") if role_data else ""
@@ -1106,11 +1181,13 @@ def query_netbox_role_templates(role: str) -> list[str]:
     templates_roles = custom_fields.get("zabbix_templates") or []
     return templates_roles
 
-def get_primary_interface(device_data: dict, zabbix_port_type: str) -> interface_model | None:
+def get_primary_interface(
+    device_data: dict, zabbix_port_type: str, snmp_version: str = ""
+) -> interface_model | None:
     """
     Resolve the interface holding the device's primary IPv4 address.
-    port_type comes from the device's zabbix_port_type custom field
-    (1=Agent, 2=SNMP, 3=IPMI, 4=JMX) — NOT the physical NetBox interface type.
+    port_type/snmp_version come from resolving the device's zabbix_port_type
+    custom field via split_snmp_port_type — NOT the physical NetBox interface type.
     """
     netbox_ip = os.environ.get("NETBOX_IP")
     netbox_key = os.environ.get("NETBOX_KEY")
@@ -1151,7 +1228,8 @@ def get_primary_interface(device_data: dict, zabbix_port_type: str) -> interface
             address_model(address=str(primary_ip4["address"]).split("/")[0], dns_name=primary_ip4.get("dns_name", "")),
         ],
         mac_address=mac,
-        port_type=zabbix_port_type,  # e.g. "1" — matches Zabbix's own numeric type codes
+        port_type=zabbix_port_type,
+        snmp_version=snmp_version,
     )
 
 
