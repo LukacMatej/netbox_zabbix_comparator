@@ -562,7 +562,7 @@ def view_logs(request: Request) -> Response:
 async def webhook_create(request: Request):
     """Handle webhook create event."""
     data = await request.json()
-    nb_device: Device = await run_in_threadpool(ds.parse_webhook, data)
+    nb_device: Device = await run_in_threadpool(ds.parse_webhook_create, data)
     log.logger.info("Webhook create event received: %s", data)
     log.logger.info(f"Creating Zabbix device for device_id: {nb_device.name}")
     try:

@@ -435,5 +435,38 @@ class DeviceServiceTests(unittest.TestCase):
         self.assertEqual(result.hostgroup, ["DevGroup"])
         self.assertEqual(result.templates, ["DevTpl"])
 
+    @patch("app.device.service.device_service.query_netbox_role_custom_fields")
+    def test_parse_webhook_create_hostgroups_from_role(self, role_mock):
+        """Webhook create should fall back to role hostgroups when the device has none."""
+        role_mock.return_value = {"zabbix_hostgroups": ["RoleGroup"]}
+        data = {
+            "data": {
+                "name": "sw1",
+                "role": {"name": "Switch"},
+                "custom_fields": {"zabbix_hostgroups": []},
+                "status": {"value": "active"},
+            }
+        }
+
+        result = ds.parse_webhook_create(data)
+        role_mock.assert_called_once_with("Switch")
+        self.assertEqual(result.name, "sw1")
+        self.assertEqual(result.hostgroup, ["RoleGroup"])
+
+    @patch("app.device.service.device_service.query_netbox_role_custom_fields")
+    def test_parse_webhook_create_device_hostgroups_skip_role_lookup(self, role_mock):
+        """Webhook create shouldn't query the role when the device sets its own hostgroups."""
+        data = {
+            "data": {
+                "name": "sw1",
+                "role": {"name": "Switch"},
+                "custom_fields": {"zabbix_hostgroups": ["DevGroup"]},
+            }
+        }
+
+        result = ds.parse_webhook_create(data)
+        role_mock.assert_not_called()
+        self.assertEqual(result.hostgroup, ["DevGroup"])
+
 if __name__ == "__main__":
     unittest.main()

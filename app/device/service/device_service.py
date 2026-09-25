@@ -1181,6 +1181,30 @@ def parse_webhook(data: dict) -> device_model:
     )
 
 
+def parse_webhook_create(data: dict) -> device_model:
+    """Build the Device for a NetBox create webhook, resolving hostgroups via the device role."""
+    device = parse_webhook(data)
+    device_data = data["data"]
+    custom_fields = device_data.get("custom_fields") or {}
+    if custom_fields.get("zabbix_hostgroups"):
+        return device
+
+    role_data = device_data.get("role")
+    role = role_data.get("name") if role_data else ""
+    role_custom_fields: dict[str, Any] = {}
+    if role:
+        try:
+            role_custom_fields = query_netbox_role_custom_fields(role)
+        except requests.exceptions.HTTPError:
+            role_custom_fields = {}
+    device.hostgroup = get_nb_hostgroups(
+        device_data,
+        custom_fields,
+        {role: role_custom_fields.get("zabbix_hostgroups") or []} if role else {},
+    )
+    return device
+
+
 def parse_webhook_update(data: dict) -> device_model:
     """Build the Device that should be synced into Zabbix from a NetBox webhook."""
     device_data = data["data"]
