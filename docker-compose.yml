@@ -1,6 +1,6 @@
 service:
   netbox_zabbix:
-    image: netbox_zabbix:{version}
+    image: docker.io/netsystemcz/netbox_zabbix:20260925
 
     env_file:
       - .env
