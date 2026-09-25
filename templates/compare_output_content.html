@@ -292,7 +292,8 @@
 		</div>
 		<div style="display: flex; flex-direction: row; justify-content: center;">
 		    <div class="cell-actions">
-			    <div class="button-create">
+				{% if ' templates ' in diff_text %}
+		        <div class="button-create">
 				    <button
 					    type="button"
 					    hx-post="{{ url_for('synchronize_netbox_templates') }}"
@@ -308,6 +309,7 @@
 					    </strong>
 				    </button>
 			    </div>
+				{% endif %}
 		    </div>
 		    <div class="cell-actions">
 			    <div class="button-create">
@@ -327,6 +329,7 @@
 				    </button>
 			    </div>
 		    </div>
+		    {% if ' templates ' in diff_text %}
 		    <div class="cell-actions">
 			    <div class="button-create">
 				    <button
@@ -345,6 +348,7 @@
 				    </button>
 			    </div>
 		    </div>
+		    {% endif %}
 		</div>
 	</div>
 	{% endfor %}
