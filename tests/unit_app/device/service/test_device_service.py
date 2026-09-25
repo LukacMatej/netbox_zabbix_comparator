@@ -318,5 +318,155 @@ class DeviceServiceTests(unittest.TestCase):
         self.assertEqual([device.name for device in result], ["zb1"])
 
 
+    def test_get_nb_hostgroups_priority(self):
+        """Hostgroups resolve device custom field > device role > config context."""
+        device = {
+            "name": "sw1",
+            "role": {"name": "Switch"},
+            "config_context": {"zabbix": {"hostgroups": ["CtxGroup"]}},
+        }
+        role_map = {"Switch": ["RoleGroup"]}
+
+        self.assertEqual(
+            ds.get_nb_hostgroups(device, {"zabbix_hostgroups": ["DevGroup"]}, role_map),
+            ["DevGroup"],
+        )
+        self.assertEqual(
+            ds.get_nb_hostgroups(device, {"zabbix_hostgroups": None}, role_map),
+            ["RoleGroup"],
+        )
+        self.assertEqual(
+            ds.get_nb_hostgroups(device, {"zabbix_hostgroups": []}, {"Switch": []}),
+            ["CtxGroup"],
+        )
+        self.assertEqual(
+            ds.get_nb_hostgroups(
+                {"name": "sw1", "role": None, "config_context": None}, {}, role_map
+            ),
+            [],
+        )
+
+    def test_get_device_role_hostgroup_map(self):
+        """Role hostgroup map should tolerate missing/empty custom fields."""
+        result = ds.get_device_role_hostgroup_map([
+            {"name": "Switch", "custom_fields": {"zabbix_hostgroups": ["RoleGroup"]}},
+            {"name": "Router", "custom_fields": {"zabbix_hostgroups": None}},
+            {"name": "Server", "custom_fields": None},
+        ])
+        self.assertEqual(result, {"Switch": ["RoleGroup"], "Router": [], "Server": []})
+
+    @patch("app.device.service.device_service.requests.post")
+    def test_get_nb_devices_hostgroups_from_role(self, post_mock):
+        """A device without zabbix_hostgroups should inherit hostgroups from its role."""
+        response = Mock(status_code=200)
+        response.request = Mock(method="POST", url="http://nb/graphql", headers={}, body="{}")
+        response.text = json.dumps({
+            "data": {
+                "device_list": [
+                    {
+                        "name": "sw1",
+                        "description": "d",
+                        "status": "active",
+                        "config_context": {},
+                        "custom_fields": {"zabbix_hostgroups": None, "zabbix_templates": None, "zabbix_port_type": None},
+                        "primary_ip4": {"address": "10.0.0.1/24", "dns_name": "sw1.local"},
+                        "interfaces": [],
+                        "role": {"name": "Switch"},
+                    }
+                ],
+                "device_role_list": [
+                    {
+                        "name": "Switch",
+                        "custom_fields": {
+                            "zabbix_hostgroups": ["RoleGroup"],
+                            "zabbix_templates": ["tpl"],
+                            "zabbix_port_type": ["Agent"],
+                        },
+                    }
+                ],
+            }
+        })
+        post_mock.return_value = response
+
+        result = ds.get_nb_devices("k", "http://nb/graphql")
+        self.assertIsInstance(result, list)
+        self.assertEqual(result[0].hostgroup, ["RoleGroup"])
+        self.assertEqual(result[0].templates, ["tpl"])
+
+    @patch("app.device.service.device_service.get_primary_interface", return_value=None)
+    @patch("app.device.service.device_service.query_netbox_role_custom_fields")
+    def test_parse_webhook_update_hostgroups_from_role(self, role_mock, _iface_mock):
+        """Webhook update should fall back to role hostgroups/templates in one role lookup."""
+        role_mock.return_value = {
+            "zabbix_hostgroups": ["RoleGroup"],
+            "zabbix_templates": ["RoleTpl"],
+        }
+        data = {
+            "data": {"name": "sw1", "role": {"name": "Switch"}, "config_context": {}},
+            "snapshots": {
+                "postchange": {
+                    "name": "sw1",
+                    "custom_fields": {"zabbix_hostgroups": [], "zabbix_templates": []},
+                }
+            },
+        }
+
+        result = ds.parse_webhook_update(data)
+        role_mock.assert_called_once_with("Switch")
+        self.assertEqual(result.hostgroup, ["RoleGroup"])
+        self.assertEqual(result.templates, ["RoleTpl"])
+
+    @patch("app.device.service.device_service.get_primary_interface", return_value=None)
+    @patch("app.device.service.device_service.query_netbox_role_custom_fields")
+    def test_parse_webhook_update_device_fields_skip_role_lookup(self, role_mock, _iface_mock):
+        """When the device sets both hostgroups and templates, NetBox isn't queried for the role."""
+        data = {
+            "data": {"name": "sw1", "role": {"name": "Switch"}, "config_context": {}},
+            "snapshots": {
+                "postchange": {
+                    "name": "sw1",
+                    "custom_fields": {"zabbix_hostgroups": ["DevGroup"], "zabbix_templates": ["DevTpl"]},
+                }
+            },
+        }
+
+        result = ds.parse_webhook_update(data)
+        role_mock.assert_not_called()
+        self.assertEqual(result.hostgroup, ["DevGroup"])
+        self.assertEqual(result.templates, ["DevTpl"])
+
+    @patch("app.device.service.device_service.query_netbox_role_custom_fields")
+    def test_parse_webhook_create_hostgroups_from_role(self, role_mock):
+        """Webhook create should fall back to role hostgroups when the device has none."""
+        role_mock.return_value = {"zabbix_hostgroups": ["RoleGroup"]}
+        data = {
+            "data": {
+                "name": "sw1",
+                "role": {"name": "Switch"},
+                "custom_fields": {"zabbix_hostgroups": []},
+                "status": {"value": "active"},
+            }
+        }
+
+        result = ds.parse_webhook_create(data)
+        role_mock.assert_called_once_with("Switch")
+        self.assertEqual(result.name, "sw1")
+        self.assertEqual(result.hostgroup, ["RoleGroup"])
+
+    @patch("app.device.service.device_service.query_netbox_role_custom_fields")
+    def test_parse_webhook_create_device_hostgroups_skip_role_lookup(self, role_mock):
+        """Webhook create shouldn't query the role when the device sets its own hostgroups."""
+        data = {
+            "data": {
+                "name": "sw1",
+                "role": {"name": "Switch"},
+                "custom_fields": {"zabbix_hostgroups": ["DevGroup"]},
+            }
+        }
+
+        result = ds.parse_webhook_create(data)
+        role_mock.assert_not_called()
+        self.assertEqual(result.hostgroup, ["DevGroup"])
+
 if __name__ == "__main__":
     unittest.main()

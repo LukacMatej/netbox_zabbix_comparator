@@ -521,6 +521,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
 
         device_role_map = get_device_role_map(device_role_list)
         device_role_port_type_map = get_device_role_port_type_map(device_role_list)
+        device_role_hostgroup_map = get_device_role_hostgroup_map(device_role_list)
         device_list: list[device_model] = []
 
         for device in devices:
@@ -590,9 +591,9 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                 device_list.append(
                     device_model(
                         name=device["name"],
-                        hostgroup=custom_fields["zabbix_hostgroups"]
-                        if custom_fields["zabbix_hostgroups"]
-                        else "",
+                        hostgroup=get_nb_hostgroups(
+                            device, custom_fields, device_role_hostgroup_map
+                        ),
                         description=device["description"],
                         templates=(
                             sorted(device_templates)
@@ -657,6 +658,48 @@ def get_port_types(
         device["config_context"] if isinstance(device["config_context"], dict) else {}
     )
     return config_context["zabbix"]["port_type"] if "zabbix" in config_context else []
+
+
+def get_nb_hostgroups(
+    device: dict[str, Any],
+    custom_fields: dict[str, Any],
+    device_role_hostgroup_map: dict[str, list[str]],
+) -> list[str]:
+    """
+    Retrieve Zabbix hostgroups for a device from custom fields, device role, or config context.
+    Args:
+        device (dict): Device data containing role and config_context.
+        custom_fields (dict): Device custom fields.
+        device_role_hostgroup_map (dict): Mapping of device roles to hostgroups.
+    Returns:
+        list[str]: List of hostgroup names, or an empty list if none are configured.
+    """
+    device_hostgroups = custom_fields.get("zabbix_hostgroups")
+    if isinstance(device_hostgroups, list) and len(device_hostgroups) > 0:
+        return [str(hostgroup) for hostgroup in device_hostgroups]
+
+    role_name = device["role"]["name"] if device.get("role") else None
+    if role_name and len(device_role_hostgroup_map.get(role_name, [])) > 0:
+        log.logger.info(
+            "Device %s has Zabbix hostgroups from device role %s: %s",
+            device.get("name"),
+            role_name,
+            device_role_hostgroup_map[role_name],
+        )
+        return device_role_hostgroup_map[role_name]
+
+    config_context = (
+        device.get("config_context")
+        if isinstance(device.get("config_context"), dict)
+        else {}
+    )
+    zabbix_context = config_context.get("zabbix") if config_context else None
+    config_hostgroups = (
+        zabbix_context.get("hostgroups") if isinstance(zabbix_context, dict) else None
+    )
+    if isinstance(config_hostgroups, list):
+        return [str(hostgroup) for hostgroup in config_hostgroups]
+    return []
 
 
 def get_mac_address(primary_ip_interface: dict[str, Any] | None) -> str:
@@ -845,6 +888,33 @@ def get_device_role_port_type_map(
             log.logger.warning("Missing key in device role data: %s", e)
             continue
     return device_role_port_type_map
+
+
+def get_device_role_hostgroup_map(
+    device_role_list: list[dict[str, Any]],
+) -> dict[str, list[str]]:
+    """
+    Create a mapping of device roles to their associated Zabbix hostgroups based on NetBox device role data.
+    Args:
+        device_role_list (list[dict[str, Any]]): A list of device role dictionaries from NetBox, each containing a name and custom fields.
+    Returns:
+        dict[str, list[str]]: A mapping where the key is the device role name and the value is a list of Zabbix hostgroups associated with that role.
+    """
+    device_role_hostgroup_map: dict[str, list[str]] = {}
+    for device_role in device_role_list:
+        role_name = device_role.get("name")
+        custom_fields = device_role.get("custom_fields") or {}
+        zabbix_hostgroups = custom_fields.get("zabbix_hostgroups") or []
+        if role_name and isinstance(zabbix_hostgroups, list):
+            device_role_hostgroup_map[role_name] = [
+                str(hostgroup) for hostgroup in zabbix_hostgroups
+            ]
+            log.logger.info(
+                "Device role %s has Zabbix hostgroups: %s",
+                role_name,
+                device_role_hostgroup_map[role_name],
+            )
+    return device_role_hostgroup_map
 
 
 def find_primary_ip_interface(
@@ -1111,6 +1181,30 @@ def parse_webhook(data: dict) -> device_model:
     )
 
 
+def parse_webhook_create(data: dict) -> device_model:
+    """Build the Device for a NetBox create webhook, resolving hostgroups via the device role."""
+    device = parse_webhook(data)
+    device_data = data["data"]
+    custom_fields = device_data.get("custom_fields") or {}
+    if custom_fields.get("zabbix_hostgroups"):
+        return device
+
+    role_data = device_data.get("role")
+    role = role_data.get("name") if role_data else ""
+    role_custom_fields: dict[str, Any] = {}
+    if role:
+        try:
+            role_custom_fields = query_netbox_role_custom_fields(role)
+        except requests.exceptions.HTTPError:
+            role_custom_fields = {}
+    device.hostgroup = get_nb_hostgroups(
+        device_data,
+        custom_fields,
+        {role: role_custom_fields.get("zabbix_hostgroups") or []} if role else {},
+    )
+    return device
+
+
 def parse_webhook_update(data: dict) -> device_model:
     """Build the Device that should be synced into Zabbix from a NetBox webhook."""
     device_data = data["data"]
@@ -1131,27 +1225,38 @@ def parse_webhook_update(data: dict) -> device_model:
     role_data = device_data.get("role")
     role = role_data.get("name") if role_data else ""
 
+    role_custom_fields: dict[str, Any] = {}
+    if not custom_fields.get("zabbix_templates") or not custom_fields.get("zabbix_hostgroups"):
+        try:
+            role_custom_fields = query_netbox_role_custom_fields(role)
+        except requests.exceptions.HTTPError:
+            role_custom_fields = {}
+
     templates: list[str]
     if custom_fields.get("zabbix_templates"):
         templates = custom_fields.get("zabbix_templates")
     else:
-        try:
-            templates = query_netbox_role_templates(role)
-        except requests.exceptions.HTTPError:
-            templates = []
+        templates = role_custom_fields.get("zabbix_templates") or []
     if not templates:
         templates = device_data.get("config_context", {}).get("zabbix", []).get("templates", [])
+
+    hostgroups = get_nb_hostgroups(
+        device_data,
+        custom_fields,
+        {role: role_custom_fields.get("zabbix_hostgroups") or []} if role else {},
+    )
     return device_model(
         name=postchange.get("name", device_data.get("name", "")),
         interfaces=interfaces,
-        hostgroup=custom_fields.get("zabbix_hostgroups", []),
+        hostgroup=hostgroups,
         description=postchange.get("description", ""),
         templates=templates,
         status=postchange.get("status", "Inactive"),
     )
 
 
-def query_netbox_role_templates(role: str) -> list[str]:
+def query_netbox_role_custom_fields(role: str) -> dict[str, Any]:
+    """Fetch the custom fields of a NetBox device role by name ({} if unknown)."""
     netbox_ip: str | None = os.environ.get("NETBOX_IP")
     netbox_key: str | None = os.environ.get("NETBOX_KEY")
     if netbox_ip is None:
@@ -1159,7 +1264,7 @@ def query_netbox_role_templates(role: str) -> list[str]:
         # which isn't a requests.exceptions.HTTPError, so parse_webhook_update's
         # `except requests.exceptions.HTTPError` wouldn't catch it.
         log.logger.error("NetBox IP not set in environment variables.")
-        return []
+        return {}
     headers = {"Authorization": f"Token {netbox_key}"} if netbox_key else {}
     query = """
     {
@@ -1177,9 +1282,7 @@ def query_netbox_role_templates(role: str) -> list[str]:
     role_dict = {r.get("name"): r for r in role_data}
 
     role_entry = role_dict.get(role, {})
-    custom_fields = role_entry.get("custom_fields") or {}
-    templates_roles = custom_fields.get("zabbix_templates") or []
-    return templates_roles
+    return role_entry.get("custom_fields") or {}
 
 def get_primary_interface(
     device_data: dict, zabbix_port_type: str, snmp_version: str = ""

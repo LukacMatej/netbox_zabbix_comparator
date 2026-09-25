@@ -33,9 +33,9 @@ docker run -d \
 
 ## Nastavení pro správný chod aplikace
 
-### Priorita výběru Templates a Port Types
+### Priorita výběru Templates, Port Types a Host Groups
 
-Systém používá hierarchickou prioritu při výběru Templates a Port Types. Aplikace hledá hodnoty v tomto pořadí (1 = nejvyšší priorita):
+Systém používá hierarchickou prioritu při výběru Templates, Port Types a Host Groups. Aplikace hledá hodnoty v tomto pořadí (1 = nejvyšší priorita):
 
 #### 1. Device Custom Fields (nejvyšší priorita)
 
@@ -43,6 +43,7 @@ Nastavit Custom Fields na individuální zařízení:
 
 - `zabbix_templates` - seznam Zabbix šablon pro konkrétní zařízení
 - `zabbix_port_type` - typ portu pro konkrétní zařízení
+- `zabbix_hostgroups` - seznam Zabbix host groups pro konkrétní zařízení
 
 #### 2. Device Role Custom Fields
 
@@ -50,6 +51,7 @@ Nastavit Custom Fields na device role s výběrem Custom Field Choices:
 
 - `zabbix_templates` - seznam šablon pro všechna zařízení s tímto rolem
 - `zabbix_port_type` - typ portu pro všechna zařízení s tímto rolem
+- `zabbix_hostgroups` - seznam host groups pro všechna zařízení s tímto rolem
 
 #### 3. Device Config Context (nejnižší priorita)
 
@@ -64,6 +66,9 @@ V Netboxu lze nastavit dědičný config context pro device role, který se auto
         "templates": [
             "Template1",
             "Template2"
+        ],
+        "hostgroups": [
+            "Hostgroup1"
         ]
     }
 }
@@ -95,7 +100,7 @@ V Netboxu lze nastavit dědičný config context pro device role, který se auto
 Je připraven Netbox script, který synchronizuje Custom Field Choices s názvem `zabbix_hostgroups` s host groups v Zabbixu:
 
 - Custom Field Choices napojit na Custom Field s názvem `zabbix_hostgroups`
-- Nastavit jako multi-select na DCIM > DEVICE
+- Nastavit jako multi-select na DCIM > DEVICE a DCIM > DEVICE ROLE (hodnoty z role se použijí, pokud je zařízení nemá nastavené, viz priorita výše)
 - Defaultní host group v Zabbixu je nastavena na "Netbox" pro kontrolu všech zařízení vytvořených synchronizací
 
 ### Vyloučené Hostgroupy

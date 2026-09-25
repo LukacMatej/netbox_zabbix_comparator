@@ -34,9 +34,9 @@ docker run -d \
 
 ## Setup for Proper Application Operation
 
-### Priority for Selecting Templates and Port Types
+### Priority for Selecting Templates, Port Types and Host Groups
 
-The system uses a hierarchical priority when selecting Templates and Port Types. The application looks for values in the following order (1 = highest priority):
+The system uses a hierarchical priority when selecting Templates, Port Types and Host Groups. The application looks for values in the following order (1 = highest priority):
 
 #### 1. Device Custom Fields (highest priority)
 
@@ -44,6 +44,7 @@ Set Custom Fields on individual devices:
 
 * `zabbix_templates` - list of Zabbix templates for a specific device
 * `zabbix_port_type` - port type for a specific device
+* `zabbix_hostgroups` - list of Zabbix host groups for a specific device
 
 #### 2. Device Role Custom Fields
 
@@ -51,6 +52,7 @@ Set Custom Fields on the device role with a selection of Custom Field Choices:
 
 * `zabbix_templates` - list of templates for all devices with this role
 * `zabbix_port_type` - port type for all devices with this role
+* `zabbix_hostgroups` - list of host groups for all devices with this role
 
 #### 3. Device Config Context (lowest priority)
 
@@ -65,6 +67,9 @@ In Netbox, you can set an inheritable config context for device roles, which is 
         "templates": [
             "Template1",
             "Template2"
+        ],
+        "hostgroups": [
+            "Hostgroup1"
         ]
     }
 }
@@ -97,7 +102,7 @@ In Netbox, you can set an inheritable config context for device roles, which is 
 A Netbox script is available to synchronize Custom Field Choices named `zabbix_hostgroups` with host groups in Zabbix:
 
 * Link Custom Field Choices to a Custom Field named `zabbix_hostgroups`
-* Set it as multi-select on DCIM > DEVICE
+* Set it as multi-select on DCIM > DEVICE and DCIM > DEVICE ROLE (role values are used when the device has none, see the priority above)
 * The default host group in Zabbix is set to "Netbox" to keep track of all devices created by the synchronization
 
 ### Excluded Hostgroups
