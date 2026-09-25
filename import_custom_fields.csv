@@ -1,0 +1,4 @@
+name,object_types,type,required,unique,choice_set,search_weight,filter_logic
+zabbix_hostgroups,"dcim.devicerole,dcim.device",multiselect,false,false,zabbix_hostgroups,1000,loose
+zabbix_port_type,"dcim.devicerole,dcim.device",multiselect,false,false,zabbix_port_type,1000,loose
+zabbix_templates,"dcim.devicerole,dcim.device",multiselect,false,false,zabbix_templates,1000,loose
