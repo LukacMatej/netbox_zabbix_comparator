@@ -1,0 +1,15 @@
+Switch 3
+
+Interfaces:
+Port Type: SNMPv3
+
+Addresses:
+IP address: 10.0.0.3
+
+Hostgroup: Netbox
+
+Description: ahoj
+
+Status: Active
+
+Templates: Apache by HTTP, Cisco IOS by SNMP

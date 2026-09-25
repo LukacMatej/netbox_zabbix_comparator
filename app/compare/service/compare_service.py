@@ -326,7 +326,7 @@ def find_differences(
     diffs, same, fields_counter, same_count = _compare_device_fields(
         nb_device,
         zb_device,
-        exclude=["description", "status", "interfaces"],
+        exclude=["description", "interfaces"],
     )
 
     # Compare address fields nested in interfaces

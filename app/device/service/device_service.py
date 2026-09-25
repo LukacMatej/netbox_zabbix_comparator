@@ -914,7 +914,6 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
         "selectInterfaces": ["interfaceid", "dns", "ip", "type", "details"],
         "selectHostGroups": ["groupid", "name"],
         "selectParentTemplates": ["templateid", "name"],
-        "filter": {"status": [0]},
     }
     try:
         zb_device_list: list[device_model] = []
