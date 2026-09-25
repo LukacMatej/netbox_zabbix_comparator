@@ -48,6 +48,7 @@ from fastapi.responses import (
 )
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
+from starlette.concurrency import run_in_threadpool
 
 from app.compare.service import compare_service as ct
 from app.compare.service import synchronization_service as ss
@@ -84,13 +85,22 @@ def dict_to_interface(data: dict) -> Interface:
     )
 
 
+def _as_list(value: Any) -> list[str]:
+    """Normalizes a JSON list or a ", "-joined string into a list of non-empty strings."""
+    if isinstance(value, list):
+        return [str(item) for item in value if item]
+    if not value:
+        return []
+    return [item for item in str(value).split(", ") if item]
+
+
 def dict_to_device(data: dict) -> Device:
     return Device(
         name=data["name"],
         interfaces=[dict_to_interface(i) for i in data["interfaces"]],
-        hostgroup=str(data["hostgroup"]).split(", "),
+        hostgroup=_as_list(data["hostgroup"]),
         description=data["description"],
-        templates=str(data["templates"]).split(", "),
+        templates=_as_list(data["templates"]),
         status=data["status"],
     )
 
@@ -193,7 +203,9 @@ async def synchronize_zabbix_templates(request: Request) -> Response:
     error_log = ""
     sync_output = sync_output_model()
     try:
-        success = ss.synchronize_templates(nb_device, zb_device, 1, sync_output)
+        success = await run_in_threadpool(
+            ss.synchronize_templates, nb_device, zb_device, 1, sync_output
+        )
         if not success:
             error_log = str(sync_output)
     except Exception as e:  # pylint: disable=broad-except
@@ -228,7 +240,11 @@ async def synchronize_netbox_templates(request: Request) -> Response:
     error_log = ""
     sync_output = sync_output_model()
     try:
-        success = ss.synchronize_templates(nb_device, zb_device, 2, sync_output)
+        # Must not block the event loop: NetBox's custom validator calls back into
+        # /validate_update on this same server before it saves the PATCH.
+        success = await run_in_threadpool(
+            ss.synchronize_templates, nb_device, zb_device, 2, sync_output
+        )
         if not success:
             error_log = str(sync_output)
     except Exception as e:  # pylint: disable=broad-except
@@ -282,7 +298,7 @@ async def delete_zabbix_device(request: Request) -> Response:
     log.logger.info(f"Deleting Zabbix device for device_id: {device.name}")
     error_log = ""
     try:
-        ds.delete_zabbix_device(device)
+        await run_in_threadpool(ds.delete_zabbix_device, device)
         success = True
     except Exception as e: # pylint: disable=broad-except
         error_log = str(e)
@@ -309,7 +325,7 @@ async def create_zabbix_device(request: Request) -> Response:
     log.logger.info(f"Creating Zabbix device for device_id: {device.name}")
     error_log = ""
     try:
-        ss.create_zabbix_device(device, sync_output_model())
+        await run_in_threadpool(ss.create_zabbix_device, device, sync_output_model())
         success = True
     except Exception as e:  # pylint: disable=broad-except
         log.logger.error(
@@ -348,7 +364,9 @@ async def synchronize_zabbix_device(request: Request) -> Response:
     log.logger.info(f"Synchronizing Zabbix device: {nb_device} -> {zb_device}")
     sync_output = sync_output_model()
     try:
-        ss.apply_differences(differences=difference, sync_output=sync_output)
+        await run_in_threadpool(
+            ss.apply_differences, differences=difference, sync_output=sync_output
+        )
         success = True
     except Exception as e:  # pylint: disable=broad-except
         log.logger.error(
@@ -544,11 +562,11 @@ def view_logs(request: Request) -> Response:
 async def webhook_create(request: Request):
     """Handle webhook create event."""
     data = await request.json()
-    nb_device: Device = ds.parse_webhook(data)
+    nb_device: Device = await run_in_threadpool(ds.parse_webhook, data)
     log.logger.info("Webhook create event received: %s", data)
     log.logger.info(f"Creating Zabbix device for device_id: {nb_device.name}")
     try:
-        ss.create_zabbix_device(nb_device, sync_output_model())
+        await run_in_threadpool(ss.create_zabbix_device, nb_device, sync_output_model())
         response = "True"
         status_code = 200
     except Exception as e:  # pylint: disable=broad-except
@@ -569,14 +587,14 @@ async def webhook_update(request: Request):
     data = await request.json()
     log.logger.info("Webhook update event received: %s", data)
 
-    nb_device = ds.parse_webhook_update(data)
-    zb_device = ds.get_zabbix_device(nb_device.name)
+    nb_device = await run_in_threadpool(ds.parse_webhook_update, data)
+    zb_device = await run_in_threadpool(ds.get_zabbix_device, nb_device.name)
 
     if zb_device is None:
         log.logger.info("No Zabbix host found for %s, skipping sync.", nb_device.name)
         return {"success": "True"}, 200
 
-    differences = ct.compare_devices([nb_device], [zb_device])
+    differences = await run_in_threadpool(ct.compare_devices, [nb_device], [zb_device])
     difference_list = differences[0]
 
     if not difference_list:
@@ -588,7 +606,9 @@ async def webhook_update(request: Request):
 
     sync_output = sync_output_model()
     try:
-        ss.apply_differences(differences=difference, sync_output=sync_output)
+        await run_in_threadpool(
+            ss.apply_differences, differences=difference, sync_output=sync_output
+        )
         response = "True"
         status_code = 200
     except Exception as e:  # pylint: disable=broad-except
@@ -605,11 +625,11 @@ async def webhook_update(request: Request):
 async def webhook_delete(request: Request):
     """Handle webhook create event."""
     data = await request.json()
-    nb_device: Device = ds.parse_webhook(data)
+    nb_device: Device = await run_in_threadpool(ds.parse_webhook, data)
     log.logger.info("Webhook delete event received: %s", data)
     log.logger.info(f"Deleting Zabbix device for device_id: {nb_device.name}")
     try:
-        ds.delete_zabbix_device(nb_device)
+        await run_in_threadpool(ds.delete_zabbix_device, nb_device)
         response = "True"
         status_code = 200
     except Exception as e:  # pylint: disable=broad-except
@@ -656,7 +676,7 @@ async def validate_update(request: Request):
         )
 
     try:
-        result = validator.can_update_device(data)
+        result = await run_in_threadpool(validator.can_update_device, data)
     except Exception as e:  # pylint: disable=broad-except
         log.logger.error(
             "Exception validating device %s: %s",

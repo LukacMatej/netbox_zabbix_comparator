@@ -146,5 +146,38 @@ class SafeIndexTests(unittest.TestCase):
         self.assertIsNone(server.safe_index(None, 0))
 
 
+class DictToDeviceTests(unittest.TestCase):
+    """Tests for dict_to_device list-field parsing (hx-vals json-enc sends JSON lists)."""
+
+    def _payload(self, templates, hostgroup):
+        return {
+            "name": "dev1",
+            "interfaces": [],
+            "hostgroup": hostgroup,
+            "description": "",
+            "templates": templates,
+            "status": "active",
+        }
+
+    def test_json_lists_are_kept_as_lists(self):
+        device = server.dict_to_device(self._payload(["T1", "T2"], ["G1"]))
+        self.assertEqual(device.templates, ["T1", "T2"])
+        self.assertEqual(device.hostgroup, ["G1"])
+
+    def test_empty_list_becomes_empty_list(self):
+        device = server.dict_to_device(self._payload([], []))
+        self.assertEqual(device.templates, [])
+        self.assertEqual(device.hostgroup, [])
+
+    def test_joined_string_is_split(self):
+        device = server.dict_to_device(self._payload("T1, T2", ""))
+        self.assertEqual(device.templates, ["T1", "T2"])
+        self.assertEqual(device.hostgroup, [])
+
+    def test_none_becomes_empty_list(self):
+        device = server.dict_to_device(self._payload(None, None))
+        self.assertEqual(device.templates, [])
+
+
 if __name__ == "__main__":
     unittest.main()
