@@ -1,4 +1,4 @@
 name,extra_choices
 zabbix_hostgroups,choice1:choice1
-zabbix_port_type,choice1:choice1
+zabbix_port_type,"Agent, SNMPv2, SNMPv3, IPMI, JMX"
 zabbix_templates,choice1:choice1
