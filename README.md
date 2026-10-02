@@ -32,7 +32,35 @@ docker run -d \
 
 ```
 
-## Setup for Proper Application Operation
+### Excluded Hostgroups
+
+* `EXCLUDED_HOSTGROUPS` optionally names a single Zabbix hostgroup to exclude from comparison
+* Zabbix hosts belonging to that hostgroup are dropped from the comparison results entirely (they are neither shown as "Zabbix-only", nor matched against NetBox, nor synchronized)
+* This is unrelated to `ZABBIX_DEFAULT_HOSTGROUP`, which only controls which hostgroup a newly-created Zabbix host is assigned to
+* Leave unset (or empty) to include all hosts
+
+### SNMPv2/SNMPv3 Configuration
+
+Since `SNMPv2`/`SNMPv3` are deployment-wide credentials (not per-device), they're read from environment variables rather than NetBox:
+
+* `SNMPV2_MACRO` — the community string (or Zabbix user macro, e.g. `{$SNMP_COMMUNITY}`) used for SNMPv2 interfaces. Defaults to `{$SNMP_COMMUNITY}` if unset.
+* `ZABBIX_SNMPV3_SECURITY_NAME` — SNMPv3 security name
+* `ZABBIX_SNMPV3_SECURITY_LEVEL` — SNMPv3 security level: `0`=noAuthNoPriv, `1`=authNoPriv, `2`=authPriv (default `2`)
+* `ZABBIX_SNMPV3_AUTH_PROTOCOL` — SNMPv3 auth protocol, Zabbix's numeric code (default `1` = SHA1)
+* `ZABBIX_SNMPV3_AUTH_PASSPHRASE` — SNMPv3 auth passphrase
+* `ZABBIX_SNMPV3_PRIV_PROTOCOL` — SNMPv3 priv protocol, Zabbix's numeric code (default `1` = AES128)
+* `ZABBIX_SNMPV3_PRIV_PASSPHRASE` — SNMPv3 priv passphrase
+* `ZABBIX_SNMPV3_CONTEXT_NAME` — SNMPv3 context name (optional)
+
+See Zabbix's API documentation for the full list of `authprotocol`/`privprotocol` numeric codes.
+
+### Zabbix Interface Ports
+
+* `ZABBIX_AGENT_PORT`, `ZABBIX_SNMP_PORT`, `ZABBIX_IPMI_PORT`, `ZABBIX_JMX_PORT` set the port used when creating/updating the corresponding Zabbix interface type
+* `ZABBIX_SNMP_PORT` is shared by both SNMPv2 and SNMPv3 — Zabbix has one port per interface type, not per SNMP version
+* Default to Zabbix's own defaults (10050, 161, 623, 12345) if unset
+
+## Setup Netbox
 
 ### Priority for Selecting Templates, Port Types and Host Groups
 
@@ -104,34 +132,6 @@ A Netbox script is available to synchronize Custom Field Choices named `zabbix_h
 * Link Custom Field Choices to a Custom Field named `zabbix_hostgroups`
 * Set it as multi-select on DCIM > DEVICE and DCIM > DEVICE ROLE (role values are used when the device has none, see the priority above)
 * The default host group in Zabbix is set to "Netbox" to keep track of all devices created by the synchronization
-
-### Excluded Hostgroups
-
-* `EXCLUDED_HOSTGROUPS` optionally names a single Zabbix hostgroup to exclude from comparison
-* Zabbix hosts belonging to that hostgroup are dropped from the comparison results entirely (they are neither shown as "Zabbix-only", nor matched against NetBox, nor synchronized)
-* This is unrelated to `ZABBIX_DEFAULT_HOSTGROUP`, which only controls which hostgroup a newly-created Zabbix host is assigned to
-* Leave unset (or empty) to include all hosts
-
-### Zabbix Interface Ports
-
-* `ZABBIX_AGENT_PORT`, `ZABBIX_SNMP_PORT`, `ZABBIX_IPMI_PORT`, `ZABBIX_JMX_PORT` set the port used when creating/updating the corresponding Zabbix interface type
-* `ZABBIX_SNMP_PORT` is shared by both SNMPv2 and SNMPv3 — Zabbix has one port per interface type, not per SNMP version
-* Default to Zabbix's own defaults (10050, 161, 623, 12345) if unset
-
-### SNMPv2/SNMPv3 Configuration
-
-Since `SNMPv2`/`SNMPv3` are deployment-wide credentials (not per-device), they're read from environment variables rather than NetBox:
-
-* `SNMPV2_MACRO` — the community string (or Zabbix user macro, e.g. `{$SNMP_COMMUNITY}`) used for SNMPv2 interfaces. Defaults to `{$SNMP_COMMUNITY}` if unset.
-* `ZABBIX_SNMPV3_SECURITY_NAME` — SNMPv3 security name
-* `ZABBIX_SNMPV3_SECURITY_LEVEL` — SNMPv3 security level: `0`=noAuthNoPriv, `1`=authNoPriv, `2`=authPriv (default `2`)
-* `ZABBIX_SNMPV3_AUTH_PROTOCOL` — SNMPv3 auth protocol, Zabbix's numeric code (default `1` = SHA1)
-* `ZABBIX_SNMPV3_AUTH_PASSPHRASE` — SNMPv3 auth passphrase
-* `ZABBIX_SNMPV3_PRIV_PROTOCOL` — SNMPv3 priv protocol, Zabbix's numeric code (default `1` = AES128)
-* `ZABBIX_SNMPV3_PRIV_PASSPHRASE` — SNMPv3 priv passphrase
-* `ZABBIX_SNMPV3_CONTEXT_NAME` — SNMPv3 context name (optional)
-
-See Zabbix's API documentation for the full list of `authprotocol`/`privprotocol` numeric codes.
 
 ### Custom Validation
 
