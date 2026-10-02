@@ -11,10 +11,10 @@ WORKDIR /
 ADD server.py /
 ADD app/ /app
 ADD templates/ /templates
-ADD .env /doc
-ADD README.md /doc
-ADD import_custom_field_choices.csv /doc
-ADD import_custom_fields.csv /doc
+COPY .env /doc/.env
+COPY README.md /doc/README.md
+COPY import_custom_field_choices.csv /doc/import_custom_field_choices.csv
+COPY import_custom_fields.csv /doc/import_custom_fields.csv
 
 EXPOSE 7000
 
