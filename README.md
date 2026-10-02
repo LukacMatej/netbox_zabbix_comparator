@@ -118,7 +118,7 @@ A Netbox script is available to synchronize Custom Field Choices named `zabbix_h
 * Link Custom Field Choices to a Custom Field named `zabbix_hostgroups`
 * Set it as multi-select on DCIM > DEVICE and DCIM > DEVICE ROLE (role values are used when the device has none, see the priority above)
 * The default host group in Zabbix is set to the value of the `ZABBIX_DEFAULT_HOSTGROUP` environment variable to keep track of all devices created by the synchronization
-* Put both scripts in netbox-docker/scripts directory
+* Put both scripts in `<netbox-docker-directory>`/scripts directory
 * chmod 755 scripts
 * chmod 644 scripts/*
 * chown -R 999:999 scripts
