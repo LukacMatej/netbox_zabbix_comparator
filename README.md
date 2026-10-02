@@ -2,6 +2,9 @@
 
 The application is used to synchronize device configurations between Netbox and Zabbix, featuring the ability to compare and automatically create/update devices in Zabbix based on the configuration in Netbox.
 
+All necessary files are included in the Docker image.
+Run docker to start the container, then copy over the configuration files.
+
 ## Running Docker
 
 ```bash
@@ -64,6 +67,8 @@ See Zabbix's API documentation for the full list of `authprotocol`/`privprotocol
 
 ### Priority for Selecting Templates, Port Types and Host Groups
 
+Import files with custom field and custom field choices are in project directory or in the Docker container.
+First import import_custom_fields_choices.py, then import_custom_fields.py.
 The system uses a hierarchical priority when selecting Templates, Port Types and Host Groups. The application looks for values in the following order (1 = highest priority):
 
 #### 1. Device Custom Fields (highest priority)
@@ -106,6 +111,26 @@ In Netbox, you can set an inheritable config context for device roles, which is 
 
 **Important:** If a higher priority level contains no values (it is empty or None), the system automatically falls back to a lower priority.
 
+### Zabbix Hostgroups
+
+A Netbox script is available to synchronize Custom Field Choices named `zabbix_hostgroups` with host groups in Zabbix:
+
+* Link Custom Field Choices to a Custom Field named `zabbix_hostgroups`
+* Set it as multi-select on DCIM > DEVICE and DCIM > DEVICE ROLE (role values are used when the device has none, see the priority above)
+* The default host group in Zabbix is set to the value of the `ZABBIX_DEFAULT_HOSTGROUP` environment variable to keep track of all devices created by the synchronization
+* Put both scripts in netbox-docker/scripts directory
+* chmod 755 scripts
+* chmod 644 scripts/*
+* chown -R 999:999 scripts
+* In docker-compose.yml, add the following line:
+  * `<local-path-to-scripts>`:/opt/netbox/netbox/scripts:z,rw
+* In netbox:
+  * Create a data source in Operations > Data Sources
+  * Type: Local
+  * URL: /opt/netbox/netbox/scripts/
+    * Sync data source
+  * Run scripts in Customization > Scripts
+
 ### Templates
 
 * Templates that will be applied to devices in Zabbix
@@ -125,15 +150,7 @@ In Netbox, you can set an inheritable config context for device roles, which is 
 * Used as the connection address for the device in Zabbix
 * Selected from `primary_ip4` on the device
 
-### Zabbix Host Groups
-
-A Netbox script is available to synchronize Custom Field Choices named `zabbix_hostgroups` with host groups in Zabbix:
-
-* Link Custom Field Choices to a Custom Field named `zabbix_hostgroups`
-* Set it as multi-select on DCIM > DEVICE and DCIM > DEVICE ROLE (role values are used when the device has none, see the priority above)
-* The default host group in Zabbix is set to "Netbox" to keep track of all devices created by the synchronization
-
-### Custom Validation
+### Custom Validation - Optional
 
 Zabbix has many dependencies regarding the Port Type - Templates relationship. For this reason, a custom validation config was created to communicate with Zabbix and handle these dependencies.
 
