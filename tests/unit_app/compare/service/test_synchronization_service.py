@@ -300,6 +300,129 @@ class SynchronizationServiceTests(unittest.TestCase):
             any("updated successfully" in item for item in out.synchronization_output_differences)
         )
 
+    def _apply_snmp_differences(self, post_mock, zb_interfaces, nb_versions, differences):
+        """Runs apply_differences for an SNMP-only device and returns the Zabbix API calls.
+
+        post_mock answers every call with a generic success; hostgroup/template
+        lookups are expected to be patched by the caller.
+        """
+        def respond(*_args, **kwargs):
+            response = Mock(status_code=200)
+            if kwargs["json"]["method"] == "host.get":
+                response.json.return_value = {"result": [{"hostid": "9001"}]}
+            else:
+                response.json.return_value = {"result": {"interfaceids": ["200"]}}
+            return response
+
+        post_mock.side_effect = respond
+
+        def snmp_iface(version: str) -> Interface:
+            return Interface("Gi1/0/1", [Address("10.0.0.1", "")], "", "SNMP", version)
+
+        nb = Device(
+            name="sw",
+            interfaces=[snmp_iface(version) for version in nb_versions],
+            hostgroup=["Netbox"],
+            description="",
+            templates=["TPL"],
+            status="Active",
+        )
+        zb = Device(
+            name="sw",
+            interfaces=[snmp_iface(zb_iface["details"]["version"]) for zb_iface in zb_interfaces],
+            hostgroup=["Netbox"],
+            description="",
+            templates=["TPL"],
+            status="Active",
+        )
+        with patch(
+            "app.compare.service.synchronization_service.get_zabbix_host_interfaces",
+            return_value=zb_interfaces,
+        ), patch(
+            "app.compare.service.synchronization_service.device_service.find_hostinterface_ids",
+            return_value=[int(zb_iface["interfaceid"]) for zb_iface in zb_interfaces],
+        ):
+            ss.apply_differences(DeviceDifference(nb, zb, (differences, [])), SyncOutput())
+        return [call.kwargs["json"] for call in post_mock.call_args_list]
+
+    @staticmethod
+    def _zb_snmp(interfaceid: str, version: str, main: str = "1") -> dict:
+        return {
+            "interfaceid": interfaceid,
+            "type": "2",
+            "ip": "10.0.0.1",
+            "dns": "",
+            "port": "161",
+            "main": main,
+            "details": {"version": version},
+        }
+
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.find_template_ids", return_value=101)
+    @patch(
+        "app.compare.service.synchronization_service.find_zabbix_hostgroup_ids", return_value=[22]
+    )
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_apply_differences_adds_missing_snmp_version(self, post_mock, *_mocks):
+        """A missing SNMPv2 next to an existing SNMPv3 should create exactly one
+        non-main SNMPv2 interface, not re-add the existing SNMPv3 one."""
+        calls = self._apply_snmp_differences(
+            post_mock,
+            [self._zb_snmp("102", "3")],
+            ["2", "3"],
+            ["Interface with port_type 'SNMPv2' missing in Zabbix"],
+        )
+
+        creates = [call for call in calls if call["method"] == "hostinterface.create"]
+        self.assertEqual(len(creates), 1)
+        params = creates[0]["params"]
+        self.assertEqual(len(params), 1)
+        self.assertEqual(params[0]["type"], "2")
+        self.assertEqual(params[0]["main"], 0)
+        self.assertEqual(params[0]["details"]["version"], "2")
+
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.remove_interface_from_zabbix")
+    @patch("app.compare.service.synchronization_service.find_template_ids", return_value=101)
+    @patch(
+        "app.compare.service.synchronization_service.find_zabbix_hostgroup_ids", return_value=[22]
+    )
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_apply_differences_removes_only_extra_snmp_version(
+        self, post_mock, _hg_mock, _tpl_mock, remove_mock
+    ):
+        """An extra SNMPv2 must remove only the SNMPv2 interface, not every SNMP one."""
+        self._apply_snmp_differences(
+            post_mock,
+            [self._zb_snmp("101", "2", main="0"), self._zb_snmp("102", "3")],
+            ["3"],
+            ["Interface with port_type 'SNMPv2' extra in Zabbix"],
+        )
+
+        remove_mock.assert_called_once()
+        self.assertEqual(remove_mock.call_args.args[1], ["101"])
+
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.find_template_ids", return_value=101)
+    @patch(
+        "app.compare.service.synchronization_service.find_zabbix_hostgroup_ids", return_value=[22]
+    )
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_apply_differences_updates_snmp_version_in_place(self, post_mock, *_mocks):
+        """An snmp_version change should update the existing interface's details."""
+        calls = self._apply_snmp_differences(
+            post_mock,
+            [self._zb_snmp("102", "2")],
+            ["3"],
+            ["snmp_version (3 != 2), Field in Netbox will overwrite value in Zabbix"],
+        )
+
+        updates = [call for call in calls if call["method"] == "hostinterface.update"]
+        self.assertEqual(len(updates), 1)
+        self.assertEqual(updates[0]["params"][0]["interfaceid"], "102")
+        self.assertEqual(updates[0]["params"][0]["details"]["version"], "3")
+        self.assertFalse(any(call["method"] == "hostinterface.create" for call in calls))
+
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
     @patch("app.compare.service.synchronization_service.resolve_inventory_link_conflicts")
     @patch("app.compare.service.synchronization_service.find_template_ids", return_value=101)

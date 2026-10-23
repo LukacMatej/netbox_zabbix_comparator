@@ -59,6 +59,34 @@ class CompareServiceTests(unittest.TestCase):
         self.assertFalse(any("missing in Zabbix" in item for item in different))
         self.assertFalse(any("extra in Zabbix" in item for item in different))
 
+    def test_find_differences_snmpv2_and_v3_reports_missing_version(self):
+        """NetBox SNMPv2+SNMPv3 vs Zabbix SNMPv3 should report only SNMPv2 as missing.
+
+        The SNMPv3 interfaces must pair with each other (no version diff).
+        """
+        nb = _device("r1", "10.0.0.1", "r1.local", port_type="SNMP", snmp_version="2")
+        nb.interfaces.append(
+            Interface("eth0", [Address("10.0.0.1", "r1.local")], "aa", "SNMP", "3")
+        )
+        zb = _device("r1", "10.0.0.1", "r1.local", port_type="SNMP", snmp_version="3")
+
+        _, _, (different, _) = cs.find_differences(nb, zb)
+        self.assertIn("Interface with port_type 'SNMPv2' missing in Zabbix", different)
+        self.assertFalse(any("snmp_version" in item for item in different))
+        self.assertFalse(any("extra in Zabbix" in item for item in different))
+
+    def test_find_differences_extra_snmp_version_in_zabbix(self):
+        """A Zabbix SNMPv2 interface absent in NetBox should be reported as 'SNMPv2' extra."""
+        nb = _device("r1", "10.0.0.1", "r1.local", port_type="SNMP", snmp_version="3")
+        zb = _device("r1", "10.0.0.1", "r1.local", port_type="SNMP", snmp_version="3")
+        zb.interfaces.append(
+            Interface("eth0", [Address("10.0.0.1", "r1.local")], "aa", "SNMP", "2")
+        )
+
+        _, _, (different, _) = cs.find_differences(nb, zb)
+        self.assertIn("Interface with port_type 'SNMPv2' extra in Zabbix", different)
+        self.assertFalse(any("missing in Zabbix" in item for item in different))
+
     def test_compare_devices_lists(self):
         """Unmatched devices should be reported in source-specific lists."""
         nb1 = _device("n1", "10.0.0.1", "n1.local")

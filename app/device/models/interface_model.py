@@ -25,7 +25,7 @@ class Interface:
         name (str): The name or identifier of the interface (e.g., 'eth0', 'GigabitEthernet0/1').
         addresses (list[addr]): A list of IP addresses assigned to this interface.
         mac_address (str): The MAC (Media Access Control) address of the interface.
-        port_type (str): The type of port (e.g., 'ethernet', 'virtual', 'loopback').
+        port_type (str): The type of port (e.g., 'Agent', 'SNMP', ...).
         snmp_version (str): SNMP version ("2" or "3") when port_type is "SNMP", else "".
     """
 
