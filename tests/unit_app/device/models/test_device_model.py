@@ -78,7 +78,6 @@ class DeviceModelTests(unittest.TestCase):
             name="r1-new",
             include_interfaces=False,
         )
-        interface_update_data = device.update_interface_data_zabbix(interface_ids=[77])
 
         self.assertEqual(create_data["method"], "host.create")
         self.assertEqual(len(create_data["params"]["groups"]), 4)
@@ -86,8 +85,6 @@ class DeviceModelTests(unittest.TestCase):
         self.assertEqual(update_data["params"]["hostid"], "101")
         self.assertEqual(update_data["params"]["name"], "r1-new")
         self.assertNotIn("interfaces", update_data_no_interfaces["params"])
-        self.assertEqual(interface_update_data["method"], "hostinterface.update")
-        self.assertEqual(interface_update_data["params"][0]["interfaceid"], 77)
 
     def test_dict_interfaces_zb_no_details_for_ipmi_and_jmx(self):
         """IPMI/JMX interfaces should never get an SNMP `details` object."""

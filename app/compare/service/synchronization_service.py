@@ -290,7 +290,7 @@ def add_interface_to_zabbix(
 
     # Prepare interface data for creation
     interface_params = []
-    for index, interface in enumerate(interfaces):
+    for interface in interfaces:
         # Ensure port_type is in numeric format
         port_type = device_service.uniform_port_type(interface.port_type, numbered=True)
 
