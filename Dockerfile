@@ -13,6 +13,7 @@ ADD app/ /app
 ADD templates/ /templates
 COPY .env /doc/.env
 COPY README.md /doc/README.md
+COPY scripts/ /doc/
 COPY import_custom_field_choices.csv /doc/import_custom_field_choices.csv
 COPY import_custom_fields.csv /doc/import_custom_fields.csv
 
