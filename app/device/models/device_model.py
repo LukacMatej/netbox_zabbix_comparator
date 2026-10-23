@@ -123,37 +123,6 @@ class Device:
             "id": 1,
         }
 
-    def update_interface_data_zabbix(self, interface_ids) -> dict:
-        """Creates a dictionary representation for Zabbix host interface update."""
-
-        type_map = {"Agent": "1", "SNMP": "2", "IPMI": "3", "JMX": "4"}
-        params = []
-        for index, interface_id in enumerate(interface_ids):
-            interface = self.interfaces[index]
-            zabbix_type = type_map.get(interface.port_type, interface.port_type)
-            entry: dict = {
-                "interfaceid": interface_id,
-                "type": zabbix_type,
-                "main": _is_main_interface(self.interfaces, index),
-                "useip": 1,
-                "ip": (
-                    str(interface.addresses[0].address).split("/", maxsplit=1)[0]
-                    if interface.addresses
-                    else ""
-                ),
-                "dns": interface.addresses[0].dns_name if interface.addresses else "",
-                "port": map_port_type_default_port(interface.port_type),
-            }
-            if zabbix_type == "2":
-                entry["details"] = build_snmp_details(interface.snmp_version)
-            params.append(entry)
-        return {
-            "jsonrpc": "2.0",
-            "method": "hostinterface.update",
-            "params": params,
-            "id": 1,
-        }
-
     def create_data_zabbix(self, hostgroupids, templateids) -> dict:
         """Creates a dictionary representation of the device for Zabbix API."""
         groups = []
@@ -182,11 +151,6 @@ class Device:
             },
             "id": 1,
         }
-
-    @staticmethod
-    def get_device_fields() -> list[str]:
-        """Returns a list of device fields for comparison."""
-        return list(Device.__annotations__.keys())
 
 
 

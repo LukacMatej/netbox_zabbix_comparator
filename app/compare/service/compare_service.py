@@ -222,8 +222,8 @@ def _compare_interface_fields(
 ) -> tuple[list[str], list[str], int, int]:
     """Compare interface fields by matching interfaces with same port_type.
 
-    Tries to match interfaces by port_type first. Compares matched interfaces,
-    and reports unmatched ones as differences.
+    Matches interfaces by (port_type, snmp_version) first, then by port_type
+    alone. Compares matched interfaces, and reports unmatched ones as differences.
 
     Returns (differences, same, fields_counter, same_count)
     """
@@ -236,63 +236,50 @@ def _compare_interface_fields(
     nb_interfaces: list[interface_model] = nb_device.interfaces or []
     zb_interfaces: list[interface_model] = zb_device.interfaces or []
 
-    # Build dictionaries mapping port_type to list of interfaces
-    nb_by_port: dict[str, list[interface_model]] = {}
-    for iface in nb_interfaces:
-        port_type = getattr(iface, "port_type", "")
-        if port_type:
-            if port_type not in nb_by_port:
-                nb_by_port[port_type] = []
-            nb_by_port[port_type].append(iface)
+    nb_left = [iface for iface in nb_interfaces if getattr(iface, "port_type", "")]
+    zb_left = [iface for iface in zb_interfaces if getattr(iface, "port_type", "")]
+    pairs: list[tuple[interface_model, interface_model]] = []
 
-    zb_by_port: dict[str, list[interface_model]] = {}
-    for iface in zb_interfaces:
-        port_type = getattr(iface, "port_type", "")
-        if port_type:
-            if port_type not in zb_by_port:
-                zb_by_port[port_type] = []
-            zb_by_port[port_type].append(iface)
+    def take_pairs(key) -> None:
+        # Pair each NetBox interface with the first unpaired Zabbix one with the same key
+        for nb_iface in list(nb_left):
+            for zb_iface in zb_left:
+                if key(nb_iface) == key(zb_iface):
+                    pairs.append((nb_iface, zb_iface))
+                    nb_left.remove(nb_iface)
+                    zb_left.remove(zb_iface)
+                    break
 
-    # Find all unique port types
-    all_port_types = set(nb_by_port.keys()) | set(zb_by_port.keys())
+    # Exact (port_type, snmp_version) matches first, then same port_type with a
+    # different SNMP version (reported as an snmp_version change, not missing/extra)
+    take_pairs(lambda iface: (iface.port_type, iface.snmp_version))
+    take_pairs(lambda iface: iface.port_type)
 
-    # Compare interfaces for each port type
-    for port_type in sorted(all_port_types):
-        nb_list = nb_by_port.get(port_type, [])
-        zb_list = zb_by_port.get(port_type, [])
-
-        # Match up interfaces with same port_type
-        for i in range(max(len(nb_list), len(zb_list))):
-            if i < len(nb_list) and i < len(zb_list):
-                # Both have an interface at this position
-                nb_iface = nb_list[i]
-                zb_iface = zb_list[i]
-
-                for field in interface_fields:
-                    nb_value = getattr(nb_iface, field, "")
-                    zb_value = getattr(zb_iface, field, "")
-                    if nb_value == "" and zb_value == "":
-                        continue
-                    fields_counter += 1
-                    if nb_value != zb_value:
-                        msg = f"{field} ({nb_value} != {zb_value}), "
-                        msg += "Field in Netbox will overwrite value in Zabbix"
-                        diffs.append(msg)
-                    else:
-                        same_count += 1
-                        same.append(field)
-            elif i < len(nb_list):
-                # Only NetBox has this interface
-                fields_counter += 1
-                diffs.append(
-                    f"Interface with port_type '{port_type}' missing in Zabbix"
-                )
+    for nb_iface, zb_iface in pairs:
+        for field in interface_fields:
+            nb_value = getattr(nb_iface, field, "")
+            zb_value = getattr(zb_iface, field, "")
+            if nb_value == "" and zb_value == "":
+                continue
+            fields_counter += 1
+            if nb_value != zb_value:
+                msg = f"{field} ({nb_value} != {zb_value}), "
+                msg += "Field in Netbox will overwrite value in Zabbix"
+                diffs.append(msg)
             else:
-                # Only Zabbix has this interface
-                fields_counter += 1
-                diffs.append(
-                    f"Interface with port_type '{port_type}' extra in Zabbix"
-                )
+                same_count += 1
+                same.append(field)
+
+    # Unpaired interfaces are labelled with their SNMP version (e.g. 'SNMPv3')
+    # so synchronization knows exactly which interface to add/remove
+    for nb_iface in nb_left:
+        fields_counter += 1
+        label = ds.port_label(nb_iface.port_type, nb_iface.snmp_version)
+        diffs.append(f"Interface with port_type '{label}' missing in Zabbix")
+    for zb_iface in zb_left:
+        fields_counter += 1
+        label = ds.port_label(zb_iface.port_type, zb_iface.snmp_version)
+        diffs.append(f"Interface with port_type '{label}' extra in Zabbix")
 
     return diffs, same, fields_counter, same_count
 

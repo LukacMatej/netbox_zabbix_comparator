@@ -1,4 +1,4 @@
-service:
+services:
   netbox_zabbix:
     image: docker.io/netsystemcz/netbox_zabbix:20260925
 

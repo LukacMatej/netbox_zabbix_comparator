@@ -2,6 +2,9 @@
 
 The application is used to synchronize device configurations between Netbox and Zabbix, featuring the ability to compare and automatically create/update devices in Zabbix based on the configuration in Netbox.
 
+All necessary files are included in the Docker image.
+Run docker to start the container, then copy over the configuration files.
+
 ## Running Docker
 
 ```bash
@@ -32,10 +35,40 @@ docker run -d \
 
 ```
 
-## Setup for Proper Application Operation
+### Excluded Hostgroups
+
+* `EXCLUDED_HOSTGROUPS` optionally names a single Zabbix hostgroup to exclude from comparison
+* Zabbix hosts belonging to that hostgroup are dropped from the comparison results entirely (they are neither shown as "Zabbix-only", nor matched against NetBox, nor synchronized)
+* This is unrelated to `ZABBIX_DEFAULT_HOSTGROUP`, which only controls which hostgroup a newly-created Zabbix host is assigned to
+* Leave unset (or empty) to include all hosts
+
+### SNMPv2/SNMPv3 Configuration
+
+Since `SNMPv2`/`SNMPv3` are deployment-wide credentials (not per-device), they're read from environment variables rather than NetBox:
+
+* `SNMPV2_MACRO` — the community string (or Zabbix user macro, e.g. `{$SNMP_COMMUNITY}`) used for SNMPv2 interfaces. Defaults to `{$SNMP_COMMUNITY}` if unset.
+* `ZABBIX_SNMPV3_SECURITY_NAME` — SNMPv3 security name
+* `ZABBIX_SNMPV3_SECURITY_LEVEL` — SNMPv3 security level: `0`=noAuthNoPriv, `1`=authNoPriv, `2`=authPriv (default `2`)
+* `ZABBIX_SNMPV3_AUTH_PROTOCOL` — SNMPv3 auth protocol, Zabbix's numeric code (default `1` = SHA1)
+* `ZABBIX_SNMPV3_AUTH_PASSPHRASE` — SNMPv3 auth passphrase
+* `ZABBIX_SNMPV3_PRIV_PROTOCOL` — SNMPv3 priv protocol, Zabbix's numeric code (default `1` = AES128)
+* `ZABBIX_SNMPV3_PRIV_PASSPHRASE` — SNMPv3 priv passphrase
+* `ZABBIX_SNMPV3_CONTEXT_NAME` — SNMPv3 context name (optional)
+
+See Zabbix's API documentation for the full list of `authprotocol`/`privprotocol` numeric codes.
+
+### Zabbix Interface Ports
+
+* `ZABBIX_AGENT_PORT`, `ZABBIX_SNMP_PORT`, `ZABBIX_IPMI_PORT`, `ZABBIX_JMX_PORT` set the port used when creating/updating the corresponding Zabbix interface type
+* `ZABBIX_SNMP_PORT` is shared by both SNMPv2 and SNMPv3 — Zabbix has one port per interface type, not per SNMP version
+* Default to Zabbix's own defaults (10050, 161, 623, 12345) if unset
+
+## Setup Netbox
 
 ### Priority for Selecting Templates, Port Types and Host Groups
 
+Import files with custom field and custom field choices are in project directory or in the Docker container.
+First import import_custom_fields_choices.py, then import_custom_fields.py.
 The system uses a hierarchical priority when selecting Templates, Port Types and Host Groups. The application looks for values in the following order (1 = highest priority):
 
 #### 1. Device Custom Fields (highest priority)
@@ -78,6 +111,26 @@ In Netbox, you can set an inheritable config context for device roles, which is 
 
 **Important:** If a higher priority level contains no values (it is empty or None), the system automatically falls back to a lower priority.
 
+### Zabbix Hostgroups
+
+A Netbox script is available to synchronize Custom Field Choices named `zabbix_hostgroups` with host groups in Zabbix:
+
+* Link Custom Field Choices to a Custom Field named `zabbix_hostgroups`
+* Set it as multi-select on DCIM > DEVICE and DCIM > DEVICE ROLE (role values are used when the device has none, see the priority above)
+* The default host group in Zabbix is set to the value of the `ZABBIX_DEFAULT_HOSTGROUP` environment variable to keep track of all devices created by the synchronization
+* Put both scripts in `<netbox-docker-directory>`/scripts directory
+* chmod 755 scripts
+* chmod 644 scripts/*
+* chown -R 999:999 scripts
+* In docker-compose.yml, add the following line:
+  * `<local-path-to-scripts>`:/opt/netbox/netbox/scripts:z,rw
+* In netbox:
+  * Create a data source in Operations > Data Sources
+  * Type: Local
+  * URL: /opt/netbox/netbox/scripts/
+    * Sync data source
+  * Run scripts in Customization > Scripts
+
 ### Templates
 
 * Templates that will be applied to devices in Zabbix
@@ -97,43 +150,7 @@ In Netbox, you can set an inheritable config context for device roles, which is 
 * Used as the connection address for the device in Zabbix
 * Selected from `primary_ip4` on the device
 
-### Zabbix Host Groups
-
-A Netbox script is available to synchronize Custom Field Choices named `zabbix_hostgroups` with host groups in Zabbix:
-
-* Link Custom Field Choices to a Custom Field named `zabbix_hostgroups`
-* Set it as multi-select on DCIM > DEVICE and DCIM > DEVICE ROLE (role values are used when the device has none, see the priority above)
-* The default host group in Zabbix is set to "Netbox" to keep track of all devices created by the synchronization
-
-### Excluded Hostgroups
-
-* `EXCLUDED_HOSTGROUPS` optionally names a single Zabbix hostgroup to exclude from comparison
-* Zabbix hosts belonging to that hostgroup are dropped from the comparison results entirely (they are neither shown as "Zabbix-only", nor matched against NetBox, nor synchronized)
-* This is unrelated to `ZABBIX_DEFAULT_HOSTGROUP`, which only controls which hostgroup a newly-created Zabbix host is assigned to
-* Leave unset (or empty) to include all hosts
-
-### Zabbix Interface Ports
-
-* `ZABBIX_AGENT_PORT`, `ZABBIX_SNMP_PORT`, `ZABBIX_IPMI_PORT`, `ZABBIX_JMX_PORT` set the port used when creating/updating the corresponding Zabbix interface type
-* `ZABBIX_SNMP_PORT` is shared by both SNMPv2 and SNMPv3 — Zabbix has one port per interface type, not per SNMP version
-* Default to Zabbix's own defaults (10050, 161, 623, 12345) if unset
-
-### SNMPv2/SNMPv3 Configuration
-
-Since `SNMPv2`/`SNMPv3` are deployment-wide credentials (not per-device), they're read from environment variables rather than NetBox:
-
-* `SNMPV2_MACRO` — the community string (or Zabbix user macro, e.g. `{$SNMP_COMMUNITY}`) used for SNMPv2 interfaces. Defaults to `{$SNMP_COMMUNITY}` if unset.
-* `ZABBIX_SNMPV3_SECURITY_NAME` — SNMPv3 security name
-* `ZABBIX_SNMPV3_SECURITY_LEVEL` — SNMPv3 security level: `0`=noAuthNoPriv, `1`=authNoPriv, `2`=authPriv (default `2`)
-* `ZABBIX_SNMPV3_AUTH_PROTOCOL` — SNMPv3 auth protocol, Zabbix's numeric code (default `1` = SHA1)
-* `ZABBIX_SNMPV3_AUTH_PASSPHRASE` — SNMPv3 auth passphrase
-* `ZABBIX_SNMPV3_PRIV_PROTOCOL` — SNMPv3 priv protocol, Zabbix's numeric code (default `1` = AES128)
-* `ZABBIX_SNMPV3_PRIV_PASSPHRASE` — SNMPv3 priv passphrase
-* `ZABBIX_SNMPV3_CONTEXT_NAME` — SNMPv3 context name (optional)
-
-See Zabbix's API documentation for the full list of `authprotocol`/`privprotocol` numeric codes.
-
-### Custom Validation
+### Custom Validation - Optional
 
 Zabbix has many dependencies regarding the Port Type - Templates relationship. For this reason, a custom validation config was created to communicate with Zabbix and handle these dependencies.
 

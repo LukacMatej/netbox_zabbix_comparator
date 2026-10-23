@@ -1,4 +1,4 @@
-FROM python:slim
+FROM python:3.14-slim
 
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     curl && \
@@ -11,6 +11,10 @@ WORKDIR /
 ADD server.py /
 ADD app/ /app
 ADD templates/ /templates
+COPY .env /doc/.env
+COPY README.md /doc/README.md
+COPY import_custom_field_choices.csv /doc/import_custom_field_choices.csv
+COPY import_custom_fields.csv /doc/import_custom_fields.csv
 
 EXPOSE 7000
 

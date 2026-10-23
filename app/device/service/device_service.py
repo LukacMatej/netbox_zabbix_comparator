@@ -375,7 +375,8 @@ def print_devices(nb_device_list: list[device_model]) -> str:
         for interface in device.interfaces:
             txt_builder += f"  Interface Name: {interface.name}\n"
             txt_builder += f"  MAC Address: {interface.mac_address}\n"
-            txt_builder += f"  Port Type: {uniform_port_type(interface.port_type)}\n"
+            snmp_suffix = f"v{interface.snmp_version}" if interface.snmp_version else ""
+            txt_builder += f"  Port Type: {uniform_port_type(interface.port_type)}{snmp_suffix}\n"
             for address in interface.addresses:
                 txt_builder += f"    IP Address: {address.address}\n"
                 txt_builder += f"    DNS Name: {address.dns_name}\n"
@@ -413,7 +414,8 @@ def print_device(device: device_model) -> str:
     for interface in device.interfaces:
         txt_builder += f"  Interface Name: {interface.name}\n"
         txt_builder += f"  MAC Address: {interface.mac_address}\n"
-        txt_builder += f"  Port Type: {uniform_port_type(interface.port_type)}\n"
+        snmp_suffix = f"v{interface.snmp_version}" if interface.snmp_version else ""
+        txt_builder += f"  Port Type: {uniform_port_type(interface.port_type)}{snmp_suffix}\n"
         for address in interface.addresses:
             txt_builder += f"    IP Address: {address.address}\n"
             txt_builder += f"    DNS Name: {address.dns_name}\n"
@@ -945,7 +947,7 @@ def find_primary_ip_interface(
     return primary_interface
 
 
-def _zb_snmp_version(interface: dict) -> str:
+def zb_snmp_version(interface: dict) -> str:
     """Derives the SNMP version from a Zabbix interface's `details.version`.
 
     Only meaningful for type "2" (SNMP) interfaces. Zabbix reports "3" for
@@ -1023,7 +1025,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
                                 name=interface["dns"],
                                 mac_address="",
                                 port_type=interface["type"],
-                                snmp_version=_zb_snmp_version(interface),
+                                snmp_version=zb_snmp_version(interface),
                                 addresses=[
                                     address_model(
                                         address=interface["ip"],
@@ -1069,6 +1071,22 @@ def split_snmp_port_type(raw_port_type: str) -> tuple[str, str] | None:
     if raw_port_type in _PORT_TYPE_PASSTHROUGH:
         return _PORT_TYPE_PASSTHROUGH[raw_port_type], ""
     return None
+
+
+def port_label(port_type: str, snmp_version: str = "") -> str:
+    """Builds a display label for an interface, e.g. "SNMPv3" or "Agent"."""
+    label = uniform_port_type(port_type)
+    return f"{label}v{snmp_version}" if snmp_version else label
+
+
+def port_label_to_key(label: str) -> tuple[str, str]:
+    """Reverses `port_label` into (numeric Zabbix type code, snmp_version).
+
+    "SNMPv3" -> ("2", "3"), "Agent" -> ("1", ""). Plain "SNMP" -> ("2", "").
+    """
+    if label in _SNMP_VERSION_CHOICES:
+        return "2", _SNMP_VERSION_CHOICES[label]
+    return uniform_port_type(label, numbered=True), ""
 
 
 def uniform_port_type(port_type: str, numbered: bool = False) -> str:

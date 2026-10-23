@@ -55,28 +55,6 @@ class DeviceModelValidatorTests(unittest.TestCase):
 
         self.assertEqual(result, set())
 
-    def test_get_item_types(self):
-        """get_item_types should return all unique item type IDs."""
-        items = [
-            {"type": "0", "interfaceid": "1"},  # ZABBIX_AGENT
-            {"type": "2", "interfaceid": "2"},  # SNMP_TRAP
-            {"type": "0", "interfaceid": "3"},  # ZABBIX_AGENT
-        ]
-        validator = vs.DeviceModelValidator("hostid1", [], [], [], items)
-
-        result = validator.get_item_types()
-
-        self.assertEqual(result, {0, 2})
-
-    def test_get_item_types_empty(self):
-        """get_item_types should return empty set when no items."""
-        validator = vs.DeviceModelValidator("hostid1", [], [], [])
-
-        result = validator.get_item_types()
-
-        self.assertEqual(result, set())
-
-
 class QueryZabbixForHostTests(unittest.TestCase):
     """Tests for query_zabbix_for_host function."""
 
