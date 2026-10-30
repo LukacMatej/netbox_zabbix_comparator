@@ -54,33 +54,6 @@
 		line-height: 1;
 		padding: 0 4px;
 	}
-	.col-resizer {
-		flex: 0 0 6px;
-		cursor: col-resize;
-		background: transparent;
-	}
-	.col-resizer:hover,
-	.col-resizer.active {
-		background: #ccc;
-	}
-	.column.collapsed {
-		flex: 0 0 32px !important;
-		min-width: 32px;
-		overflow: hidden;
-		padding: 10px 4px;
-		cursor: pointer;
-	}
-	.column.collapsed > *:not(.header) {
-		display: none;
-	}
-	.column.collapsed .header {
-		writing-mode: vertical-rl;
-		text-orientation: mixed;
-		justify-content: flex-start;
-	}
-	.column.collapsed .col-hide-btn {
-		display: none;
-	}
 	.lines {
 		line-height: 2;
 	}
@@ -477,7 +450,6 @@
 		<div>No synchronization output found</div>
 		{% endif %}
 	</div>
-	<div class="col-resizer"></div>
 	<div class="column">
 		<div class="header">Synchronization output from Differences<button type="button" class="col-hide-btn" title="Hide column">&times;</button></div>
 		{% if sync_output.synchronization_output_differences %}
@@ -490,7 +462,6 @@
 		<div>No synchronization output found</div>
 		{% endif %}
 	</div>
-	<div class="col-resizer"></div>
 	<div class="column">
 		<div class="header">Synchronization output from Zabbix<button type="button" class="col-hide-btn" title="Hide column">&times;</button></div>
 		{% if sync_output.synchronization_output_netbox %}
@@ -505,65 +476,3 @@
 	</div>
 </div>
 {% endif %}
-
-<script>
-	(function () {
-		const MIN_COLUMN_WIDTH = 80;
-
-		function initResizers() {
-			document.querySelectorAll(".col-resizer").forEach(function (resizer) {
-				resizer.addEventListener("mousedown", function (e) {
-					const left = resizer.previousElementSibling;
-					const right = resizer.nextElementSibling;
-					if (!left || !right) {
-						return;
-					}
-					e.preventDefault();
-					const startX = e.clientX;
-					const leftStartWidth = left.getBoundingClientRect().width;
-					const rightStartWidth = right.getBoundingClientRect().width;
-					resizer.classList.add("active");
-					document.body.style.userSelect = "none";
-
-					function onMouseMove(moveEvent) {
-						const dx = moveEvent.clientX - startX;
-						const newLeft = Math.max(MIN_COLUMN_WIDTH, leftStartWidth + dx);
-						const newRight = Math.max(MIN_COLUMN_WIDTH, rightStartWidth - dx);
-						left.style.flex = "0 0 " + newLeft + "px";
-						right.style.flex = "0 0 " + newRight + "px";
-					}
-
-					function onMouseUp() {
-						resizer.classList.remove("active");
-						document.body.style.userSelect = "";
-						document.removeEventListener("mousemove", onMouseMove);
-						document.removeEventListener("mouseup", onMouseUp);
-					}
-
-					document.addEventListener("mousemove", onMouseMove);
-					document.addEventListener("mouseup", onMouseUp);
-				});
-			});
-		}
-
-		function initHideButtons() {
-			document.querySelectorAll(".col-hide-btn").forEach(function (btn) {
-				btn.addEventListener("click", function (e) {
-					e.stopPropagation();
-					btn.closest(".column").classList.add("collapsed");
-				});
-			});
-			document.querySelectorAll(".container").forEach(function (container) {
-				container.addEventListener("click", function (e) {
-					const header = e.target.closest(".column.collapsed .header");
-					if (header) {
-						header.closest(".column").classList.remove("collapsed");
-					}
-				});
-			});
-		}
-
-		initResizers();
-		initHideButtons();
-	})();
-</script>

@@ -11,6 +11,7 @@ import requests
 
 from app.logger import logger_conf as log
 from app.enums.item_types import ItemTypes
+from app.device.service.device_service import normalize_custom_fields
 
 # Port type name mappings
 INTERFACE_TYPE_NAMES = {
@@ -372,7 +373,7 @@ def can_update_device(data: dict):  # pylint: disable=too-many-return-statements
         ones if those are also changing, otherwise the host's current ones)?
     zabbix_hostgroups alone never affects interfaces, so it's not checked.
     """
-    custom_fields = data.get("data", {}).get("custom_fields", {})
+    custom_fields = normalize_custom_fields(data.get("data", {}).get("custom_fields"))
     if not custom_fields:
         return {"valid": True, "message": "No custom fields to validate"}
 
