@@ -300,16 +300,33 @@ class SynchronizationServiceTests(unittest.TestCase):
             any("updated successfully" in item for item in out.synchronization_output_differences)
         )
 
-    def _apply_snmp_differences(self, post_mock, zb_interfaces, nb_versions, differences):
+    def _apply_snmp_differences(
+        self, post_mock, zb_interfaces, nb_versions, differences, links=None, delete_error=False
+    ):
         """Runs apply_differences for an SNMP-only device and returns the Zabbix API calls.
 
         post_mock answers every call with a generic success; hostgroup/template
-        lookups are expected to be patched by the caller.
+        lookups are expected to be patched by the caller. `links` maps an
+        interfaceid to the number of items linked to it (default 0), and
+        `delete_error` makes hostinterface.delete fail like Zabbix does when
+        items are still linked.
         """
+        links = links or {}
+
         def respond(*_args, **kwargs):
             response = Mock(status_code=200)
-            if kwargs["json"]["method"] == "host.get":
+            method = kwargs["json"]["method"]
+            params = kwargs["json"]["params"]
+            if method == "host.get":
                 response.json.return_value = {"result": [{"hostid": "9001"}]}
+            elif method == "item.get":
+                response.json.return_value = {"result": str(links.get(params["interfaceids"], 0))}
+            elif method == "discoveryrule.get":
+                response.json.return_value = {"result": "0"}
+            elif method == "hostinterface.delete" and delete_error:
+                response.json.return_value = {
+                    "error": {"code": -32602, "message": "Invalid params.", "data": "Interface is linked to item"}
+                }
             else:
                 response.json.return_value = {"result": {"interfaceids": ["200"]}}
             return response
@@ -422,6 +439,134 @@ class SynchronizationServiceTests(unittest.TestCase):
         self.assertEqual(updates[0]["params"][0]["interfaceid"], "102")
         self.assertEqual(updates[0]["params"][0]["details"]["version"], "3")
         self.assertFalse(any(call["method"] == "hostinterface.create" for call in calls))
+
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.find_template_ids", return_value=101)
+    @patch(
+        "app.compare.service.synchronization_service.find_zabbix_hostgroup_ids", return_value=[22]
+    )
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_apply_differences_extra_snmp_with_items_keeps_it_and_switches_version(
+        self, post_mock, *_mocks
+    ):
+        """Extra SNMPv3 (default, items linked) next to the wanted SNMPv2: delete the
+        item-less SNMPv2 and switch the SNMPv3 interface to v2 in place."""
+        calls = self._apply_snmp_differences(
+            post_mock,
+            [self._zb_snmp("102", "3"), self._zb_snmp("110", "2", main="0")],
+            ["2"],
+            ["Interface with port_type 'SNMPv3' extra in Zabbix"],
+            links={"102": 5},
+        )
+
+        deletes = [call for call in calls if call["method"] == "hostinterface.delete"]
+        self.assertEqual(len(deletes), 1)
+        self.assertEqual(deletes[0]["params"], ["110"])
+        updates = [call for call in calls if call["method"] == "hostinterface.update"]
+        self.assertEqual(len(updates), 1)
+        self.assertEqual(len(updates[0]["params"]), 1)
+        self.assertEqual(updates[0]["params"][0]["interfaceid"], "102")
+        self.assertEqual(updates[0]["params"][0]["details"]["version"], "2")
+        self.assertNotIn("main", updates[0]["params"][0])
+
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.find_template_ids", return_value=101)
+    @patch(
+        "app.compare.service.synchronization_service.find_zabbix_hostgroup_ids", return_value=[22]
+    )
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_apply_differences_extra_default_without_items_promotes_partner(
+        self, post_mock, *_mocks
+    ):
+        """If the extra interface is the default but the wanted one holds the items,
+        delete the extra one and make the kept one the default."""
+        calls = self._apply_snmp_differences(
+            post_mock,
+            [self._zb_snmp("102", "3"), self._zb_snmp("110", "2", main="0")],
+            ["2"],
+            ["Interface with port_type 'SNMPv3' extra in Zabbix"],
+            links={"110": 3},
+        )
+
+        deletes = [call for call in calls if call["method"] == "hostinterface.delete"]
+        self.assertEqual(deletes[0]["params"], ["102"])
+        updates = [call for call in calls if call["method"] == "hostinterface.update"]
+        self.assertEqual(updates[0]["params"][0]["interfaceid"], "110")
+        self.assertEqual(updates[0]["params"][0]["main"], 1)
+        self.assertNotIn("details", updates[0]["params"][0])
+
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.find_template_ids", return_value=101)
+    @patch(
+        "app.compare.service.synchronization_service.find_zabbix_hostgroup_ids", return_value=[22]
+    )
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_apply_differences_extra_snmp_both_with_items_is_not_deleted(
+        self, post_mock, *_mocks
+    ):
+        """If both same-type interfaces have items linked, nothing is deleted and the sync fails."""
+        with self.assertRaises(RuntimeError):
+            self._apply_snmp_differences(
+                post_mock,
+                [self._zb_snmp("102", "3"), self._zb_snmp("110", "2", main="0")],
+                ["2"],
+                ["Interface with port_type 'SNMPv3' extra in Zabbix"],
+                links={"102": 5, "110": 1},
+            )
+
+        methods = [call.kwargs["json"]["method"] for call in post_mock.call_args_list]
+        self.assertNotIn("hostinterface.delete", methods)
+
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.find_template_ids", return_value=101)
+    @patch(
+        "app.compare.service.synchronization_service.find_zabbix_hostgroup_ids", return_value=[22]
+    )
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_apply_differences_failed_delete_raises_and_skips_swap(self, post_mock, *_mocks):
+        """A failed hostinterface.delete must fail the sync and not switch the kept interface."""
+        with self.assertRaises(RuntimeError):
+            self._apply_snmp_differences(
+                post_mock,
+                [self._zb_snmp("102", "3"), self._zb_snmp("110", "2", main="0")],
+                ["2"],
+                ["Interface with port_type 'SNMPv3' extra in Zabbix"],
+                links={"102": 5},
+                delete_error=True,
+            )
+
+        updates = [
+            call.kwargs["json"]
+            for call in post_mock.call_args_list
+            if call.kwargs["json"]["method"] == "hostinterface.update"
+        ]
+        for update in updates:
+            for entry in update["params"]:
+                self.assertNotIn("details", entry)
+
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_remove_interface_from_zabbix_reports_result(self, post_mock):
+        """remove_interface_from_zabbix should return False on an API error and True on success."""
+        error = Mock(status_code=200)
+        error.json.return_value = {"error": {"data": "Interface is linked to item"}}
+        ok = Mock(status_code=200)
+        ok.json.return_value = {"result": {"interfaceids": ["102"]}}
+        post_mock.side_effect = [error, ok]
+
+        self.assertFalse(ss.remove_interface_from_zabbix("9001", ["102"], SyncOutput()))
+        self.assertTrue(ss.remove_interface_from_zabbix("9001", ["102"], SyncOutput()))
+
+    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
+    @patch("app.compare.service.synchronization_service.requests.post")
+    def test_add_interface_to_zabbix_reports_error(self, post_mock):
+        """add_interface_to_zabbix should return False on an API error."""
+        error = Mock(status_code=200)
+        error.json.return_value = {"error": {"data": "boom"}}
+        post_mock.return_value = error
+        iface = Interface("Gi1/0/1", [Address("10.0.0.1", "")], "", "SNMP", "2")
+
+        self.assertFalse(ss.add_interface_to_zabbix("9001", [iface], SyncOutput()))
 
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb/", "ZABBIX_KEY": "k"}, clear=False)
     @patch("app.compare.service.synchronization_service.resolve_inventory_link_conflicts")
