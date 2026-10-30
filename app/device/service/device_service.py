@@ -515,7 +515,10 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
         # Extract JSON structure with validation
         try:
             response_data = data["data"]
-            device_role_list = response_data["device_role_list"]
+            device_role_list = [
+                {**role, "custom_fields": normalize_custom_fields(role.get("custom_fields"))}
+                for role in response_data["device_role_list"]
+            ]
             devices = response_data["device_list"]
         except KeyError as e:
             log.logger.error("Missing expected key in Netbox response: %s", e)
@@ -533,9 +536,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                     if isinstance(device["config_context"], dict)
                     else {}
                 )
-                custom_fields = (
-                    device["custom_fields"] if device["custom_fields"] else {}
-                )
+                custom_fields = normalize_custom_fields(device["custom_fields"])
                 role_name = device["role"]["name"] if device["role"] else None
 
                 # Check if device has required Zabbix configuration
@@ -629,6 +630,28 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
         return device_list
     except requests.exceptions.RequestException as e:
         return f"Request failed: {e}"
+
+
+def custom_field_value(value: Any) -> Any:
+    """Unwraps a NetBox selection custom-field value into its raw value.
+
+    Since NetBox v4.7.0 (#20897) the REST and GraphQL APIs return selection and
+    multi-selection values as {"value": ..., "label": ...} objects instead of the
+    raw value. Lists are unwrapped item by item; anything else passes through, so
+    both pre-4.7 and 4.7+ payloads resolve to the same raw values.
+    """
+    if isinstance(value, list):
+        return [custom_field_value(item) for item in value]
+    if isinstance(value, dict) and "value" in value:
+        return value["value"]
+    return value
+
+
+def normalize_custom_fields(custom_fields: dict[str, Any] | None) -> dict[str, Any]:
+    """Returns a copy of `custom_fields` with every value unwrapped by `custom_field_value`."""
+    if not custom_fields:
+        return {}
+    return {name: custom_field_value(value) for name, value in custom_fields.items()}
 
 
 def get_port_types(
@@ -1188,7 +1211,7 @@ def uniform_output_text(
 
 def parse_webhook(data: dict) -> device_model:
     device_data = data["data"]
-    custom_fields = device_data.get("custom_fields", {})
+    custom_fields = normalize_custom_fields(device_data.get("custom_fields"))
     return device_model(
         name=device_data["name"],
         interfaces=[],
@@ -1203,7 +1226,7 @@ def parse_webhook_create(data: dict) -> device_model:
     """Build the Device for a NetBox create webhook, resolving hostgroups via the device role."""
     device = parse_webhook(data)
     device_data = data["data"]
-    custom_fields = device_data.get("custom_fields") or {}
+    custom_fields = normalize_custom_fields(device_data.get("custom_fields"))
     if custom_fields.get("zabbix_hostgroups"):
         return device
 
@@ -1228,7 +1251,9 @@ def parse_webhook_update(data: dict) -> device_model:
     device_data = data["data"]
     postchange = data["snapshots"].get("postchange") or {}
 
-    custom_fields = postchange.get("custom_fields") or device_data.get("custom_fields", {})
+    custom_fields = normalize_custom_fields(
+        postchange.get("custom_fields") or device_data.get("custom_fields")
+    )
     # zabbix_port_type is a NetBox multi-select custom field, e.g. ["SNMPv2"]
     zabbix_port_type_list = custom_fields.get("zabbix_port_type") or []
     raw_port_type = zabbix_port_type_list[0] if zabbix_port_type_list else "1"
@@ -1252,7 +1277,7 @@ def parse_webhook_update(data: dict) -> device_model:
 
     templates: list[str]
     if custom_fields.get("zabbix_templates"):
-        templates = custom_fields.get("zabbix_templates")
+        templates = custom_fields["zabbix_templates"]
     else:
         templates = role_custom_fields.get("zabbix_templates") or []
     if not templates:
@@ -1300,7 +1325,7 @@ def query_netbox_role_custom_fields(role: str) -> dict[str, Any]:
     role_dict = {r.get("name"): r for r in role_data}
 
     role_entry = role_dict.get(role, {})
-    return role_entry.get("custom_fields") or {}
+    return normalize_custom_fields(role_entry.get("custom_fields"))
 
 def get_primary_interface(
     device_data: dict, zabbix_port_type: str, snmp_version: str = ""

@@ -468,5 +468,130 @@ class DeviceServiceTests(unittest.TestCase):
         role_mock.assert_not_called()
         self.assertEqual(result.hostgroup, ["DevGroup"])
 
+    def test_custom_field_value_unwraps_netbox_47_objects(self):
+        """NetBox >= 4.7 {value, label} selection objects should unwrap to the raw value."""
+        self.assertEqual(ds.custom_field_value({"value": "SNMPv3", "label": "SNMPv3"}), "SNMPv3")
+        self.assertEqual(
+            ds.custom_field_value([{"value": "a", "label": "A"}, {"value": "b", "label": "B"}]),
+            ["a", "b"],
+        )
+
+    def test_custom_field_value_passes_through_raw_values(self):
+        """Pre-4.7 raw values (strings, lists of strings, None) should be unchanged."""
+        self.assertEqual(ds.custom_field_value("SNMPv3"), "SNMPv3")
+        self.assertEqual(ds.custom_field_value(["a", "b"]), ["a", "b"])
+        self.assertIsNone(ds.custom_field_value(None))
+
+    def test_normalize_custom_fields_handles_empty(self):
+        """Missing custom fields should normalize to an empty dict."""
+        self.assertEqual(ds.normalize_custom_fields(None), {})
+        self.assertEqual(ds.normalize_custom_fields({}), {})
+
+    @patch("app.device.service.device_service.requests.post")
+    def test_get_nb_devices_netbox_47_selection_objects(self, post_mock):
+        """NetBox >= 4.7 {value, label} custom fields (device and role) should map to raw values."""
+        response = Mock(status_code=200)
+        response.request = Mock(method="POST", url="http://nb/graphql", headers={}, body="{}")
+        response.text = json.dumps({
+            "data": {
+                "device_list": [
+                    {
+                        "name": "sw1",
+                        "description": "",
+                        "status": "active",
+                        "config_context": {},
+                        "custom_fields": {
+                            "zabbix_hostgroups": [{"value": "Netbox", "label": "Netbox"}],
+                            "zabbix_templates": [
+                                {"value": "Ping test", "label": "Ping test"},
+                                {"value": "Cisco IOS by SNMP", "label": "Cisco IOS by SNMP"},
+                            ],
+                            "zabbix_port_type": [{"value": "SNMPv3", "label": "SNMPv3"}],
+                        },
+                        "primary_ip4": {"address": "10.0.0.1/24", "dns_name": ""},
+                        "interfaces": [],
+                        "role": {"name": "Switch"},
+                    },
+                    {
+                        "name": "sw2",
+                        "description": "",
+                        "status": "active",
+                        "config_context": {},
+                        "custom_fields": {
+                            "zabbix_hostgroups": None,
+                            "zabbix_templates": None,
+                            "zabbix_port_type": None,
+                        },
+                        "primary_ip4": {"address": "10.0.0.2/24", "dns_name": ""},
+                        "interfaces": [],
+                        "role": {"name": "Switch"},
+                    },
+                ],
+                "device_role_list": [
+                    {
+                        "name": "Switch",
+                        "custom_fields": {
+                            "zabbix_hostgroups": [{"value": "RoleGroup", "label": "RoleGroup"}],
+                            "zabbix_templates": [{"value": "RoleTpl", "label": "RoleTpl"}],
+                            "zabbix_port_type": [{"value": "Agent", "label": "Agent"}],
+                        },
+                    }
+                ],
+            }
+        })
+        post_mock.return_value = response
+
+        result = ds.get_nb_devices("k", "http://nb/graphql")
+        self.assertIsInstance(result, list)
+        sw1, sw2 = result
+        self.assertEqual(sw1.hostgroup, ["Netbox"])
+        self.assertEqual(sw1.templates, ["Cisco IOS by SNMP", "Ping test"])
+        self.assertEqual(len(sw1.interfaces), 1)
+        self.assertEqual(sw1.interfaces[0].port_type, "SNMP")
+        self.assertEqual(sw1.interfaces[0].snmp_version, "3")
+        self.assertEqual(sw2.hostgroup, ["RoleGroup"])
+        self.assertEqual(sw2.templates, ["RoleTpl"])
+        self.assertEqual(sw2.interfaces[0].port_type, "Agent")
+
+    @patch("app.device.service.device_service.get_primary_interface", return_value=None)
+    @patch("app.device.service.device_service.query_netbox_role_custom_fields")
+    def test_parse_webhook_update_netbox_47_selection_objects(self, role_mock, iface_mock):
+        """Webhook update should unwrap NetBox >= 4.7 {value, label} custom fields."""
+        data = {
+            "data": {"name": "sw1", "role": {"name": "Switch"}, "config_context": {}},
+            "snapshots": {
+                "postchange": {
+                    "name": "sw1",
+                    "custom_fields": {
+                        "zabbix_hostgroups": [{"value": "DevGroup", "label": "DevGroup"}],
+                        "zabbix_templates": [{"value": "DevTpl", "label": "DevTpl"}],
+                        "zabbix_port_type": [{"value": "SNMPv3", "label": "SNMPv3"}],
+                    },
+                }
+            },
+        }
+
+        result = ds.parse_webhook_update(data)
+        role_mock.assert_not_called()
+        iface_mock.assert_called_once_with(data["data"], "SNMP", "3")
+        self.assertEqual(result.hostgroup, ["DevGroup"])
+        self.assertEqual(result.templates, ["DevTpl"])
+
+    @patch("app.device.service.device_service.query_netbox_role_custom_fields")
+    def test_parse_webhook_create_netbox_47_selection_objects(self, role_mock):
+        """Webhook create should unwrap NetBox >= 4.7 {value, label} hostgroups."""
+        data = {
+            "data": {
+                "name": "sw1",
+                "role": {"name": "Switch"},
+                "custom_fields": {"zabbix_hostgroups": [{"value": "DevGroup", "label": "DevGroup"}]},
+                "status": {"value": "active"},
+            }
+        }
+
+        result = ds.parse_webhook_create(data)
+        role_mock.assert_not_called()
+        self.assertEqual(result.hostgroup, ["DevGroup"])
+
 if __name__ == "__main__":
     unittest.main()
