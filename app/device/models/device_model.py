@@ -13,8 +13,6 @@ Functions:
         Normalize device status to standard "Active" or "Inactive" format.
     dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
         Convert InterfaceModel objects to Zabbix API interface dictionaries for host creation.
-    dict_interfaces_zb_id(interfaces: list[InterfaceModel], interface_id) -> list[dict]:
-        Convert InterfaceModel objects to Zabbix API interface dictionaries for host updates.
     map_port_type_default_port(port_type: str) -> str:
         Look up the env-configurable default Zabbix interface port for a port type.
     build_snmp_details(snmp_version: str) -> dict[str, str]:
@@ -44,8 +42,9 @@ class Device:
             Normalizes the status using the normalize_status function.
         __str__() -> str:
             Returns a string representation of the device containing all its attributes.
-        update_data_zabbix(hostid, interface_id, hostgroupIds, templateids, name) -> dict:
+        update_data_zabbix(hostid, hostgroupids, templateids, name, interfaces=None) -> dict:
             Generates a Zabbix API request dictionary for updating an existing host.
+            `interfaces`, when given, replaces the host's whole interface set.
             Handles various hostgroup ID formats
             and constructs proper group and template configurations.
         create_data_zabbix(hostgroupIds, templateids) -> dict:
@@ -79,13 +78,17 @@ class Device:
     def update_data_zabbix(
         self,
         hostid,
-        interface_ids,
         hostgroupids,
         templateids,
         name,
-        include_interfaces: bool = True,
+        interfaces: list[dict] | None = None,
     ) -> dict:
-        """Creates a dictionary representation of the device for Zabbix API."""
+        """Creates a host.update payload for the Zabbix API.
+
+        `interfaces` is sent only when not None. Zabbix treats it as the complete
+        interface set: entries with `interfaceid` are kept/updated, entries without
+        one are created and every interface not listed is deleted.
+        """
         groups = []
         for gid in hostgroupids:
             if gid and gid != -1:  # Skip invalid IDs
@@ -108,13 +111,8 @@ class Device:
             "templates": [{"templateid": tempId} for tempId in templateids if tempId],
             "status": 0 if self.status == "Active" else 1,
         }
-        if include_interfaces:
-            params["interfaces"] = ([
-                dict_interfaces_zb_id(self.interfaces, interface_id=interface_id)
-                if self.interfaces
-                else []
-            ] for interface_id in interface_ids
-                                    )
+        if interfaces is not None:
+            params["interfaces"] = interfaces
 
         return {
             "jsonrpc": "2.0",
@@ -243,30 +241,6 @@ def dict_interfaces_zb(interfaces: list[InterfaceModel]) -> list[dict]:
         result.append(entry)
     return result
 
-
-def dict_interfaces_zb_id(interfaces: list[InterfaceModel], interface_id) -> list[dict]:
-    """Converts a list of InterfaceModel objects to a list of dictionaries."""
-    type_map = {"Agent": "1", "SNMP": "2", "IPMI": "3", "JMX": "4"}
-    result = []
-    for index, interface in enumerate(interfaces):
-        zabbix_type = type_map.get(interface.port_type, interface.port_type)
-        entry = {
-            "type": zabbix_type,
-            "interfaceid": interface_id,
-            "main": _is_main_interface(interfaces, index),
-            "useip": 1,
-            "ip": (
-                str(interface.addresses[0].address).split("/", maxsplit=1)[0]
-                if interface.addresses
-                else ""
-            ),
-            "dns": interface.addresses[0].dns_name if interface.addresses else "",
-            "port": map_port_type_default_port(interface.port_type),
-        }
-        if zabbix_type == "2":
-            entry["details"] = build_snmp_details(interface.snmp_version)
-        result.append(entry)
-    return result
 
 def map_port_type_default_port(port_type: str) -> str:
     """

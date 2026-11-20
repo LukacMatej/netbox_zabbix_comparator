@@ -93,24 +93,6 @@ class DeviceServiceTests(unittest.TestCase):
 
     @patch("app.device.service.device_service.requests.post")
     @patch.dict("os.environ", {"ZABBIX_IP": "http://zb", "ZABBIX_KEY": "k"}, clear=False)
-    def test_find_hostinterface_ids_success(self, post_mock):
-        """Host interface lookup should return parsed interface IDs on success."""
-        response = Mock()
-        response.text = json.dumps({"result": [{"interfaceid": "55"}]})
-        response.raise_for_status.return_value = None
-        post_mock.return_value = response
-
-        self.assertEqual(ds.find_hostinterface_ids("10"), [55])
-
-    @patch("app.device.service.device_service.requests.post")
-    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb", "ZABBIX_KEY": "k"}, clear=False)
-    def test_find_hostinterface_ids_request_error(self, post_mock):
-        """Host interface lookup should return empty list on request exception."""
-        post_mock.side_effect = requests.exceptions.RequestException("network")
-        self.assertEqual(ds.find_hostinterface_ids("10"), [])
-
-    @patch("app.device.service.device_service.requests.post")
-    @patch.dict("os.environ", {"ZABBIX_IP": "http://zb", "ZABBIX_KEY": "k"}, clear=False)
     def test_get_zabbix_device_reads_hostgroups(self, post_mock):
         """Regression test: get_zabbix_device must request selectHostGroups and
         read the "hostgroups" key. Zabbix >= 6.0 doesn't populate "groups" from

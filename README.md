@@ -63,6 +63,11 @@ See Zabbix's API documentation for the full list of `authprotocol`/`privprotocol
 * `ZABBIX_SNMP_PORT` is shared by both SNMPv2 and SNMPv3 — Zabbix has one port per interface type, not per SNMP version
 * Default to Zabbix's own defaults (10050, 161, 623, 12345) if unset
 
+### Interface Changes and Zabbix 8.0
+
+* Interfaces are added, updated and removed through `host.update` (the full interface list, sent together with the other host changes in one call); the `hostinterface.create/update/delete` methods removed in Zabbix 8.0 are not used. The API user's role therefore needs `host.update`; of `hostinterface.*` only `hostinterface.get` is used
+* A device update is all-or-nothing: if an extra interface can't be removed (items still linked to it, e.g. after an unlinked template left its items behind), nothing is changed on that host and the sync reports the error
+
 ## Setup Netbox
 
 ### Priority for Selecting Templates, Port Types and Host Groups
