@@ -9,10 +9,12 @@ from app.device.models.device_model import Device
 from app.device.models.interface_model import Interface
 
 
-def _device(name: str, address: str, dns: str, port_type: str = "1") -> Device:
+def _device(
+    name: str, address: str, dns: str, port_type: str = "1", snmp_version: str = ""
+) -> Device:
     return Device(
         name=name,
-        interfaces=[Interface("eth0", [Address(address, dns)], "aa", port_type)],
+        interfaces=[Interface("eth0", [Address(address, dns)], "aa", port_type, snmp_version)],
         hostgroup="g",
         description="d",
         templates=["t"],
@@ -42,6 +44,48 @@ class CompareServiceTests(unittest.TestCase):
         self.assertEqual(tag, 1)
         self.assertTrue(any("name (r1 != r2)" in item for item in different))
         self.assertTrue(any("address" in item for item in different))
+
+    def test_find_differences_snmp_version_mismatch_not_missing_interface(self):
+        """A NetBox SNMPv3 vs Zabbix SNMPv2 interface should diff by version,
+
+        not be reported as a missing/extra interface (both share port_type "SNMP").
+        """
+        nb = _device("r1", "10.0.0.1", "r1.local", port_type="SNMP", snmp_version="3")
+        zb = _device("r1", "10.0.0.1", "r1.local", port_type="SNMP", snmp_version="2")
+
+        tag, _, (different, _) = cs.find_differences(nb, zb)
+        self.assertEqual(tag, 1)
+        self.assertTrue(any("snmp_version (3 != 2)" in item for item in different))
+        self.assertFalse(any("missing in Zabbix" in item for item in different))
+        self.assertFalse(any("extra in Zabbix" in item for item in different))
+
+    def test_find_differences_snmpv2_and_v3_reports_missing_version(self):
+        """NetBox SNMPv2+SNMPv3 vs Zabbix SNMPv3 should report only SNMPv2 as missing.
+
+        The SNMPv3 interfaces must pair with each other (no version diff).
+        """
+        nb = _device("r1", "10.0.0.1", "r1.local", port_type="SNMP", snmp_version="2")
+        nb.interfaces.append(
+            Interface("eth0", [Address("10.0.0.1", "r1.local")], "aa", "SNMP", "3")
+        )
+        zb = _device("r1", "10.0.0.1", "r1.local", port_type="SNMP", snmp_version="3")
+
+        _, _, (different, _) = cs.find_differences(nb, zb)
+        self.assertIn("Interface with port_type 'SNMPv2' missing in Zabbix", different)
+        self.assertFalse(any("snmp_version" in item for item in different))
+        self.assertFalse(any("extra in Zabbix" in item for item in different))
+
+    def test_find_differences_extra_snmp_version_in_zabbix(self):
+        """A Zabbix SNMPv2 interface absent in NetBox should be reported as 'SNMPv2' extra."""
+        nb = _device("r1", "10.0.0.1", "r1.local", port_type="SNMP", snmp_version="3")
+        zb = _device("r1", "10.0.0.1", "r1.local", port_type="SNMP", snmp_version="3")
+        zb.interfaces.append(
+            Interface("eth0", [Address("10.0.0.1", "r1.local")], "aa", "SNMP", "2")
+        )
+
+        _, _, (different, _) = cs.find_differences(nb, zb)
+        self.assertIn("Interface with port_type 'SNMPv2' extra in Zabbix", different)
+        self.assertFalse(any("missing in Zabbix" in item for item in different))
 
     def test_compare_devices_lists(self):
         """Unmatched devices should be reported in source-specific lists."""
@@ -86,7 +130,7 @@ class CompareServiceTests(unittest.TestCase):
         get_nb_mock.return_value = nb
         get_zb_mock.return_value = zb
 
-        result = cs.compare("http://nb", "nk", "http://zb", "zk")
+        result = cs.compare()
         self.assertEqual(result, ([], [], []))
         map_mock.assert_called_once_with(nb, zb)
         compare_devices_mock.assert_called_once_with(nb, zb)
@@ -94,7 +138,7 @@ class CompareServiceTests(unittest.TestCase):
     @patch("app.compare.service.compare_service.ds.get_nb_devices", return_value="boom")
     def test_compare_nb_error(self, _get_nb):
         """Compare should return Exception when NetBox retrieval returns an error string."""
-        result = cs.compare("http://nb", "nk", "http://zb", "zk")
+        result = cs.compare()
         self.assertIsInstance(result, Exception)
 
 

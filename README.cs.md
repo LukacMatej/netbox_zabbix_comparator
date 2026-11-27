@@ -10,19 +10,32 @@ docker run -d \
   -e LISTEN_ADDRESS=<IP adresa> \
   -e HTTP_PORT=<port> \
   -e ZABBIX_DEFAULT_HOSTGROUP=<název defaultní hostgroupy> \
+  -e EXCLUDED_HOSTGROUPS=<název hostgroupy vyloučené z porovnání> \
   -e NETBOX_IP=<IP Adresa Netboxu s http:/> \
   -e NETBOX_KEY=<Netbox API klíč> \
   -e ZABBIX_IP=<IP Adresa Zabbixu s http:/> \
   -e ZABBIX_KEY=<Zabbix API klíč> \
-  -e PROXY_ROOT_PATH=<dev|prod>
+  -e PROXY_ROOT_PATH=<dev|prod> \
+  -e ZABBIX_AGENT_PORT=<port Zabbix Agent rozhraní, výchozí 10050> \
+  -e ZABBIX_SNMP_PORT=<port Zabbix SNMP rozhraní, výchozí 161> \
+  -e ZABBIX_IPMI_PORT=<port Zabbix IPMI rozhraní, výchozí 623> \
+  -e ZABBIX_JMX_PORT=<port Zabbix JMX rozhraní, výchozí 12345> \
+  -e SNMPV2_MACRO=<SNMPv2 community string nebo Zabbix makro, výchozí {$SNMP_COMMUNITY}> \
+  -e ZABBIX_SNMPV3_SECURITY_NAME=<SNMPv3 security name> \
+  -e ZABBIX_SNMPV3_SECURITY_LEVEL=<SNMPv3 security level: 0=noAuthNoPriv, 1=authNoPriv, 2=authPriv, výchozí 2> \
+  -e ZABBIX_SNMPV3_AUTH_PROTOCOL=<kód SNMPv3 auth protokolu, výchozí 1 (SHA1)> \
+  -e ZABBIX_SNMPV3_AUTH_PASSPHRASE=<SNMPv3 auth passphrase> \
+  -e ZABBIX_SNMPV3_PRIV_PROTOCOL=<kód SNMPv3 priv protokolu, výchozí 1 (AES128)> \
+  -e ZABBIX_SNMPV3_PRIV_PASSPHRASE=<SNMPv3 priv passphrase> \
+  -e ZABBIX_SNMPV3_CONTEXT_NAME=<SNMPv3 context name>
   netbox-zabbix
 ```
 
 ## Nastavení pro správný chod aplikace
 
-### Priorita výběru Templates a Port Types
+### Priorita výběru Templates, Port Types a Host Groups
 
-Systém používá hierarchickou prioritu při výběru Templates a Port Types. Aplikace hledá hodnoty v tomto pořadí (1 = nejvyšší priorita):
+Systém používá hierarchickou prioritu při výběru Templates, Port Types a Host Groups. Aplikace hledá hodnoty v tomto pořadí (1 = nejvyšší priorita):
 
 #### 1. Device Custom Fields (nejvyšší priorita)
 
@@ -30,6 +43,7 @@ Nastavit Custom Fields na individuální zařízení:
 
 - `zabbix_templates` - seznam Zabbix šablon pro konkrétní zařízení
 - `zabbix_port_type` - typ portu pro konkrétní zařízení
+- `zabbix_hostgroups` - seznam Zabbix host groups pro konkrétní zařízení
 
 #### 2. Device Role Custom Fields
 
@@ -37,6 +51,7 @@ Nastavit Custom Fields na device role s výběrem Custom Field Choices:
 
 - `zabbix_templates` - seznam šablon pro všechna zařízení s tímto rolem
 - `zabbix_port_type` - typ portu pro všechna zařízení s tímto rolem
+- `zabbix_hostgroups` - seznam host groups pro všechna zařízení s tímto rolem
 
 #### 3. Device Config Context (nejnižší priorita)
 
@@ -51,6 +66,9 @@ V Netboxu lze nastavit dědičný config context pro device role, který se auto
         "templates": [
             "Template1",
             "Template2"
+        ],
+        "hostgroups": [
+            "Hostgroup1"
         ]
     }
 }
@@ -68,7 +86,8 @@ V Netboxu lze nastavit dědičný config context pro device role, který se auto
 ### Port Type
 
 * Specifikuje typ portu pro komunikaci s Zabbixem
-* Podporované typy: Agent, SNMP, JMX, IPMI
+* Podporované typy: Agent, SNMPv2, SNMPv3, JMX, IPMI
+* Samotné `SNMP` už není platná volba — aktualizujte Custom Field Choices `zabbix_port_type` v Netboxu na `SNMPv2`/`SNMPv3`. Zařízení/role stále nastavené na starou hodnotu `SNMP` je považováno za nenastavené, dokud nebude aktualizováno.
 
 ### Primární IP adresa
 
@@ -81,8 +100,36 @@ V Netboxu lze nastavit dědičný config context pro device role, který se auto
 Je připraven Netbox script, který synchronizuje Custom Field Choices s názvem `zabbix_hostgroups` s host groups v Zabbixu:
 
 - Custom Field Choices napojit na Custom Field s názvem `zabbix_hostgroups`
-- Nastavit jako multi-select na DCIM > DEVICE
+- Nastavit jako multi-select na DCIM > DEVICE a DCIM > DEVICE ROLE (hodnoty z role se použijí, pokud je zařízení nemá nastavené, viz priorita výše)
 - Defaultní host group v Zabbixu je nastavena na "Netbox" pro kontrolu všech zařízení vytvořených synchronizací
+
+### Vyloučené Hostgroupy
+
+- `EXCLUDED_HOSTGROUPS` volitelně určuje jednu Zabbix hostgroupu, která se vyloučí z porovnání
+- Zabbix zařízení patřící do této hostgroupy jsou z výsledků porovnání zcela vynechána (nejsou zobrazena jako "pouze v Zabbixu", nejsou párována s Netboxem ani synchronizována)
+- Nesouvisí s `ZABBIX_DEFAULT_HOSTGROUP`, ta pouze určuje, do jaké hostgroupy se zařadí nově vytvořené zařízení v Zabbixu
+- Ponechte nevyplněné (nebo prázdné), pokud chcete zahrnout všechna zařízení
+
+### Porty Zabbix rozhraní
+
+* `ZABBIX_AGENT_PORT`, `ZABBIX_SNMP_PORT`, `ZABBIX_IPMI_PORT`, `ZABBIX_JMX_PORT` nastavují port použitý při vytváření/aktualizaci odpovídajícího typu rozhraní v Zabbixu
+* `ZABBIX_SNMP_PORT` je sdílený pro SNMPv2 i SNMPv3 — Zabbix má jeden port na typ rozhraní, ne na verzi SNMP
+* Pokud nejsou nastaveny, použijí se výchozí hodnoty Zabbixu (10050, 161, 623, 12345)
+
+### Konfigurace SNMPv2/SNMPv3
+
+Protože přihlašovací údaje pro `SNMPv2`/`SNMPv3` jsou společné pro celé nasazení (ne pro jednotlivá zařízení), načítají se z proměnných prostředí, ne z Netboxu:
+
+* `SNMPV2_MACRO` — community string (nebo Zabbix makro, např. `{$SNMP_COMMUNITY}`) použitý pro SNMPv2 rozhraní. Výchozí hodnota je `{$SNMP_COMMUNITY}`.
+* `ZABBIX_SNMPV3_SECURITY_NAME` — SNMPv3 security name
+* `ZABBIX_SNMPV3_SECURITY_LEVEL` — SNMPv3 security level: `0`=noAuthNoPriv, `1`=authNoPriv, `2`=authPriv (výchozí `2`)
+* `ZABBIX_SNMPV3_AUTH_PROTOCOL` — kód SNMPv3 auth protokolu podle Zabbixu (výchozí `1` = SHA1)
+* `ZABBIX_SNMPV3_AUTH_PASSPHRASE` — SNMPv3 auth passphrase
+* `ZABBIX_SNMPV3_PRIV_PROTOCOL` — kód SNMPv3 priv protokolu podle Zabbixu (výchozí `1` = AES128)
+* `ZABBIX_SNMPV3_PRIV_PASSPHRASE` — SNMPv3 priv passphrase
+* `ZABBIX_SNMPV3_CONTEXT_NAME` — SNMPv3 context name (volitelné)
+
+Úplný seznam číselných kódů `authprotocol`/`privprotocol` najdete v dokumentaci Zabbix API.
 
 ### Custom Validation
 

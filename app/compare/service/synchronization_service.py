@@ -32,7 +32,7 @@ import requests
 
 from app.device.models.address_model import Address as address_model
 from app.device.models.device_model import Device as device_model
-from app.device.models.device_model import map_port_type_default_port
+from app.device.models.device_model import build_snmp_details, map_port_type_default_port
 from app.device.models.difference_model import (
     DeviceDifference as device_difference_model,
 )
@@ -44,6 +44,154 @@ from app.device.service import device_service
 from app.logger import logger_conf as log
 
 REQUEST_TIMEOUT = 30
+
+
+def _netbox_credentials() -> tuple[str | None, str | None]:
+    """Reads NETBOX_IP/NETBOX_KEY from the environment, logging if either is unset."""
+    netbox_ip: str | None = os.environ.get("NETBOX_IP")
+    netbox_key: str | None = os.environ.get("NETBOX_KEY")
+    if netbox_ip is None or netbox_key is None:
+        log.logger.error("Netbox IP or API key not set in environment variables.")
+    return netbox_ip, netbox_key
+
+
+def _synchronize_templates_to_zabbix(
+    nb_device: device_model, zb_device: device_model, sync_output: sync_output_model
+) -> bool:
+    """Pushes the NetBox device's templates into Zabbix, touching only the templates field."""
+    template_source = nb_device.templates
+    template_source = template_source if isinstance(template_source, list) else [template_source]
+    template_source = [template for template in template_source if template]
+    if not template_source:
+        msg = f"No Netbox templates to synchronize to Zabbix for {nb_device.name}."
+        log.logger.info(msg)
+        sync_output.add_difference_output(msg)
+        return False
+
+    zabbix_ip, zabbix_key = _zabbix_credentials()
+    if zabbix_ip is None or zabbix_key is None:
+        msg = "Zabbix IP or API key not set in environment variables."
+        sync_output.add_difference_output(msg)
+        return False
+
+    host_response = _zabbix_post(
+        zabbix_ip, zabbix_key, "host.get", {"filter": {"host": [zb_device.name]}}
+    )
+    host_data = host_response.json()
+    if "error" in host_data:
+        msg = f"Error in Zabbix API response: {host_data['error']}"
+        log.logger.error(msg)
+        sync_output.add_difference_output(msg)
+        return False
+    if not host_data["result"]:
+        msg = f"Failed to find Zabbix hostid for {zb_device.name}, cannot synchronize templates."
+        log.logger.error(msg)
+        sync_output.add_difference_output(msg)
+        return False
+    hostid = host_data["result"][0]["hostid"]
+
+    templateids = [find_template_ids(template) for template in template_source]
+    templateids = [tid for tid in templateids if tid and tid != -1]
+    resolve_inventory_link_conflicts(hostid, templateids, sync_output)
+
+    update_response = _zabbix_post(
+        zabbix_ip,
+        zabbix_key,
+        "host.update",
+        {"hostid": hostid, "templates": [{"templateid": tid} for tid in templateids]},
+    )
+    update_data = update_response.json()
+    if "error" in update_data:
+        msg = f"Error in Zabbix API response: {update_data['error']}"
+        log.logger.error(msg)
+        sync_output.add_difference_output(msg)
+        return False
+
+    msg = f"Templates for {zb_device.name} updated successfully in Zabbix."
+    log.logger.info(msg)
+    sync_output.add_difference_output(msg)
+    return True
+
+
+def _synchronize_templates_to_netbox(
+    nb_device: device_model, zb_device: device_model, sync_output: sync_output_model
+) -> bool:
+    """Pushes the Zabbix device's templates into NetBox's zabbix_templates custom field."""
+    template_source = zb_device.templates
+    template_source = template_source if isinstance(template_source, list) else [template_source]
+    template_source = [template for template in template_source if template]
+    if not template_source:
+        msg = f"No Zabbix templates to synchronize to Netbox for {zb_device.name}."
+        log.logger.info(msg)
+        sync_output.add_difference_output(msg)
+        return False
+
+    netbox_ip, netbox_key = _netbox_credentials()
+    if netbox_ip is None or netbox_key is None:
+        msg = "Netbox IP or API key not set in environment variables."
+        sync_output.add_difference_output(msg)
+        return False
+
+    device_id = device_service.find_nb_device_id(nb_device.name)
+    if device_id == -1:
+        msg = f"Failed to find Netbox device id for {nb_device.name}, cannot synchronize templates."
+        log.logger.error(msg)
+        sync_output.add_difference_output(msg)
+        return False
+
+    response = requests.patch(
+        f"{netbox_ip}/api/dcim/devices/{device_id}/",
+        headers={
+            "Authorization": f"Token {netbox_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        json={"custom_fields": {"zabbix_templates": template_source}},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if response.status_code != 200:
+        msg = f"Failed to update Netbox templates for {nb_device.name}: {response.text}"
+        log.logger.error(msg)
+        sync_output.add_difference_output(msg)
+        return False
+
+    msg = f"Templates for {nb_device.name} updated successfully in Netbox."
+    log.logger.info(msg)
+    sync_output.add_difference_output(msg)
+    return True
+
+
+def synchronize_templates(
+    nb_device: device_model,
+    zb_device: device_model,
+    direction: int,
+    sync_output: sync_output_model,
+) -> bool:
+    """
+    Synchronizes templates between NetBox and Zabbix.
+
+    Args:
+        nb_device (device_model): The NetBox device.
+        zb_device (device_model): The Zabbix device.
+        direction (int): The synchronization direction (1 for NetBox to Zabbix, 2 for Zabbix to NetBox).
+        sync_output (sync_output_model): The synchronization output model to log the results.
+
+    Returns:
+        bool: True if synchronization was successful, False otherwise.
+    """
+    try:
+        if direction == 1:
+            return _synchronize_templates_to_zabbix(nb_device, zb_device, sync_output)
+        if direction == 2:
+            return _synchronize_templates_to_netbox(nb_device, zb_device, sync_output)
+        msg = f"Unknown template synchronization direction: {direction}."
+        log.logger.error(msg)
+        sync_output.add_difference_output(msg)
+        return False
+    except Exception as e:  # pylint: disable=broad-except
+        log.logger.error(f"Error synchronizing templates: {e}")
+        sync_output.add_difference_output(f"Error synchronizing templates: {e}")
+        return False
 
 
 def _zabbix_credentials() -> tuple[str | None, str | None]:
@@ -97,7 +245,7 @@ def get_zabbix_host_interfaces(hostid: str) -> list[dict]:
             "hostinterface.get",
             {
                 "hostids": hostid,
-                "output": ["interfaceid", "type", "ip", "dns", "port", "main"],
+                "output": ["interfaceid", "type", "ip", "dns", "port", "main", "details"],
             },
         )
         response_json = response.json()
@@ -125,24 +273,26 @@ def add_interface_to_zabbix(
     interfaces: list[interface_model],
     sync_output: sync_output_model,
     existing_interfaces: list[dict] | None = None,
-):
+) -> bool:
     """Adds new interfaces to a Zabbix host via API.
     Args:
         hostid (str): The Zabbix host ID to add interfaces to.
         interfaces (list[interface_model]): List of interface models to add.
         sync_output (sync_output_model): The synchronization output model to log results.
         existing_interfaces (list[dict]): List of existing interface details from Zabbix (optional). Each dict should contain 'type' and 'main' keys.
+    Returns:
+        bool: True if the interfaces were created, False on any error.
     """
     zabbix_ip, zabbix_key = _zabbix_credentials()
     if zabbix_ip is None or zabbix_key is None:
-        return
+        return False
 
     if existing_interfaces is None:
         existing_interfaces = []
 
     # Prepare interface data for creation
     interface_params = []
-    for index, interface in enumerate(interfaces):
+    for interface in interfaces:
         # Ensure port_type is in numeric format
         port_type = device_service.uniform_port_type(interface.port_type, numbered=True)
 
@@ -174,11 +324,7 @@ def add_interface_to_zabbix(
             "port": port,
         }
         if port_type == "2":  # SNMP
-            interface_data["details"] = {
-                "version": "2",
-                "bulk": "1",
-                "community": "{$SNMP_COMMUNITY}",
-            }
+            interface_data["details"] = build_snmp_details(interface.snmp_version)
         interface_params.append(interface_data)
     log.logger.info("Params payload: %s", interface_params)
     try:
@@ -194,41 +340,45 @@ def add_interface_to_zabbix(
             error_msg = f"Failed to add interfaces to Zabbix host {hostid}: {response_json['error']}"
             sync_output.add_difference_output(error_msg)
             log.logger.error(error_msg)
-            return
+            return False
 
         if response.status_code == 200:
             interfaceids = response_json.get("result", {}).get("interfaceids", [])
             success_msg = f"Successfully added {len(interfaceids)} interface(s) to Zabbix host {hostid}."
             sync_output.add_difference_output(success_msg)
             log.logger.info(success_msg)
-        else:
-            error_msg = (
-                f"Unexpected status code {response.status_code} when adding interfaces."
-            )
-            sync_output.add_difference_output(error_msg)
-            log.logger.error(error_msg)
+            return True
+        error_msg = (
+            f"Unexpected status code {response.status_code} when adding interfaces."
+        )
+        sync_output.add_difference_output(error_msg)
+        log.logger.error(error_msg)
+        return False
     except requests.exceptions.RequestException as e:
         error_msg = f"Exception when adding interfaces to Zabbix: {e}"
         sync_output.add_difference_output(error_msg)
         log.logger.error(error_msg)
+        return False
 
 
 def remove_interface_from_zabbix(
-    hostid: str, interface_ids: list[int], sync_output: sync_output_model
-):
+    hostid: str, interface_ids: list[str], sync_output: sync_output_model
+) -> bool:
     """Removes interfaces from a Zabbix host via API.
     Args:
         hostid (str): The Zabbix host ID (for logging purposes).
-        interface_ids (list[int]): List of interface IDs to remove.
+        interface_ids (list[str]): List of Zabbix interface IDs to remove.
         sync_output (sync_output_model): The synchronization output model to log results.
+    Returns:
+        bool: True if the interfaces were removed (or there was nothing to remove), False on any error.
     """
     if not interface_ids:
         log.logger.info("No interfaces to remove from Zabbix host %s.", hostid)
-        return
+        return True
 
     zabbix_ip, zabbix_key = _zabbix_credentials()
     if zabbix_ip is None or zabbix_key is None:
-        return
+        return False
 
     try:
         log.logger.info(
@@ -243,21 +393,60 @@ def remove_interface_from_zabbix(
             error_msg = f"Failed to remove interfaces from Zabbix host {hostid}: {response_json['error']}"
             sync_output.add_difference_output(error_msg)
             log.logger.error(error_msg)
-            return
+            return False
 
         if response.status_code == 200:
             interfaceids = response_json.get("result", {}).get("interfaceids", [])
             success_msg = f"Successfully removed {len(interfaceids)} interface(s) from Zabbix host {hostid}."
             sync_output.add_difference_output(success_msg)
             log.logger.info(success_msg)
-        else:
-            error_msg = f"Unexpected status code {response.status_code} when removing interfaces."
-            sync_output.add_difference_output(error_msg)
-            log.logger.error(error_msg)
+            return True
+        error_msg = f"Unexpected status code {response.status_code} when removing interfaces."
+        sync_output.add_difference_output(error_msg)
+        log.logger.error(error_msg)
+        return False
     except requests.exceptions.RequestException as e:
         error_msg = f"Exception when removing interfaces from Zabbix: {e}"
         sync_output.add_difference_output(error_msg)
         log.logger.error(error_msg)
+        return False
+
+
+def count_interface_links(hostid: str, interfaceid: str) -> int | None:
+    """Counts the items and LLD rules linked to a Zabbix host interface.
+
+    Zabbix refuses hostinterface.delete while anything is linked to the
+    interface (default or not), so this is checked before choosing which
+    interface to remove. Returns None if the count can't be determined.
+    """
+    zabbix_ip, zabbix_key = _zabbix_credentials()
+    if zabbix_ip is None or zabbix_key is None:
+        return None
+
+    total = 0
+    try:
+        for method in ("item.get", "discoveryrule.get"):
+            response: requests.Response = _zabbix_post(
+                zabbix_ip,
+                zabbix_key,
+                method,
+                {"hostids": hostid, "interfaceids": interfaceid, "countOutput": True},
+            )
+            response_json = response.json()
+            if "error" in response_json:
+                log.logger.error(
+                    "Error counting %s links for interface %s: %s",
+                    method,
+                    interfaceid,
+                    response_json["error"],
+                )
+                return None
+            total += int(response_json.get("result", 0))
+    except (requests.exceptions.RequestException, TypeError, ValueError) as e:
+        log.logger.error("Exception when counting links for interface %s: %s", interfaceid, e)
+        return None
+    log.logger.debug("Interface %s has %d linked item(s)/LLD rule(s).", interfaceid, total)
+    return total
 
 
 def find_hostgroup_id(hostgroup_name: str) -> int:
@@ -292,6 +481,7 @@ def find_hostgroup_id(hostgroup_name: str) -> int:
         "Failed to find Zabbix hostgroup ID for %s: %s", hostgroup_name, response.text
     )
     return -1
+
 
 def resolve_inventory_link_conflicts(
     hostid: str, new_template_ids: list[int], sync_output: sync_output_model
@@ -408,6 +598,72 @@ def find_template_ids(template_name: str) -> int:
         "Failed to find Zabbix template ID for %s: %s", template_name, response.text
     )
     return -1
+
+
+def _choose_interface_to_remove(
+    hostid: str,
+    extra: dict,
+    zb_interfaces: list[dict],
+    nb_keys: set[tuple[str, str]],
+    already_removed: list,
+    snmp_version_updates: dict[str, str],
+    main_promotions: set[str],
+) -> str | None:
+    """Picks the Zabbix interface to delete for an "extra in Zabbix" difference.
+
+    Normally that's `extra` itself. But if another interface of the same type
+    stays (one NetBox wants, e.g. SNMPv2 next to an extra SNMPv3), the two are
+    interchangeable: keep whichever has items linked (or, if neither has,
+    whichever is the default), delete the other, and switch the kept one to
+    the NetBox SNMP version via `snmp_version_updates`. If the deleted one was
+    the default, the kept one is queued in `main_promotions` to become the
+    default once the delete went through. Zabbix won't delete an
+    interface with linked items and items don't move to another interface on
+    their own, so this avoids touching items at all.
+
+    Returns the interfaceid to delete, or None if every candidate has items
+    linked (or the links couldn't be checked) and nothing can be deleted.
+    """
+    extra_id = extra["interfaceid"]
+    extra_links = count_interface_links(hostid, extra_id)
+    if extra_links is None:
+        return None
+
+    partner = next(
+        (
+            zb_iface
+            for zb_iface in zb_interfaces
+            if zb_iface.get("type") == extra.get("type")
+            and zb_iface["interfaceid"] != extra_id
+            and zb_iface["interfaceid"] not in already_removed
+            and (zb_iface.get("type", ""), device_service.zb_snmp_version(zb_iface)) in nb_keys
+        ),
+        None,
+    )
+    if partner is None:
+        return extra_id if extra_links == 0 else None
+
+    partner_links = count_interface_links(hostid, partner["interfaceid"])
+    if partner_links is None:
+        return None
+    if extra_links > 0 and partner_links > 0:
+        return None
+    keep_extra = extra_links > 0 or (partner_links == 0 and extra.get("main") == "1")
+    if not keep_extra:
+        if extra.get("main") == "1":
+            main_promotions.add(partner["interfaceid"])
+        return extra_id
+
+    if extra.get("type") == "2":
+        snmp_version_updates[extra_id] = device_service.zb_snmp_version(partner)
+    log.logger.info(
+        "Keeping interface %s (linked items: %d, main: %s) and removing %s instead.",
+        extra_id,
+        extra_links,
+        extra.get("main"),
+        partner["interfaceid"],
+    )
+    return partner["interfaceid"]
 
 
 def apply_differences(
@@ -537,7 +793,7 @@ def apply_differences(
 
     # Handle missing and extra interfaces
     interfaces_to_add = []
-    interface_ids_to_remove = []
+    interface_ids_to_remove: list[str] = []
 
     log.logger.info(
         "Processing interface differences. Different fields: %s", different_fields
@@ -551,7 +807,11 @@ def apply_differences(
         for field in different_fields
     )
     has_interface_field_changes_check = any(
-        "address" in field or "dns" in field or "port" in field or "Interface" in field
+        "address" in field
+        or "dns" in field
+        or "port" in field
+        or "Interface" in field
+        or "snmp_version" in field
         for field in different_fields
     )
     log.logger.info("Has interface changes: %s", has_interface_changes)
@@ -562,88 +822,137 @@ def apply_differences(
             "Retrieved %d interface details from Zabbix", len(zb_interface_details)
         )
 
+    # Interfaces are identified by (Zabbix type code, snmp_version) so that e.g.
+    # SNMPv2 and SNMPv3 on the same host are handled as separate interfaces
+    def nb_key(iface: interface_model) -> tuple[str, str]:
+        return (
+            device_service.uniform_port_type(iface.port_type, numbered=True),
+            iface.snmp_version,
+        )
+
+    def zb_key(iface: dict) -> tuple[str, str]:
+        return iface.get("type", ""), device_service.zb_snmp_version(iface)
+
+    # Zabbix interfaceid -> new SNMP version, for in-place version changes
+    snmp_version_updates: dict[str, str] = {}
+    # Changes to the interface kept instead of a deleted one; only applied once
+    # the delete went through (interfaceid -> SNMP version, interfaceids to make default)
+    swap_version_updates: dict[str, str] = {}
+    main_promotions: set[str] = set()
+
     for field in different_fields:
         log.logger.debug("Processing field: %s", field)
 
         if "missing in Zabbix" in field:
             log.logger.info("Field indicates missing interface: %s", field)
-            # Extract port_type from message: "Interface with port_type 'X' missing in Zabbix"
+            # Extract label from message: "Interface with port_type 'X' missing in Zabbix"
             port_type = field.split("'")[1] if "'" in field else ""
             log.logger.info("Extracted port_type for missing interface: %s", port_type)
 
             if port_type:
-                # Convert port_type name to numeric code to match NetBox device model
-                nb_port_type_code = device_service.uniform_port_type(
-                    port_type, numbered=True
-                )
-                log.logger.info(
-                    "Converted port_type '%s' to NetBox port_type code '%s'",
-                    port_type,
-                    nb_port_type_code,
-                )
+                iface_key = device_service.port_label_to_key(port_type)
                 log.logger.debug(
-                    "Available port_types in NetBox device: %s",
-                    [
-                        getattr(iface, "port_type", "N/A")
+                    "Available interfaces in NetBox device: %s",
+                    [nb_key(iface) for iface in nb_device.interfaces],
+                )
+                # One message = one missing interface
+                nb_match = next(
+                    (
+                        iface
                         for iface in nb_device.interfaces
-                    ],
+                        if nb_key(iface) == iface_key and iface not in interfaces_to_add
+                    ),
+                    None,
                 )
-
-                # Find matching interface in NetBox by port_type code
-                nb_matching_interfaces = [
-                    iface
-                    for iface in nb_device.interfaces
-                    if getattr(iface, "port_type", "") == nb_port_type_code
-                ]
-                log.logger.info(
-                    "Found %d matching interfaces in NetBox with port_type '%s' (code: '%s')",
-                    len(nb_matching_interfaces),
-                    port_type,
-                    nb_port_type_code,
-                )
-
-                if nb_matching_interfaces:
-                    interfaces_to_add.extend(nb_matching_interfaces)
+                if nb_match is not None:
+                    interfaces_to_add.append(nb_match)
                     log.logger.info(
-                        "Added %d interface(s) with port_type '%s' to add list for device %s.",
-                        len(nb_matching_interfaces),
+                        "Added interface %s with port_type '%s' to add list for device %s.",
+                        iface_key,
                         port_type,
                         zb_device.name,
                     )
                     sync_output.add_difference_output(
                         f"Interface with port_type '{port_type}' will be added to {zb_device.name} in Zabbix."
                     )
+                else:
+                    log.logger.warning(
+                        "No NetBox interface found for missing port_type '%s' %s",
+                        port_type,
+                        iface_key,
+                    )
 
         elif "extra in Zabbix" in field:
             log.logger.info("Field indicates extra interface: %s", field)
-            # Extract port_type from message: "Interface with port_type 'X' extra in Zabbix"
+            # Extract label from message: "Interface with port_type 'X' extra in Zabbix"
             port_type = field.split("'")[1] if "'" in field else ""
             log.logger.info("Extracted port_type for extra interface: %s", port_type)
             if port_type:
-                # Convert port_type name to Zabbix type code
-                zabbix_type_code = device_service.uniform_port_type(
-                    port_type, numbered=True
+                iface_key = device_service.port_label_to_key(port_type)
+                # One message = one extra interface; never remove all of a type
+                zb_match = next(
+                    (
+                        zb_iface
+                        for zb_iface in zb_interface_details
+                        if zb_key(zb_iface) == iface_key
+                        and zb_iface["interfaceid"] not in interface_ids_to_remove
+                    ),
+                    None,
                 )
-                log.logger.info(
-                    "Converted port_type '%s' to Zabbix type code '%s'",
-                    port_type,
-                    zabbix_type_code,
-                )
-
-                # Find the interface in Zabbix details by type code and collect its ID
-                for zb_iface in zb_interface_details:
-                    if zb_iface.get("type") == zabbix_type_code:
-                        interface_ids_to_remove.append(zb_iface["interfaceid"])
-                        log.logger.info(
-                            "Found interface ID %s to remove (type: '%s' = '%s')",
-                            zb_iface["interfaceid"],
-                            zabbix_type_code,
-                            port_type,
+                if zb_match is not None:
+                    remove_id = _choose_interface_to_remove(
+                        hostid,
+                        zb_match,
+                        zb_interface_details,
+                        {nb_key(iface) for iface in nb_device.interfaces},
+                        interface_ids_to_remove,
+                        swap_version_updates,
+                        main_promotions,
+                    )
+                    if remove_id is None:
+                        msg = (
+                            f"Extra interface with port_type '{port_type}' can't be removed from "
+                            f"{zb_device.name} in Zabbix: items are linked to it (and to the other "
+                            "interface of the same type, if any). Move the items to another "
+                            "interface in Zabbix first."
                         )
+                        sync_output.add_difference_output(msg)
+                        log.logger.error(msg)
+                        had_errors = True
+                        continue
+                    interface_ids_to_remove.append(remove_id)
+                    log.logger.info(
+                        "Found interface ID %s to remove %s ('%s')",
+                        remove_id,
+                        iface_key,
+                        port_type,
+                    )
+                    sync_output.add_difference_output(
+                        f"Extra interface with port_type '{port_type}' will be removed from {zb_device.name} in Zabbix."
+                    )
 
-                sync_output.add_difference_output(
-                    f"Extra interface with port_type '{port_type}' will be removed from {zb_device.name} in Zabbix."
+        elif extract_field_name(field) == "snmp_version":
+            # Message: "snmp_version (<netbox> != <zabbix>), ..."
+            versions = field.split("(", 1)[1].split(")", 1)[0].split(" != ")
+            if len(versions) == 2:
+                new_version, old_version = versions
+                zb_match = next(
+                    (
+                        zb_iface
+                        for zb_iface in zb_interface_details
+                        if zb_key(zb_iface) == ("2", old_version)
+                        and zb_iface["interfaceid"] not in snmp_version_updates
+                    ),
+                    None,
                 )
+                if zb_match is not None:
+                    snmp_version_updates[zb_match["interfaceid"]] = new_version
+                    log.logger.info(
+                        "SNMP interface %s will change version %s -> %s",
+                        zb_match["interfaceid"],
+                        old_version,
+                        new_version,
+                    )
 
     log.logger.info(
         "Interfaces to add: %d, Interface IDs to remove: %d",
@@ -656,16 +965,23 @@ def apply_differences(
         log.logger.info(
             "Making API call to add %d interface(s)", len(interfaces_to_add)
         )
-        add_interface_to_zabbix(
+        if not add_interface_to_zabbix(
             hostid, interfaces_to_add, sync_output, zb_interface_details
-        )
+        ):
+            had_errors = True
 
     # Make API calls to remove interfaces from Zabbix
     if interface_ids_to_remove:
         log.logger.info(
             "Making API call to remove %d interface(s)", len(interface_ids_to_remove)
         )
-        remove_interface_from_zabbix(hostid, interface_ids_to_remove, sync_output)
+        if not remove_interface_from_zabbix(hostid, interface_ids_to_remove, sync_output):
+            had_errors = True
+            # The interfaces are still there, so don't update them as if they were gone
+            interface_ids_to_remove.clear()
+            main_promotions.clear()
+        else:
+            snmp_version_updates.update(swap_version_updates)
 
     # Prefer updated Zabbix values, but fall back to Netbox if source data is missing.
     hostgroup_source: list[str] | str = (
@@ -710,41 +1026,58 @@ def apply_differences(
 
         # Build update params by matching device model interfaces with Zabbix interfaces by type
         # This ensures we don't try to change interface types (which fails if items are linked)
-        interface_update_params = []
+        interface_update_params: list[dict[str, Any]] = []
+        # NetBox interfaces just created in Zabbix must not be matched again
+        used_nb_interfaces: list[interface_model] = list(interfaces_to_add)
         for zb_iface in zb_interface_details:
-            zabbix_type = zb_iface.get("type")
-            # Find matching interface in device model by type
-            for nb_iface in nb_device.interfaces:
-                nb_port_type = device_service.uniform_port_type(
-                    nb_iface.port_type, numbered=True
-                )
-                if nb_port_type == zabbix_type:
-                    # Match found - only update IP, DNS, port (don't change type or main)
-                    ip_address = (
-                        str(nb_iface.addresses[0].address).split("/", maxsplit=1)[0]
-                        if nb_iface.addresses
-                        else ""
-                    )
-                    dns_name = (
-                        nb_iface.addresses[0].dns_name if nb_iface.addresses else ""
-                    )
+            if zb_iface["interfaceid"] in interface_ids_to_remove:
+                continue
+            zabbix_type = zb_iface.get("type", "")
+            zabbix_version = snmp_version_updates.get(
+                zb_iface["interfaceid"], device_service.zb_snmp_version(zb_iface)
+            )
+            candidates = [
+                iface for iface in nb_device.interfaces if iface not in used_nb_interfaces
+            ]
+            # Prefer same type and SNMP version, fall back to same type only
+            nb_iface = next(
+                (iface for iface in candidates if nb_key(iface) == (zabbix_type, zabbix_version)),
+                None,
+            ) or next(
+                (iface for iface in candidates if nb_key(iface)[0] == zabbix_type),
+                None,
+            )
+            if nb_iface is None:
+                continue
+            used_nb_interfaces.append(nb_iface)
+            # Only update IP, DNS, port and SNMP details (don't change type or main)
+            ip_address = (
+                str(nb_iface.addresses[0].address).split("/", maxsplit=1)[0]
+                if nb_iface.addresses
+                else ""
+            )
+            dns_name = nb_iface.addresses[0].dns_name if nb_iface.addresses else ""
 
-                    interface_update_params.append(
-                        {
-                            "interfaceid": zb_iface["interfaceid"],
-                            "ip": ip_address,
-                            "dns": dns_name,
-                            "port": map_port_type_default_port(nb_iface.port_type),
-                        }
-                    )
-                    log.logger.debug(
-                        "Matched interface type %s: updating interfaceid %s with ip=%s, dns=%s",
-                        zabbix_type,
-                        zb_iface["interfaceid"],
-                        ip_address,
-                        dns_name,
-                    )
-                    break
+            update_entry: dict[str, Any] = {
+                "interfaceid": zb_iface["interfaceid"],
+                "ip": ip_address,
+                "dns": dns_name,
+                "port": map_port_type_default_port(nb_iface.port_type),
+            }
+            if zb_iface["interfaceid"] in snmp_version_updates:
+                update_entry["details"] = build_snmp_details(
+                    snmp_version_updates[zb_iface["interfaceid"]]
+                )
+            if zb_iface["interfaceid"] in main_promotions:
+                update_entry["main"] = 1
+            interface_update_params.append(update_entry)
+            log.logger.debug(
+                "Matched interface type %s: updating interfaceid %s with ip=%s, dns=%s",
+                zabbix_type,
+                zb_iface["interfaceid"],
+                ip_address,
+                dns_name,
+            )
 
         if interface_update_params:
             log.logger.info("Interface update params: %s", interface_update_params)

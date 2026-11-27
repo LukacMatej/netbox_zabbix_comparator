@@ -1,0 +1,8 @@
+services:
+  netbox_zabbix:
+    image: docker.io/netsystemcz/netbox_zabbix:20260925
+
+    env_file:
+      - .env
+    ports:
+      - "7000:7000"

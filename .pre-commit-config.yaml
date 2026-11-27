@@ -12,7 +12,7 @@ repos:
       entry: pylint
       language: python
       types: [python]
-      exclude: ^(scripts|tests|validators)/
+      exclude: ^(scripts|tests|validators|doc)/
       args: [--rcfile=.pylintrc, --fail-under=9]
       additional_dependencies: [pylint, fastapi, uvicorn, requests]
     - id: mypy

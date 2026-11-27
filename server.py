@@ -8,10 +8,12 @@ Routes:
     / (GET): Renders the index page.
     /run_comparison (GET): Compares devices between NetBox and Zabbix.
     /run_comparison_sync (GET): Compares and synchronizes devices.
+    /logs (GET): Renders recent application log lines (full page or HTMX partial).
 Functions:
     test(): Renders an index template with actions for compare/sync.
     run_compare(): Returns comparison output in full page or HTMX partial mode.
     run_compare_sync(): Returns synchronized output in full page or HTMX partial mode.
+    view_logs(): Returns recent log lines in full page or HTMX partial mode.
     parser_init(): Initializes and returns an argument parser for server configuration.
 Usage:
     Run the script with optional arguments to start the server in development or production mode.
@@ -31,6 +33,7 @@ Dependencies:
 from __future__ import annotations
 
 import argparse
+import difflib
 import os
 import sys
 from typing import Any
@@ -44,6 +47,8 @@ from fastapi.responses import (
     PlainTextResponse,
 )
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup, escape
+from starlette.concurrency import run_in_threadpool
 
 from app.compare.service import compare_service as ct
 from app.compare.service import synchronization_service as ss
@@ -57,6 +62,7 @@ from app.device.models.synchonization_output_model import (
 from app.device.service import device_service as ds
 from app.device.service import validator_service as validator
 from app.logger import logger_conf as log
+from app.logger.log_buffer import log_buffer
 
 proxy_root_path: str = os.environ.get("PROXY_ROOT_PATH", "")
 # Ensure root_path starts with / if provided
@@ -64,7 +70,6 @@ if proxy_root_path and not proxy_root_path.startswith("/"):
     proxy_root_path = "/" + proxy_root_path
 app = FastAPI(root_path=proxy_root_path, title="NetBox Zabbix Compare")
 templates = Jinja2Templates(directory="templates")
-
 
 def dict_to_address(data: dict) -> Address:
     return Address(address=data["address"], dns_name=data["dns_name"])
@@ -76,16 +81,26 @@ def dict_to_interface(data: dict) -> Interface:
         addresses=[dict_to_address(a) for a in data["addresses"]],
         mac_address=data["mac_address"],
         port_type=data["port_type"],
+        snmp_version=data.get("snmp_version", ""),
     )
+
+
+def _as_list(value: Any) -> list[str]:
+    """Normalizes a JSON list or a ", "-joined string into a list of non-empty strings."""
+    if isinstance(value, list):
+        return [str(item) for item in value if item]
+    if not value:
+        return []
+    return [item for item in str(value).split(", ") if item]
 
 
 def dict_to_device(data: dict) -> Device:
     return Device(
         name=data["name"],
         interfaces=[dict_to_interface(i) for i in data["interfaces"]],
-        hostgroup=str(data["hostgroup"]).split(", "),
+        hostgroup=_as_list(data["hostgroup"]),
         description=data["description"],
-        templates=str(data["templates"]).split(", "),
+        templates=_as_list(data["templates"]),
         status=data["status"],
     )
 
@@ -103,6 +118,7 @@ def device_to_dict(device: Device) -> dict:
                 "name": interface.name,
                 "mac_address": interface.mac_address,
                 "port_type": interface.port_type,
+                "snmp_version": interface.snmp_version,
                 "addresses": [address.to_dict() for address in interface.addresses],
             }
             for interface in device.interfaces
@@ -125,6 +141,127 @@ def difference_to_dict(difference: DeviceDifference) -> dict:
 templates.env.globals["difference_to_dict"] = difference_to_dict
 
 
+def diff_html(zabbix_value: Any, netbox_value: Any, side: str) -> Markup:
+    """Character-level diff highlighting between a Zabbix and a NetBox value.
+
+    Always takes (zabbix_value, netbox_value) in that order, regardless of which
+    side is being rendered. `side="old"` returns zabbix_value with its differing
+    characters wrapped for red highlighting; `side="new"` returns netbox_value
+    with its differing characters wrapped for green highlighting. Used by
+    compare_output_content.html to show exactly what changed between the two
+    sides, vim-diff style, instead of coloring the whole value.
+    """
+    old_str = "" if zabbix_value is None else str(zabbix_value)
+    new_str = "" if netbox_value is None else str(netbox_value)
+    css_class = "diff-old" if side == "old" else "diff-new"
+    matcher = difflib.SequenceMatcher(None, old_str, new_str, autojunk=False)
+    parts: list[str] = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        chunk = old_str[i1:i2] if side == "old" else new_str[j1:j2]
+        if not chunk:
+            continue
+        if tag == "equal":
+            parts.append(str(escape(chunk)))
+        else:
+            parts.append(f'<span class="{css_class}">{escape(chunk)}</span>')
+    return Markup("".join(parts))
+
+
+templates.env.globals["diff_html"] = diff_html
+
+
+def safe_index(seq: list, index: int) -> Any:
+    """Returns seq[index], or None if seq is falsy or index is out of range.
+
+    Used by compare_output_content.html to look up the "same position"
+    counterpart interface/address when the NetBox and Zabbix sides are
+    rendered in two separate loops.
+    """
+    try:
+        return seq[index]
+    except (IndexError, TypeError):
+        return None
+
+
+templates.env.globals["safe_index"] = safe_index
+
+
+@app.post(
+    "/synchronize_zabbix_templates",
+    name="synchronize_zabbix_templates",
+    response_class=HTMLResponse,
+)
+async def synchronize_zabbix_templates(request: Request) -> Response:
+    try:
+        payload = await request.json()
+    except ValueError:
+        return PlainTextResponse("Invalid or missing JSON body", status_code=400)
+
+    nb_device = dict_to_device(payload["nb_device"])
+    zb_device = dict_to_device(payload["zb_device"])
+    log.logger.info(f"Synchronizing Netbox -> Zabbix templates: {nb_device.name} -> {zb_device.name}")
+    error_log = ""
+    sync_output = sync_output_model()
+    try:
+        success = await run_in_threadpool(
+            ss.synchronize_templates, nb_device, zb_device, 1, sync_output
+        )
+        if not success:
+            error_log = str(sync_output)
+    except Exception as e:  # pylint: disable=broad-except
+        log.logger.error(
+            "Failed to synchronize Netbox -> Zabbix templates for %s: %s", nb_device.name, e, exc_info=True
+        )
+        success = False
+        error_log = str(e)
+
+    return templates.TemplateResponse(
+        request,
+        "sync_button_result.html",
+        {"success": success, "error_log": error_log},
+        status_code=200,
+    )
+
+
+@app.post(
+    "/synchronize_netbox_templates",
+    name="synchronize_netbox_templates",
+    response_class=HTMLResponse,
+)
+async def synchronize_netbox_templates(request: Request) -> Response:
+    try:
+        payload = await request.json()
+    except ValueError:
+        return PlainTextResponse("Invalid or missing JSON body", status_code=400)
+
+    nb_device = dict_to_device(payload["nb_device"])
+    zb_device = dict_to_device(payload["zb_device"])
+    log.logger.info(f"Synchronizing Zabbix -> Netbox templates: {zb_device.name} -> {nb_device.name}")
+    error_log = ""
+    sync_output = sync_output_model()
+    try:
+        # Must not block the event loop: NetBox's custom validator calls back into
+        # /validate_update on this same server before it saves the PATCH.
+        success = await run_in_threadpool(
+            ss.synchronize_templates, nb_device, zb_device, 2, sync_output
+        )
+        if not success:
+            error_log = str(sync_output)
+    except Exception as e:  # pylint: disable=broad-except
+        log.logger.error(
+            "Failed to synchronize Zabbix -> Netbox templates for %s: %s", nb_device.name, e, exc_info=True
+        )
+        success = False
+        error_log = str(e)
+
+    return templates.TemplateResponse(
+        request,
+        "sync_button_result.html",
+        {"success": success, "error_log": error_log},
+        status_code=200,
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
 def test(request: Request) -> HTMLResponse:
     """
@@ -135,10 +272,43 @@ def test(request: Request) -> HTMLResponse:
     """
     netbox_url: str | None = os.environ.get("NETBOX_IP")
     zabbix_url: str | None = os.environ.get("ZABBIX_IP")
+    excluded_hostgroups: str = os.environ.get("EXCLUDED_HOSTGROUPS", "")
     return templates.TemplateResponse(
         request,
         "index.html",
-        {"request": request, "netbox_url": netbox_url, "zabbix_url": zabbix_url},
+        {
+            "request": request,
+            "netbox_url": netbox_url,
+            "zabbix_url": zabbix_url,
+            "excluded_hostgroups": excluded_hostgroups,
+        },
+        status_code=200,
+    )
+
+@app.post(
+    "/delete_zabbix_device", name="delete_zabbix_device", response_class=HTMLResponse
+)
+async def delete_zabbix_device(request: Request) -> Response:
+    try:
+        payload = await request.json()
+    except ValueError:
+        return PlainTextResponse("Invalid or missing JSON body", status_code=400)
+
+    device: Device = dict_to_device(payload)
+    log.logger.info(f"Deleting Zabbix device for device_id: {device.name}")
+    error_log = ""
+    try:
+        await run_in_threadpool(ds.delete_zabbix_device, device)
+        success = True
+    except Exception as e: # pylint: disable=broad-except
+        error_log = str(e)
+        log.logger.error(f"Failed to delete Zabbix device for device_id: {device.name}: {e}", exc_info=True)
+        success = False
+
+    return templates.TemplateResponse(
+        request,
+        "sync_button_result.html",
+        {"success": success, "error_log": error_log},
         status_code=200,
     )
 
@@ -155,7 +325,7 @@ async def create_zabbix_device(request: Request) -> Response:
     log.logger.info(f"Creating Zabbix device for device_id: {device.name}")
     error_log = ""
     try:
-        ss.create_zabbix_device(device, sync_output_model())
+        await run_in_threadpool(ss.create_zabbix_device, device, sync_output_model())
         success = True
     except Exception as e:  # pylint: disable=broad-except
         log.logger.error(
@@ -194,7 +364,9 @@ async def synchronize_zabbix_device(request: Request) -> Response:
     log.logger.info(f"Synchronizing Zabbix device: {nb_device} -> {zb_device}")
     sync_output = sync_output_model()
     try:
-        ss.apply_differences(differences=difference, sync_output=sync_output)
+        await run_in_threadpool(
+            ss.apply_differences, differences=difference, sync_output=sync_output
+        )
         success = True
     except Exception as e:  # pylint: disable=broad-except
         log.logger.error(
@@ -231,15 +403,11 @@ def run_compare(request: Request) -> Response:
         Implicitly handles exceptions from the compare operation and returns
         them as error responses with status code 500.
     """
-    netbox_key: str | None = os.environ.get("NETBOX_KEY")
     netbox_ip: str | None = os.environ.get("NETBOX_IP")
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
-    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
     compare_output: (
         Exception | tuple[list[DeviceDifference], list[Device], list[Device]]
-    ) = ct.compare(
-        nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key
-    )
+    ) = ct.compare()
     if isinstance(compare_output, Exception):
         return PlainTextResponse(str(compare_output), status_code=500)
     differences: list[DeviceDifference] = compare_output[0]
@@ -307,15 +475,11 @@ def run_compare_sync(request: Request) -> Response:
     """
     synchronization: bool = True
     sync_output: sync_output_model
-    netbox_key: str | None = os.environ.get("NETBOX_KEY")
     netbox_ip: str | None = os.environ.get("NETBOX_IP")
     zabbix_ip: str | None = os.environ.get("ZABBIX_IP")
-    zabbix_key: str | None = os.environ.get("ZABBIX_KEY")
     compare_output: (
         Exception | tuple[list[DeviceDifference], list[Device], list[Device]]
-    ) = ct.compare(
-        nb_ip=netbox_ip, nb_key=netbox_key, zb_ip=zabbix_ip, zb_key=zabbix_key
-    )
+    ) = ct.compare()
     if isinstance(compare_output, Exception):
         return PlainTextResponse(str(compare_output), status_code=500)
     differences: list[DeviceDifference] = compare_output[0]
@@ -368,15 +532,41 @@ def run_compare_sync(request: Request) -> Response:
     )
 
 
+@app.get("/logs", name="view_logs", response_class=HTMLResponse)
+def view_logs(request: Request) -> Response:
+    """
+    Render recent application log lines (most recent 1000).
+
+    Three cases, distinguished by the HTMX request headers:
+      - No HTMX request: full page (nav bar + fragment).
+      - HTMX request targeting "page-content": initial nav-click swap,
+        returns the fragment (container + polling <pre>).
+      - HTMX request targeting "log-output": the <pre>'s own poll, returns
+        just the bare lines so only its innerHTML is refreshed in place
+        (avoids destroying/recreating the container every 2s).
+    """
+    lines = log_buffer.snapshot()
+    is_htmx = request.headers.get("hx-request", "").lower() == "true"
+    if not is_htmx:
+        template_name = "logs.html"
+    elif request.headers.get("hx-target") == "log-output":
+        template_name = "logs_lines.html"
+    else:
+        template_name = "logs_content.html"
+    return templates.TemplateResponse(
+        request, template_name, {"lines": lines}, status_code=200
+    )
+
+
 @app.post("/webhook_create")
 async def webhook_create(request: Request):
     """Handle webhook create event."""
     data = await request.json()
-    nb_device: Device = ds.parse_webhook(data)
+    nb_device: Device = await run_in_threadpool(ds.parse_webhook_create, data)
     log.logger.info("Webhook create event received: %s", data)
     log.logger.info(f"Creating Zabbix device for device_id: {nb_device.name}")
     try:
-        ss.create_zabbix_device(nb_device, sync_output_model())
+        await run_in_threadpool(ss.create_zabbix_device, nb_device, sync_output_model())
         response = "True"
         status_code = 200
     except Exception as e:  # pylint: disable=broad-except
@@ -397,14 +587,14 @@ async def webhook_update(request: Request):
     data = await request.json()
     log.logger.info("Webhook update event received: %s", data)
 
-    nb_device = ds.parse_webhook_update(data)
-    zb_device = ds.get_zabbix_device(nb_device.name)
+    nb_device = await run_in_threadpool(ds.parse_webhook_update, data)
+    zb_device = await run_in_threadpool(ds.get_zabbix_device, nb_device.name)
 
     if zb_device is None:
         log.logger.info("No Zabbix host found for %s, skipping sync.", nb_device.name)
         return {"success": "True"}, 200
 
-    differences = ct.compare_devices([nb_device], [zb_device])
+    differences = await run_in_threadpool(ct.compare_devices, [nb_device], [zb_device])
     difference_list = differences[0]
 
     if not difference_list:
@@ -416,7 +606,9 @@ async def webhook_update(request: Request):
 
     sync_output = sync_output_model()
     try:
-        ss.apply_differences(differences=difference, sync_output=sync_output)
+        await run_in_threadpool(
+            ss.apply_differences, differences=difference, sync_output=sync_output
+        )
         response = "True"
         status_code = 200
     except Exception as e:  # pylint: disable=broad-except
@@ -433,11 +625,11 @@ async def webhook_update(request: Request):
 async def webhook_delete(request: Request):
     """Handle webhook create event."""
     data = await request.json()
-    nb_device: Device = ds.parse_webhook(data)
+    nb_device: Device = await run_in_threadpool(ds.parse_webhook, data)
     log.logger.info("Webhook delete event received: %s", data)
     log.logger.info(f"Deleting Zabbix device for device_id: {nb_device.name}")
     try:
-        ds.delete_zabbix_device(nb_device)
+        await run_in_threadpool(ds.delete_zabbix_device, nb_device)
         response = "True"
         status_code = 200
     except Exception as e:  # pylint: disable=broad-except
@@ -484,7 +676,7 @@ async def validate_update(request: Request):
         )
 
     try:
-        result = validator.can_update_device(data)
+        result = await run_in_threadpool(validator.can_update_device, data)
     except Exception as e:  # pylint: disable=broad-except
         log.logger.error(
             "Exception validating device %s: %s",

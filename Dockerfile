@@ -1,4 +1,4 @@
-FROM python:slim
+FROM python:3.14-slim
 
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     curl && \
@@ -11,6 +11,7 @@ WORKDIR /
 ADD server.py /
 ADD app/ /app
 ADD templates/ /templates
+COPY doc/ /doc
 
 EXPOSE 7000
 

@@ -11,6 +11,7 @@ import requests
 
 from app.logger import logger_conf as log
 from app.enums.item_types import ItemTypes
+from app.device.service.device_service import normalize_custom_fields
 
 # Port type name mappings
 INTERFACE_TYPE_NAMES = {
@@ -21,7 +22,7 @@ INTERFACE_TYPE_NAMES = {
 }
 
 PORT_TYPE_MAPPING: dict[str, str] = {
-    "Agent": "1", "SNMP": "2", "IPMI": "3", "JMX": "4",
+    "Agent": "1", "SNMPv2": "2", "SNMPv3": "2", "IPMI": "3", "JMX": "4",
     "1": "1", "2": "2", "3": "3", "4": "4",
 }
 
@@ -84,9 +85,6 @@ class DeviceModelValidator:
 
     def get_interface_types(self) -> set[str]:
         return {interface.get("type", "") for interface in self.interfaces}
-
-    def get_item_types(self) -> set[int]:
-        return {int(item.get("type", 0)) for item in self.items}
 
 
 def _zabbix_post(method: str, params: Any) -> list | None:
@@ -375,8 +373,7 @@ def can_update_device(data: dict):  # pylint: disable=too-many-return-statements
         ones if those are also changing, otherwise the host's current ones)?
     zabbix_hostgroups alone never affects interfaces, so it's not checked.
     """
-    device_name = data.get("data", {}).get("name", "unknown")
-    custom_fields = data.get("data", {}).get("custom_fields", {})
+    custom_fields = normalize_custom_fields(data.get("data", {}).get("custom_fields"))
     if not custom_fields:
         return {"valid": True, "message": "No custom fields to validate"}
 

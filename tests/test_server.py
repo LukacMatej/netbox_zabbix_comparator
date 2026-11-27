@@ -36,6 +36,13 @@ class ServerRoutesTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("NetBox Zabbix Comparison", response.text)
 
+    @patch.dict("os.environ", {"EXCLUDED_HOSTGROUPS": "Servers"}, clear=False)
+    def test_root_route_shows_excluded_hostgroups(self):
+        """Root route should render the EXCLUDED_HOSTGROUPS env var into the nav bar."""
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Servers", response.text)
+
     @patch("server.ct.compare", return_value=Exception("boom"))
     def test_run_compare_error(self, _compare):
         """Compare route returns 500 when compare service raises error output."""
@@ -88,6 +95,88 @@ class ServerRoutesTests(unittest.TestCase):
         args = parser.parse_args(["--development", "--debug"])
         self.assertTrue(args.development)
         self.assertTrue(args.debug)
+
+
+class DiffHtmlTests(unittest.TestCase):
+    """Tests for the vim-diff-style character highlighting helper."""
+
+    def test_identical_values_have_no_spans(self):
+        """No highlighting is produced when both sides match."""
+        old_html = server.diff_html("router-01", "router-01", "old")
+        new_html = server.diff_html("router-01", "router-01", "new")
+        self.assertEqual(old_html, "router-01")
+        self.assertEqual(new_html, "router-01")
+        self.assertNotIn("<span", old_html)
+        self.assertNotIn("<span", new_html)
+
+    def test_single_character_change_is_highlighted(self):
+        """Only the differing character is wrapped, unchanged text stays bare."""
+        old_html = server.diff_html("router-01A", "router-01B", "old")
+        new_html = server.diff_html("router-01A", "router-01B", "new")
+        self.assertEqual(old_html, 'router-01<span class="diff-old">A</span>')
+        self.assertEqual(new_html, 'router-01<span class="diff-new">B</span>')
+
+    def test_none_and_empty_inputs_do_not_error(self):
+        """None is treated as an empty string on either side."""
+        self.assertEqual(server.diff_html(None, "new-value", "new"),
+                          '<span class="diff-new">new-value</span>')
+        self.assertEqual(server.diff_html("old-value", None, "old"),
+                          '<span class="diff-old">old-value</span>')
+        self.assertEqual(server.diff_html(None, None, "old"), "")
+
+    def test_values_are_html_escaped(self):
+        """Special HTML characters in the values don't break the markup."""
+        html = server.diff_html("A & <B>", "A & <B>!", "new")
+        self.assertIn("&amp;", html)
+        self.assertIn("&lt;B&gt;", html)
+        self.assertNotIn("<B>", html)
+
+
+class SafeIndexTests(unittest.TestCase):
+    """Tests for the bounds-safe list accessor used for interface pairing."""
+
+    def test_returns_item_in_range(self):
+        self.assertEqual(server.safe_index(["a", "b"], 1), "b")
+
+    def test_returns_none_out_of_range(self):
+        self.assertIsNone(server.safe_index(["a"], 5))
+
+    def test_returns_none_for_falsy_or_wrong_type_input(self):
+        self.assertIsNone(server.safe_index([], 0))
+        self.assertIsNone(server.safe_index(None, 0))
+
+
+class DictToDeviceTests(unittest.TestCase):
+    """Tests for dict_to_device list-field parsing (hx-vals json-enc sends JSON lists)."""
+
+    def _payload(self, templates, hostgroup):
+        return {
+            "name": "dev1",
+            "interfaces": [],
+            "hostgroup": hostgroup,
+            "description": "",
+            "templates": templates,
+            "status": "active",
+        }
+
+    def test_json_lists_are_kept_as_lists(self):
+        device = server.dict_to_device(self._payload(["T1", "T2"], ["G1"]))
+        self.assertEqual(device.templates, ["T1", "T2"])
+        self.assertEqual(device.hostgroup, ["G1"])
+
+    def test_empty_list_becomes_empty_list(self):
+        device = server.dict_to_device(self._payload([], []))
+        self.assertEqual(device.templates, [])
+        self.assertEqual(device.hostgroup, [])
+
+    def test_joined_string_is_split(self):
+        device = server.dict_to_device(self._payload("T1, T2", ""))
+        self.assertEqual(device.templates, ["T1", "T2"])
+        self.assertEqual(device.hostgroup, [])
+
+    def test_none_becomes_empty_list(self):
+        device = server.dict_to_device(self._payload(None, None))
+        self.assertEqual(device.templates, [])
 
 
 if __name__ == "__main__":

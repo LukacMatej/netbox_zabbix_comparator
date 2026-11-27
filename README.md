@@ -19,7 +19,7 @@ Compares device configuration between NetBox and Zabbix and creates/updates Zabb
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
 - [Setup for Proper Application Operation](#setup-for-proper-application-operation)
-  - [Priority for Selecting Templates and Port Types](#priority-for-selecting-templates-and-port-types)
+  - [Priority for Selecting Templates, Port Types and Host Groups](#priority-for-selecting-templates-port-types-and-host-groups)
   - [Templates](#templates)
   - [Port Type](#port-type)
   - [Primary IP Address](#primary-ip-address)
@@ -81,6 +81,8 @@ docker run -d \
   netbox-zabbix
 ```
 
+All necessary files (README, custom field import scripts, example `.env`) are included in the Docker image under `/doc`.
+
 ## Configuration
 
 | Variable | Description |
@@ -93,12 +95,29 @@ docker run -d \
 | `ZABBIX_IP` | Base URL of the Zabbix instance, including scheme. |
 | `ZABBIX_KEY` | Zabbix API token. |
 | `PROXY_ROOT_PATH` | `dev` or `prod` — adjusts routing when running behind a reverse proxy. |
+| `EXCLUDED_HOSTGROUPS` | Optional. A single Zabbix host group whose hosts are dropped from comparison entirely (not shown as Zabbix-only, not matched, not synchronized). Unrelated to `ZABBIX_DEFAULT_HOSTGROUP`. Unset/empty includes all hosts. |
+| `ZABBIX_AGENT_PORT` | Port for Agent interfaces (default `10050`). |
+| `ZABBIX_SNMP_PORT` | Port for SNMP interfaces (default `161`). Shared by SNMPv2 and SNMPv3 — Zabbix has one port per interface type, not per SNMP version. |
+| `ZABBIX_IPMI_PORT` | Port for IPMI interfaces (default `623`). |
+| `ZABBIX_JMX_PORT` | Port for JMX interfaces (default `12345`). |
+| `SNMPV2_MACRO` | SNMPv2 community string or Zabbix user macro (default `{$SNMP_COMMUNITY}`). |
+| `ZABBIX_SNMPV3_SECURITY_NAME` | SNMPv3 security name. |
+| `ZABBIX_SNMPV3_SECURITY_LEVEL` | SNMPv3 security level: `0`=noAuthNoPriv, `1`=authNoPriv, `2`=authPriv (default `2`). |
+| `ZABBIX_SNMPV3_AUTH_PROTOCOL` | SNMPv3 auth protocol, Zabbix numeric code (default `1` = SHA1). |
+| `ZABBIX_SNMPV3_AUTH_PASSPHRASE` | SNMPv3 auth passphrase. |
+| `ZABBIX_SNMPV3_PRIV_PROTOCOL` | SNMPv3 priv protocol, Zabbix numeric code (default `1` = AES128). |
+| `ZABBIX_SNMPV3_PRIV_PASSPHRASE` | SNMPv3 priv passphrase. |
+| `ZABBIX_SNMPV3_CONTEXT_NAME` | SNMPv3 context name (optional). |
+
+SNMP credentials are deployment-wide (not per-device), so they come from environment variables rather than NetBox. See Zabbix's API documentation for the full list of `authprotocol`/`privprotocol` codes.
 
 ## Setup for Proper Application Operation
 
-### Priority for Selecting Templates and Port Types
+### Priority for Selecting Templates, Port Types and Host Groups
 
-The system uses a hierarchical priority when selecting Templates and Port Types. The application looks for values in the following order (1 = highest priority):
+Import files with custom fields and custom field choices are in the project directory and in the Docker image. Import `import_custom_fields_choices.py` first, then `import_custom_fields.py`.
+
+The system uses a hierarchical priority when selecting Templates, Port Types and Host Groups. The application looks for values in the following order (1 = highest priority):
 
 #### 1. Device Custom Fields (highest priority)
 
@@ -106,6 +125,7 @@ Set Custom Fields on individual devices:
 
 * `zabbix_templates` - list of Zabbix templates for a specific device
 * `zabbix_port_type` - port type for a specific device
+* `zabbix_hostgroups` - list of Zabbix host groups for a specific device
 
 #### 2. Device Role Custom Fields
 
@@ -113,6 +133,7 @@ Set Custom Fields on the device role with a selection of Custom Field Choices:
 
 * `zabbix_templates` - list of templates for all devices with this role
 * `zabbix_port_type` - port type for all devices with this role
+* `zabbix_hostgroups` - list of host groups for all devices with this role
 
 #### 3. Device Config Context (lowest priority)
 
@@ -127,6 +148,9 @@ In NetBox, you can set an inheritable config context for device roles, which is 
         "templates": [
             "Template1",
             "Template2"
+        ],
+        "hostgroups": [
+            "Hostgroup1"
         ]
     }
 }
@@ -144,7 +168,8 @@ In NetBox, you can set an inheritable config context for device roles, which is 
 ### Port Type
 
 * Specifies the port type for communication with Zabbix
-* Supported types: Agent, SNMP, JMX, IPMI
+* Supported types: Agent, SNMPv2, SNMPv3, JMX, IPMI
+* Plain `SNMP` is no longer a valid choice — update the `zabbix_port_type` Custom Field Choices in NetBox to `SNMPv2`/`SNMPv3` instead. A device/role still configured with the old `SNMP` value is treated as if no port type were set until it's updated.
 
 ### Primary IP Address
 
@@ -157,8 +182,17 @@ In NetBox, you can set an inheritable config context for device roles, which is 
 A NetBox script is available to synchronize Custom Field Choices named `zabbix_hostgroups` with host groups in Zabbix:
 
 * Link Custom Field Choices to a Custom Field named `zabbix_hostgroups`
-* Set it as multi-select on DCIM > DEVICE
-* The default host group in Zabbix is set to "Netbox" to keep track of all devices created by the synchronization
+* Set it as multi-select on DCIM > DEVICE and DCIM > DEVICE ROLE (role values are used when the device has none, see the priority above)
+* The default host group in Zabbix is set to the value of the `ZABBIX_DEFAULT_HOSTGROUP` environment variable to keep track of all devices created by the synchronization
+
+To install the sync scripts (templates and host groups) in [netbox-docker](https://github.com/netbox-community/netbox-docker):
+
+* Put both scripts in the `<netbox-docker-directory>/scripts` directory
+* `chmod 755 scripts`, `chmod 644 scripts/*`, `chown -R 999:999 scripts`
+* In `docker-compose.yml`, add the volume `<local-path-to-scripts>:/opt/netbox/netbox/scripts:z,rw`
+* In NetBox:
+  * Create a data source in Operations > Data Sources (Type: Local, URL: `/opt/netbox/netbox/scripts/`) and sync it
+  * Run the scripts in Customization > Scripts
 
 ### Custom Validation
 

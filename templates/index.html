@@ -83,28 +83,54 @@
                 left: 36px;
             }
         }
-        nav > div {
-            margin-left: 2vh !important;
+        .log-output {
+            background: #111;
+            color: #ddd;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 0.85em;
+            padding: 16px;
+            border-radius: 8px;
+            max-height: 75vh;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
         }
     </style>
 </head>
 <body>
     <nav>
-        <div style="display: flex; align-items: center; max-width: 1100px; margin-left: 2; width: 100%;">
-            <div id="burger-menu" style="width: 36px; height: 36px; display: flex; flex-direction: column; justify-content: center; cursor: pointer;">
-                <span style="height: 4px; background:rgb(0, 0, 0); margin: 4px 0; border-radius: 2px; display: block;"></span>
-                <span style="height: 4px; background:rgb(0, 0, 0); margin: 4px 0; border-radius: 2px; display: block;"></span>
-                <span style="height: 4px; background:rgb(0, 0, 0); margin: 4px 0; border-radius: 2px; display: block;"></span>
+        <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 20px; width: 100%; box-sizing: border-box; padding: 0 16px;">
+            <div id="burger-menu" style="width: 22px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; flex-shrink: 0;">
+                <span style="height: 3px; background:rgb(0, 0, 0); border-radius: 2px; display: block;"></span>
+                <span style="height: 3px; background:rgb(0, 0, 0); border-radius: 2px; display: block;"></span>
+                <span style="height: 3px; background:rgb(0, 0, 0); border-radius: 2px; display: block;"></span>
             </div>
-            <div style="flex: 1;"></div>
-            <div style="margin-left: 24px;">
-                <span style="background: #e3e3e3; border-radius: 6px; padding: 6px 12px; font-size: 0.95em; margin-right: 8px;">
+            <h4 style="margin: 0;">Comparison&Synchronization of Netbox devices to Zabbix</h4>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                <span style="background: #e3e3e3; border-radius: 6px; padding: 6px 12px; font-size: 0.95em;">
                     Netbox: {{ netbox_url }}
                 </span>
                 <span style="background: #e3e3e3; border-radius: 6px; padding: 6px 12px; font-size: 0.95em;">
                     Zabbix: {{ zabbix_url }}
                 </span>
+                <span style="background: #e3e3e3; border-radius: 6px; padding: 6px 12px; font-size: 0.95em;">
+                    Excluded hostgroup: {{ excluded_hostgroups or "None" }}
+                </span>
             </div>
+            <span style="background: #e3e3e3; border-radius: 6px; padding: 6px 12px; font-size: 0.95em; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <span style="display: flex; align-items: center; gap: 4px;">
+                    <span style="width: 10px; height: 10px; border-radius: 50%; background: #7bc79e; border: 1px solid #7bc79e; display: inline-block;"></span>
+                    Create in Zabbix
+                </span>
+                <span style="display: flex; align-items: center; gap: 4px;">
+                    <span style="width: 10px; height: 10px; border-radius: 50%; background: #e08a86; border: 1px solid #e08a86; display: inline-block;"></span>
+                    Delete in Zabbix
+                </span>
+                <span style="display: flex; align-items: center; gap: 4px;">
+                    <span style="width: 10px; height: 10px; border-radius: 50%; background: #d9c46a; border: 1px solid #d9c46a; display: inline-block;"></span>
+                    Update Zabbix values
+                </span>
+            </span>
         </div>
         <div id="nav-links" style="display: none; flex-direction: column; position: absolute; top: 56px; left: 16px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.07); border-radius: 8px; min-width: 180px; z-index: 100;">
             <button type="button" class="menu-action" style="border-bottom: 1px solid #eee;" onclick="document.getElementById('page-content').innerHTML = ''; navLinks.style.display = 'none';">Home</button>
@@ -128,6 +154,17 @@
                 hx-push-url="false"
                 hx-confirm="Synchronization will make changes based on comparison in Zabbix. Continue?"
             >Synchronize</button>
+            <button
+                type="button"
+                class="menu-action"
+                hx-get="{{ url_for('view_logs') }}"
+                hx-target="#page-content"
+                hx-swap="innerHTML"
+                hx-indicator="#comparison-loading"
+                hx-push-url="false"
+            >
+                View Logs
+            </button>
         </div>
         <script>
             const burger = document.getElementById('burger-menu');

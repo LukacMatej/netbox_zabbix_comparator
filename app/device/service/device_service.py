@@ -211,6 +211,31 @@ def find_nb_device_role_id(device_role: str) -> int:
     return -1
 
 
+def find_nb_device_id(name: str) -> int:
+    """Finds the Netbox device ID based on the provided device name.
+    Args:
+        name (str): The name of the device to find.
+    Returns:
+        int: The ID of the device if found, otherwise -1.
+    """
+    log.logger.info("Finding Netbox device ID for %s.", name)
+    nb_ip = os.environ.get("NETBOX_IP")
+    nb_key = os.environ.get("NETBOX_KEY")
+    response = requests.get(
+        f"{nb_ip}/api/dcim/devices/?name={name}",
+        headers=_netbox_headers(nb_key),
+        timeout=REQUEST_TIMEOUT,
+    )
+    if response.status_code == 200:
+        data = json.loads(response.text)
+        if data["count"] > 0:
+            device_id = data["results"][0]["id"]
+            log.logger.info("Found Netbox device ID: %s for %s.", device_id, name)
+            return int(device_id)
+    log.logger.error("Failed to find Netbox device ID for %s: %s", name, response.text)
+    return -1
+
+
 def format_address(address: str) -> str:
     """
     Extract the IP address from a CIDR notation string.
@@ -350,7 +375,8 @@ def print_devices(nb_device_list: list[device_model]) -> str:
         for interface in device.interfaces:
             txt_builder += f"  Interface Name: {interface.name}\n"
             txt_builder += f"  MAC Address: {interface.mac_address}\n"
-            txt_builder += f"  Port Type: {uniform_port_type(interface.port_type)}\n"
+            snmp_suffix = f"v{interface.snmp_version}" if interface.snmp_version else ""
+            txt_builder += f"  Port Type: {uniform_port_type(interface.port_type)}{snmp_suffix}\n"
             for address in interface.addresses:
                 txt_builder += f"    IP Address: {address.address}\n"
                 txt_builder += f"    DNS Name: {address.dns_name}\n"
@@ -388,7 +414,8 @@ def print_device(device: device_model) -> str:
     for interface in device.interfaces:
         txt_builder += f"  Interface Name: {interface.name}\n"
         txt_builder += f"  MAC Address: {interface.mac_address}\n"
-        txt_builder += f"  Port Type: {uniform_port_type(interface.port_type)}\n"
+        snmp_suffix = f"v{interface.snmp_version}" if interface.snmp_version else ""
+        txt_builder += f"  Port Type: {uniform_port_type(interface.port_type)}{snmp_suffix}\n"
         for address in interface.addresses:
             txt_builder += f"    IP Address: {address.address}\n"
             txt_builder += f"    DNS Name: {address.dns_name}\n"
@@ -488,7 +515,10 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
         # Extract JSON structure with validation
         try:
             response_data = data["data"]
-            device_role_list = response_data["device_role_list"]
+            device_role_list = [
+                {**role, "custom_fields": normalize_custom_fields(role.get("custom_fields"))}
+                for role in response_data["device_role_list"]
+            ]
             devices = response_data["device_list"]
         except KeyError as e:
             log.logger.error("Missing expected key in Netbox response: %s", e)
@@ -496,6 +526,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
 
         device_role_map = get_device_role_map(device_role_list)
         device_role_port_type_map = get_device_role_port_type_map(device_role_list)
+        device_role_hostgroup_map = get_device_role_hostgroup_map(device_role_list)
         device_list: list[device_model] = []
 
         for device in devices:
@@ -505,9 +536,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                     if isinstance(device["config_context"], dict)
                     else {}
                 )
-                custom_fields = (
-                    device["custom_fields"] if device["custom_fields"] else {}
-                )
+                custom_fields = normalize_custom_fields(device["custom_fields"])
                 role_name = device["role"]["name"] if device["role"] else None
 
                 # Check if device has required Zabbix configuration
@@ -554,15 +583,20 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                 port_types = get_port_types(
                     custom_fields, device, device_role_port_type_map
                 )
+                resolved_port_types = [
+                    resolved
+                    for raw_port_type in sorted(port_types)
+                    if (resolved := split_snmp_port_type(raw_port_type)) is not None
+                ] if port_types else []
                 primary_ip, primary_dns = get_primary_ip_info(device)
                 mac_address = get_mac_address(primary_ip_interface)
 
                 device_list.append(
                     device_model(
                         name=device["name"],
-                        hostgroup=custom_fields["zabbix_hostgroups"]
-                        if custom_fields["zabbix_hostgroups"]
-                        else "",
+                        hostgroup=get_nb_hostgroups(
+                            device, custom_fields, device_role_hostgroup_map
+                        ),
                         description=device["description"],
                         templates=(
                             sorted(device_templates)
@@ -576,7 +610,8 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                                 if primary_ip_interface
                                 else "",
                                 mac_address=mac_address,
-                                port_type=port_type,
+                                port_type=resolved_port_type,
+                                snmp_version=resolved_snmp_version,
                                 addresses=[
                                     address_model(
                                         address=primary_ip,
@@ -584,8 +619,7 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
                                     )
                                 ],
                             )
-                            for port_type in sorted(port_types)
-                            if port_types
+                            for resolved_port_type, resolved_snmp_version in resolved_port_types
                         ],
                     )
                 )
@@ -596,6 +630,28 @@ def get_nb_devices(key: str, ip: str) -> list[device_model] | str:
         return device_list
     except requests.exceptions.RequestException as e:
         return f"Request failed: {e}"
+
+
+def custom_field_value(value: Any) -> Any:
+    """Unwraps a NetBox selection custom-field value into its raw value.
+
+    Since NetBox v4.7.0 (#20897) the REST and GraphQL APIs return selection and
+    multi-selection values as {"value": ..., "label": ...} objects instead of the
+    raw value. Lists are unwrapped item by item; anything else passes through, so
+    both pre-4.7 and 4.7+ payloads resolve to the same raw values.
+    """
+    if isinstance(value, list):
+        return [custom_field_value(item) for item in value]
+    if isinstance(value, dict) and "value" in value:
+        return value["value"]
+    return value
+
+
+def normalize_custom_fields(custom_fields: dict[str, Any] | None) -> dict[str, Any]:
+    """Returns a copy of `custom_fields` with every value unwrapped by `custom_field_value`."""
+    if not custom_fields:
+        return {}
+    return {name: custom_field_value(value) for name, value in custom_fields.items()}
 
 
 def get_port_types(
@@ -627,6 +683,48 @@ def get_port_types(
         device["config_context"] if isinstance(device["config_context"], dict) else {}
     )
     return config_context["zabbix"]["port_type"] if "zabbix" in config_context else []
+
+
+def get_nb_hostgroups(
+    device: dict[str, Any],
+    custom_fields: dict[str, Any],
+    device_role_hostgroup_map: dict[str, list[str]],
+) -> list[str]:
+    """
+    Retrieve Zabbix hostgroups for a device from custom fields, device role, or config context.
+    Args:
+        device (dict): Device data containing role and config_context.
+        custom_fields (dict): Device custom fields.
+        device_role_hostgroup_map (dict): Mapping of device roles to hostgroups.
+    Returns:
+        list[str]: List of hostgroup names, or an empty list if none are configured.
+    """
+    device_hostgroups = custom_fields.get("zabbix_hostgroups")
+    if isinstance(device_hostgroups, list) and len(device_hostgroups) > 0:
+        return [str(hostgroup) for hostgroup in device_hostgroups]
+
+    role_name = device["role"]["name"] if device.get("role") else None
+    if role_name and len(device_role_hostgroup_map.get(role_name, [])) > 0:
+        log.logger.info(
+            "Device %s has Zabbix hostgroups from device role %s: %s",
+            device.get("name"),
+            role_name,
+            device_role_hostgroup_map[role_name],
+        )
+        return device_role_hostgroup_map[role_name]
+
+    config_context = (
+        device.get("config_context")
+        if isinstance(device.get("config_context"), dict)
+        else {}
+    )
+    zabbix_context = config_context.get("zabbix") if config_context else None
+    config_hostgroups = (
+        zabbix_context.get("hostgroups") if isinstance(zabbix_context, dict) else None
+    )
+    if isinstance(config_hostgroups, list):
+        return [str(hostgroup) for hostgroup in config_hostgroups]
+    return []
 
 
 def get_mac_address(primary_ip_interface: dict[str, Any] | None) -> str:
@@ -817,6 +915,33 @@ def get_device_role_port_type_map(
     return device_role_port_type_map
 
 
+def get_device_role_hostgroup_map(
+    device_role_list: list[dict[str, Any]],
+) -> dict[str, list[str]]:
+    """
+    Create a mapping of device roles to their associated Zabbix hostgroups based on NetBox device role data.
+    Args:
+        device_role_list (list[dict[str, Any]]): A list of device role dictionaries from NetBox, each containing a name and custom fields.
+    Returns:
+        dict[str, list[str]]: A mapping where the key is the device role name and the value is a list of Zabbix hostgroups associated with that role.
+    """
+    device_role_hostgroup_map: dict[str, list[str]] = {}
+    for device_role in device_role_list:
+        role_name = device_role.get("name")
+        custom_fields = device_role.get("custom_fields") or {}
+        zabbix_hostgroups = custom_fields.get("zabbix_hostgroups") or []
+        if role_name and isinstance(zabbix_hostgroups, list):
+            device_role_hostgroup_map[role_name] = [
+                str(hostgroup) for hostgroup in zabbix_hostgroups
+            ]
+            log.logger.info(
+                "Device role %s has Zabbix hostgroups: %s",
+                role_name,
+                device_role_hostgroup_map[role_name],
+            )
+    return device_role_hostgroup_map
+
+
 def find_primary_ip_interface(
     interfaces: list[dict[str, Any]], primary_ip: str
 ) -> dict[str, Any] | None:
@@ -845,6 +970,19 @@ def find_primary_ip_interface(
     return primary_interface
 
 
+def zb_snmp_version(interface: dict) -> str:
+    """Derives the SNMP version from a Zabbix interface's `details.version`.
+
+    Only meaningful for type "2" (SNMP) interfaces. Zabbix reports "3" for
+    SNMPv3; anything else (missing, "1", "2") defaults to SNMPv2, matching
+    this app's own default.
+    """
+    if interface["type"] != "2":
+        return ""
+    version = str(interface.get("details", {}).get("version", ""))
+    return "3" if version == "3" else "2"
+
+
 def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
     """
     Retrieve devices from a Zabbix instance via its API.
@@ -866,12 +1004,11 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
       - Interfaces are mapped to address_model objects with their IP and DNS information.
       - Templates are extracted from parentTemplates and mapped to their names.
     """
-    params = {
+    params: dict[str, Any] = {
         "output": ["hostid", "host", "name", "status", "description"],
-        "selectInterfaces": ["interfaceid", "dns", "ip", "type"],
+        "selectInterfaces": ["interfaceid", "dns", "ip", "type", "details"],
         "selectHostGroups": ["groupid", "name"],
         "selectParentTemplates": ["templateid", "name"],
-        "filter": {"status": [0]},
     }
     try:
         zb_device_list: list[device_model] = []
@@ -888,8 +1025,13 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
             log.logger.error("Error in Zabbix API response: %s", result["error"])
             return f"Error in Zabbix API response: {result['error']}"
         log.logger.debug(result)
+        hostgroup_filter = os.environ.get("EXCLUDED_HOSTGROUPS", "")
         for host in result["result"]:
             try:
+                if hostgroup_filter and any(
+                    group["name"] == hostgroup_filter for group in host["hostgroups"]
+                ):
+                    continue
                 # Sort interfaces by port_type for consistent ordering
                 sorted_interfaces = sorted(host["interfaces"], key=lambda x: x["type"])
                 zb_device_list.append(
@@ -906,6 +1048,7 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
                                 name=interface["dns"],
                                 mac_address="",
                                 port_type=interface["type"],
+                                snmp_version=zb_snmp_version(interface),
                                 addresses=[
                                     address_model(
                                         address=interface["ip"],
@@ -924,6 +1067,49 @@ def get_zb_devices(key: str, ip: str) -> list[device_model] | str:
         log.logger.error("Request failed: %s", e)
         return f"Request failed: {e}"
     return zb_device_list
+
+
+_SNMP_VERSION_CHOICES = {"SNMPv2": "2", "SNMPv3": "3"}
+_PORT_TYPE_PASSTHROUGH = {
+    "Agent": "Agent",
+    "1": "Agent",
+    "IPMI": "IPMI",
+    "3": "IPMI",
+    "JMX": "JMX",
+    "4": "JMX",
+}
+
+
+def split_snmp_port_type(raw_port_type: str) -> tuple[str, str] | None:
+    """Resolves a NetBox `zabbix_port_type` choice into (port_type, snmp_version).
+
+    "SNMPv2"/"SNMPv3" resolve to ("SNMP", "2"/"3"). "Agent"/"IPMI"/"JMX" (by
+    name or by Zabbix's own numeric code) pass through unchanged with no SNMP
+    version. Anything else — including the removed plain "SNMP"/"2" choice —
+    is unrecognized: returns None so the caller drops it, treating the device
+    as if that port type were never configured.
+    """
+    if raw_port_type in _SNMP_VERSION_CHOICES:
+        return "SNMP", _SNMP_VERSION_CHOICES[raw_port_type]
+    if raw_port_type in _PORT_TYPE_PASSTHROUGH:
+        return _PORT_TYPE_PASSTHROUGH[raw_port_type], ""
+    return None
+
+
+def port_label(port_type: str, snmp_version: str = "") -> str:
+    """Builds a display label for an interface, e.g. "SNMPv3" or "Agent"."""
+    label = uniform_port_type(port_type)
+    return f"{label}v{snmp_version}" if snmp_version else label
+
+
+def port_label_to_key(label: str) -> tuple[str, str]:
+    """Reverses `port_label` into (numeric Zabbix type code, snmp_version).
+
+    "SNMPv3" -> ("2", "3"), "Agent" -> ("1", ""). Plain "SNMP" -> ("2", "").
+    """
+    if label in _SNMP_VERSION_CHOICES:
+        return "2", _SNMP_VERSION_CHOICES[label]
+    return uniform_port_type(label, numbered=True), ""
 
 
 def uniform_port_type(port_type: str, numbered: bool = False) -> str:
@@ -1025,7 +1211,7 @@ def uniform_output_text(
 
 def parse_webhook(data: dict) -> device_model:
     device_data = data["data"]
-    custom_fields = device_data.get("custom_fields", {})
+    custom_fields = normalize_custom_fields(device_data.get("custom_fields"))
     return device_model(
         name=device_data["name"],
         interfaces=[],
@@ -1036,42 +1222,84 @@ def parse_webhook(data: dict) -> device_model:
     )
 
 
+def parse_webhook_create(data: dict) -> device_model:
+    """Build the Device for a NetBox create webhook, resolving hostgroups via the device role."""
+    device = parse_webhook(data)
+    device_data = data["data"]
+    custom_fields = normalize_custom_fields(device_data.get("custom_fields"))
+    if custom_fields.get("zabbix_hostgroups"):
+        return device
+
+    role_data = device_data.get("role")
+    role = role_data.get("name") if role_data else ""
+    role_custom_fields: dict[str, Any] = {}
+    if role:
+        try:
+            role_custom_fields = query_netbox_role_custom_fields(role)
+        except requests.exceptions.HTTPError:
+            role_custom_fields = {}
+    device.hostgroup = get_nb_hostgroups(
+        device_data,
+        custom_fields,
+        {role: role_custom_fields.get("zabbix_hostgroups") or []} if role else {},
+    )
+    return device
+
+
 def parse_webhook_update(data: dict) -> device_model:
     """Build the Device that should be synced into Zabbix from a NetBox webhook."""
     device_data = data["data"]
     postchange = data["snapshots"].get("postchange") or {}
 
-    custom_fields = postchange.get("custom_fields") or device_data.get("custom_fields", {})
-    # zabbix_port_type is a NetBox multi-select custom field, e.g. ["1"]
+    custom_fields = normalize_custom_fields(
+        postchange.get("custom_fields") or device_data.get("custom_fields")
+    )
+    # zabbix_port_type is a NetBox multi-select custom field, e.g. ["SNMPv2"]
     zabbix_port_type_list = custom_fields.get("zabbix_port_type") or []
-    zabbix_port_type = zabbix_port_type_list[0] if zabbix_port_type_list else "1"
+    raw_port_type = zabbix_port_type_list[0] if zabbix_port_type_list else "1"
+    resolved_port_type = split_snmp_port_type(raw_port_type)
 
-    primary_interface = get_primary_interface(device_data, zabbix_port_type)
+    primary_interface = (
+        get_primary_interface(device_data, resolved_port_type[0], resolved_port_type[1])
+        if resolved_port_type is not None
+        else None
+    )
     interfaces = [primary_interface] if primary_interface else []
     role_data = device_data.get("role")
     role = role_data.get("name") if role_data else ""
 
+    role_custom_fields: dict[str, Any] = {}
+    if not custom_fields.get("zabbix_templates") or not custom_fields.get("zabbix_hostgroups"):
+        try:
+            role_custom_fields = query_netbox_role_custom_fields(role)
+        except requests.exceptions.HTTPError:
+            role_custom_fields = {}
+
     templates: list[str]
     if custom_fields.get("zabbix_templates"):
-        templates = custom_fields.get("zabbix_templates")
+        templates = custom_fields["zabbix_templates"]
     else:
-        try:
-            templates = query_netbox_role_templates(role)
-        except requests.exceptions.HTTPError:
-            templates = []
+        templates = role_custom_fields.get("zabbix_templates") or []
     if not templates:
         templates = device_data.get("config_context", {}).get("zabbix", []).get("templates", [])
+
+    hostgroups = get_nb_hostgroups(
+        device_data,
+        custom_fields,
+        {role: role_custom_fields.get("zabbix_hostgroups") or []} if role else {},
+    )
     return device_model(
         name=postchange.get("name", device_data.get("name", "")),
         interfaces=interfaces,
-        hostgroup=custom_fields.get("zabbix_hostgroups", []),
+        hostgroup=hostgroups,
         description=postchange.get("description", ""),
         templates=templates,
         status=postchange.get("status", "Inactive"),
     )
 
 
-def query_netbox_role_templates(role: str) -> list[str]:
+def query_netbox_role_custom_fields(role: str) -> dict[str, Any]:
+    """Fetch the custom fields of a NetBox device role by name ({} if unknown)."""
     netbox_ip: str | None = os.environ.get("NETBOX_IP")
     netbox_key: str | None = os.environ.get("NETBOX_KEY")
     if netbox_ip is None:
@@ -1079,7 +1307,7 @@ def query_netbox_role_templates(role: str) -> list[str]:
         # which isn't a requests.exceptions.HTTPError, so parse_webhook_update's
         # `except requests.exceptions.HTTPError` wouldn't catch it.
         log.logger.error("NetBox IP not set in environment variables.")
-        return []
+        return {}
     headers = {"Authorization": f"Token {netbox_key}"} if netbox_key else {}
     query = """
     {
@@ -1097,15 +1325,15 @@ def query_netbox_role_templates(role: str) -> list[str]:
     role_dict = {r.get("name"): r for r in role_data}
 
     role_entry = role_dict.get(role, {})
-    custom_fields = role_entry.get("custom_fields") or {}
-    templates_roles = custom_fields.get("zabbix_templates") or []
-    return templates_roles
+    return normalize_custom_fields(role_entry.get("custom_fields"))
 
-def get_primary_interface(device_data: dict, zabbix_port_type: str) -> interface_model | None:
+def get_primary_interface(
+    device_data: dict, zabbix_port_type: str, snmp_version: str = ""
+) -> interface_model | None:
     """
     Resolve the interface holding the device's primary IPv4 address.
-    port_type comes from the device's zabbix_port_type custom field
-    (1=Agent, 2=SNMP, 3=IPMI, 4=JMX) — NOT the physical NetBox interface type.
+    port_type/snmp_version come from resolving the device's zabbix_port_type
+    custom field via split_snmp_port_type — NOT the physical NetBox interface type.
     """
     netbox_ip = os.environ.get("NETBOX_IP")
     netbox_key = os.environ.get("NETBOX_KEY")
@@ -1146,7 +1374,8 @@ def get_primary_interface(device_data: dict, zabbix_port_type: str) -> interface
             address_model(address=str(primary_ip4["address"]).split("/")[0], dns_name=primary_ip4.get("dns_name", "")),
         ],
         mac_address=mac,
-        port_type=zabbix_port_type,  # e.g. "1" — matches Zabbix's own numeric type codes
+        port_type=zabbix_port_type,
+        snmp_version=snmp_version,
     )
 
 
