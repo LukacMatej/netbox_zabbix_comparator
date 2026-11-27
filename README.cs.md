@@ -116,6 +116,11 @@ Je připraven Netbox script, který synchronizuje Custom Field Choices s názvem
 * `ZABBIX_SNMP_PORT` je sdílený pro SNMPv2 i SNMPv3 — Zabbix má jeden port na typ rozhraní, ne na verzi SNMP
 * Pokud nejsou nastaveny, použijí se výchozí hodnoty Zabbixu (10050, 161, 623, 12345)
 
+### Změny rozhraní a Zabbix 8.0
+
+* Rozhraní se přidávají, upravují a odebírají přes `host.update` (celý seznam rozhraní, odeslaný spolu s ostatními změnami hostu v jednom volání); metody `hostinterface.create/update/delete` odebrané v Zabbixu 8.0 se nepoužívají. Role API uživatele proto potřebuje `host.update`; z `hostinterface.*` se používá jen `hostinterface.get`
+* Aktualizace zařízení je vše-nebo-nic: pokud nejde odebrat přebývající rozhraní (jsou na něj stále navázané itemy, např. po odpojení šablony, jejíž itemy zůstaly), na hostu se nic nezmění a synchronizace vrátí chybu
+
 ### Konfigurace SNMPv2/SNMPv3
 
 Protože přihlašovací údaje pro `SNMPv2`/`SNMPv3` jsou společné pro celé nasazení (ne pro jednotlivá zařízení), načítají se z proměnných prostředí, ne z Netboxu:

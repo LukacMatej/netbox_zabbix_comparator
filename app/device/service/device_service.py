@@ -7,8 +7,6 @@ This module provides utilities for:
 - Comparing and printing device differences
 - Mapping and uniforming device data structures
 Functions:
-    find_hostinterface_id(hostid: str) -> int:
-        Finds the interface ID for a given Zabbix host ID.
   find_nb_site_id(site_name: str) -> int: Finds the Netbox site ID by site name.
     find_nb_device_type_id(device_type: str) -> int:
         Finds the Netbox device type ID by device type name.
@@ -88,42 +86,6 @@ def _netbox_headers(nb_key: str | None) -> dict[str, str]:
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
-
-
-def find_hostinterface_ids(hostid: str) -> list[int]:
-    """
-    Finds the interface IDs for a given Zabbix host ID.
-    Args:
-      hostid (str): The Zabbix host ID.
-    Returns:
-      list[int]: A list of interface IDs if found, otherwise an empty list.
-    """
-    zb_url = os.environ.get("ZABBIX_IP")
-    zb_key = os.environ.get("ZABBIX_KEY")
-    try:
-        log.logger.info("Finding Zabbix interface IDs for hostid %s.", hostid)
-        response = _zabbix_post(
-            zb_url, zb_key, "hostinterface.get", {"hostids": hostid, "output": ["interfaceid"]}
-        )
-        response.raise_for_status()
-        result = json.loads(response.text)
-        log.logger.debug("Response from Zabbix API: %s", result)
-        if "error" in result:
-            log.logger.error("Error in Zabbix API response: %s", result["error"])
-            return []
-        interface = result.get("result", [])
-        for iface in interface:
-            log.logger.info(
-                "Found Zabbix interface ID: %s for hostid %s.",
-                iface["interfaceid"],
-                hostid,
-            )
-        return [int(iface["interfaceid"]) for iface in interface]
-    except requests.exceptions.RequestException as e:
-        log.logger.error(
-            "Failed to find Zabbix interface IDs for hostid %s: %s", hostid, e
-        )
-    return []
 
 
 def find_nb_site_id(site_name: str) -> int:

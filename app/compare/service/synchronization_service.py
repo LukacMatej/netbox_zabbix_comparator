@@ -227,16 +227,19 @@ def _zabbix_post(
     )
 
 
-def get_zabbix_host_interfaces(hostid: str) -> list[dict]:
+def get_zabbix_host_interfaces(hostid: str) -> list[dict] | None:
     """Fetches detailed interface information for a Zabbix host.
     Args:
         hostid (str): The Zabbix host ID.
     Returns:
-        list[dict]: List of interface details including interfaceid, type, ip, dns, etc.
+        list[dict] | None: Interface details (interfaceid, type, main, useip, ip, dns,
+        port, details), [] for a host without interfaces, or None if the interfaces
+        couldn't be read. Callers must not send an interface set built from None:
+        host.update would delete every interface left out of it.
     """
     zabbix_ip, zabbix_key = _zabbix_credentials()
     if zabbix_ip is None or zabbix_key is None:
-        return []
+        return None
 
     try:
         response: requests.Response = _zabbix_post(
@@ -245,7 +248,9 @@ def get_zabbix_host_interfaces(hostid: str) -> list[dict]:
             "hostinterface.get",
             {
                 "hostids": hostid,
-                "output": ["interfaceid", "type", "ip", "dns", "port", "main", "details"],
+                "output": [
+                    "interfaceid", "type", "main", "useip", "ip", "dns", "port", "details"
+                ],
             },
         )
         response_json = response.json()
@@ -254,7 +259,7 @@ def get_zabbix_host_interfaces(hostid: str) -> list[dict]:
             log.logger.error(
                 "Error fetching interfaces from Zabbix: %s", response_json["error"]
             )
-            return []
+            return None
 
         interfaces = response_json.get("result", [])
         log.logger.info(
@@ -263,161 +268,77 @@ def get_zabbix_host_interfaces(hostid: str) -> list[dict]:
         for idx, iface in enumerate(interfaces):
             log.logger.debug("Interface %d: %s", idx, iface)
         return interfaces
-    except requests.exceptions.RequestException as e:
+    except (requests.exceptions.RequestException, ValueError) as e:
         log.logger.error("Exception when fetching interfaces from Zabbix: %s", str(e))
-        return []
+        return None
 
 
-def add_interface_to_zabbix(
-    hostid: str,
-    interfaces: list[interface_model],
-    sync_output: sync_output_model,
-    existing_interfaces: list[dict] | None = None,
-) -> bool:
-    """Adds new interfaces to a Zabbix host via API.
-    Args:
-        hostid (str): The Zabbix host ID to add interfaces to.
-        interfaces (list[interface_model]): List of interface models to add.
-        sync_output (sync_output_model): The synchronization output model to log results.
-        existing_interfaces (list[dict]): List of existing interface details from Zabbix (optional). Each dict should contain 'type' and 'main' keys.
-    Returns:
-        bool: True if the interfaces were created, False on any error.
+def _new_interface_payload(interface: interface_model) -> dict[str, Any]:
+    """Builds a host.update interface entry (no interfaceid) for a NetBox interface."""
+    port_type = device_service.uniform_port_type(interface.port_type, numbered=True)
+    entry: dict[str, Any] = {
+        "type": port_type,
+        "main": 0,
+        "useip": 1,
+        "ip": (
+            str(interface.addresses[0].address).split("/", maxsplit=1)[0]
+            if interface.addresses
+            else ""
+        ),
+        "dns": interface.addresses[0].dns_name if interface.addresses else "",
+        "port": map_port_type_default_port(port_type),
+    }
+    if port_type == "2":  # SNMP
+        entry["details"] = build_snmp_details(interface.snmp_version)
+    return entry
+
+
+def build_interface_set(
+    zb_interfaces: list[dict],
+    interfaces_to_add: list[interface_model],
+    interface_ids_to_remove: list[str],
+    update_entries: dict[str, dict[str, Any]],
+    main_promotions: set[str],
+) -> list[dict[str, Any]]:
+    """Builds the complete interface list for host.update.
+
+    host.update replaces the host's interfaces with this list: kept interfaces
+    are sent with their interfaceid (so items stay linked) plus only the fields
+    that change, new ones without an id, and removed ones are left out.
+    Exactly one interface per type ends up as the default (main=1): the current
+    default if it's kept, else a promoted one, else the first of that type.
     """
-    zabbix_ip, zabbix_key = _zabbix_credentials()
-    if zabbix_ip is None or zabbix_key is None:
-        return False
-
-    if existing_interfaces is None:
-        existing_interfaces = []
-
-    # Prepare interface data for creation
-    interface_params = []
-    for interface in interfaces:
-        # Ensure port_type is in numeric format
-        port_type = device_service.uniform_port_type(interface.port_type, numbered=True)
-
-        # Check if there's already a primary (main=1) interface for this type
-        has_primary_for_type = any(
-            iface.get("type") == port_type and iface.get("main") == "1"
-            for iface in existing_interfaces
-        )
-        # If no primary exists for this type, mark this as main; otherwise mark as secondary
-        is_main = 0 if has_primary_for_type else 1
-        log.logger.debug(
-            "Interface type '%s': has_primary=%s, setting main=%d",
-            port_type,
-            has_primary_for_type,
-            is_main,
-        )
-        port = map_port_type_default_port(port_type)
-        interface_data: dict[str, str | int | dict[str, str]] = {
-            "hostid": hostid,
-            "type": port_type,
-            "main": is_main,
-            "useip": 1,
-            "ip": (
-                str(interface.addresses[0].address).split("/", maxsplit=1)[0]
-                if interface.addresses
-                else ""
-            ),
-            "dns": interface.addresses[0].dns_name if interface.addresses else "",
-            "port": port,
+    kept: list[dict[str, Any]] = []
+    for zb_iface in zb_interfaces:
+        interfaceid = zb_iface["interfaceid"]
+        if interfaceid in interface_ids_to_remove:
+            continue
+        entry: dict[str, Any] = {
+            "interfaceid": interfaceid,
+            "type": zb_iface.get("type", ""),
+            "main": 1 if str(zb_iface.get("main")) == "1" else 0,
         }
-        if port_type == "2":  # SNMP
-            interface_data["details"] = build_snmp_details(interface.snmp_version)
-        interface_params.append(interface_data)
-    log.logger.info("Params payload: %s", interface_params)
-    try:
-        log.logger.info(
-            "Adding %d interface(s) to Zabbix host %s.", len(interfaces), hostid
-        )
-        response: requests.Response = _zabbix_post(
-            zabbix_ip, zabbix_key, "hostinterface.create", interface_params
-        )
-        response_json = response.json()
+        entry.update(update_entries.get(interfaceid, {}))
+        if interfaceid in main_promotions:
+            entry["main"] = 1
+        kept.append(entry)
 
-        if "error" in response_json:
-            error_msg = f"Failed to add interfaces to Zabbix host {hostid}: {response_json['error']}"
-            sync_output.add_difference_output(error_msg)
-            log.logger.error(error_msg)
-            return False
+    result = kept + [_new_interface_payload(iface) for iface in interfaces_to_add]
 
-        if response.status_code == 200:
-            interfaceids = response_json.get("result", {}).get("interfaceids", [])
-            success_msg = f"Successfully added {len(interfaceids)} interface(s) to Zabbix host {hostid}."
-            sync_output.add_difference_output(success_msg)
-            log.logger.info(success_msg)
-            return True
-        error_msg = (
-            f"Unexpected status code {response.status_code} when adding interfaces."
-        )
-        sync_output.add_difference_output(error_msg)
-        log.logger.error(error_msg)
-        return False
-    except requests.exceptions.RequestException as e:
-        error_msg = f"Exception when adding interfaces to Zabbix: {e}"
-        sync_output.add_difference_output(error_msg)
-        log.logger.error(error_msg)
-        return False
-
-
-def remove_interface_from_zabbix(
-    hostid: str, interface_ids: list[str], sync_output: sync_output_model
-) -> bool:
-    """Removes interfaces from a Zabbix host via API.
-    Args:
-        hostid (str): The Zabbix host ID (for logging purposes).
-        interface_ids (list[str]): List of Zabbix interface IDs to remove.
-        sync_output (sync_output_model): The synchronization output model to log results.
-    Returns:
-        bool: True if the interfaces were removed (or there was nothing to remove), False on any error.
-    """
-    if not interface_ids:
-        log.logger.info("No interfaces to remove from Zabbix host %s.", hostid)
-        return True
-
-    zabbix_ip, zabbix_key = _zabbix_credentials()
-    if zabbix_ip is None or zabbix_key is None:
-        return False
-
-    try:
-        log.logger.info(
-            "Removing %d interface(s) from Zabbix host %s.", len(interface_ids), hostid
-        )
-        response: requests.Response = _zabbix_post(
-            zabbix_ip, zabbix_key, "hostinterface.delete", interface_ids
-        )
-        response_json = response.json()
-
-        if "error" in response_json:
-            error_msg = f"Failed to remove interfaces from Zabbix host {hostid}: {response_json['error']}"
-            sync_output.add_difference_output(error_msg)
-            log.logger.error(error_msg)
-            return False
-
-        if response.status_code == 200:
-            interfaceids = response_json.get("result", {}).get("interfaceids", [])
-            success_msg = f"Successfully removed {len(interfaceids)} interface(s) from Zabbix host {hostid}."
-            sync_output.add_difference_output(success_msg)
-            log.logger.info(success_msg)
-            return True
-        error_msg = f"Unexpected status code {response.status_code} when removing interfaces."
-        sync_output.add_difference_output(error_msg)
-        log.logger.error(error_msg)
-        return False
-    except requests.exceptions.RequestException as e:
-        error_msg = f"Exception when removing interfaces from Zabbix: {e}"
-        sync_output.add_difference_output(error_msg)
-        log.logger.error(error_msg)
-        return False
+    for iface_type in {entry["type"] for entry in result}:
+        same_type = [entry for entry in result if entry["type"] == iface_type]
+        default = next((entry for entry in same_type if entry["main"] == 1), same_type[0])
+        for entry in same_type:
+            entry["main"] = 1 if entry is default else 0
+    return result
 
 
 def count_interface_links(hostid: str, interfaceid: str) -> int | None:
     """Counts the items and LLD rules linked to a Zabbix host interface.
 
-    Zabbix refuses hostinterface.delete while anything is linked to the
-    interface (default or not), so this is checked before choosing which
-    interface to remove. Returns None if the count can't be determined.
+    Zabbix refuses to delete an interface (left out of host.update's interface
+    list) while anything is linked to it, default or not, so this is checked
+    before choosing which interface to remove. Returns None if the count can't be determined.
     """
     zabbix_ip, zabbix_key = _zabbix_credentials()
     if zabbix_ip is None or zabbix_key is None:
@@ -680,7 +601,6 @@ def apply_differences(
     different_fields: list[str] = differences.differences[
         0
     ]  # tuple: (different_fields, same_fields)
-    had_errors: bool = False
 
     def extract_field_name(field: str):
         if "(" in field:
@@ -817,7 +737,18 @@ def apply_differences(
     log.logger.info("Has interface changes: %s", has_interface_changes)
 
     if has_interface_changes or has_interface_field_changes_check:
-        zb_interface_details = get_zabbix_host_interfaces(hostid)
+        fetched_interfaces = get_zabbix_host_interfaces(hostid)
+        if fetched_interfaces is None:
+            # host.update replaces the whole interface set, so an unknown current
+            # set must never be sent; stop before anything is written.
+            msg = (
+                f"Failed to read interfaces of {zb_device.name} from Zabbix, "
+                "device not updated."
+            )
+            sync_output.add_difference_output(msg)
+            log.logger.error(msg)
+            raise RuntimeError(msg)
+        zb_interface_details = fetched_interfaces
         log.logger.info(
             "Retrieved %d interface details from Zabbix", len(zb_interface_details)
         )
@@ -835,10 +766,11 @@ def apply_differences(
 
     # Zabbix interfaceid -> new SNMP version, for in-place version changes
     snmp_version_updates: dict[str, str] = {}
-    # Changes to the interface kept instead of a deleted one; only applied once
-    # the delete went through (interfaceid -> SNMP version, interfaceids to make default)
+    # Changes to the interface kept instead of a deleted one
+    # (interfaceid -> SNMP version, interfaceids to make default)
     swap_version_updates: dict[str, str] = {}
     main_promotions: set[str] = set()
+    removal_blocked = False
 
     for field in different_fields:
         log.logger.debug("Processing field: %s", field)
@@ -918,7 +850,7 @@ def apply_differences(
                         )
                         sync_output.add_difference_output(msg)
                         log.logger.error(msg)
-                        had_errors = True
+                        removal_blocked = True
                         continue
                     interface_ids_to_remove.append(remove_id)
                     log.logger.info(
@@ -960,28 +892,16 @@ def apply_differences(
         len(interface_ids_to_remove),
     )
 
-    # Make API calls to add interfaces to Zabbix
-    if interfaces_to_add:
-        log.logger.info(
-            "Making API call to add %d interface(s)", len(interfaces_to_add)
+    # Nothing has been written yet: an interface that can't be removed stops the
+    # whole update, so Zabbix never ends up half-synchronized.
+    if removal_blocked:
+        raise RuntimeError(
+            f"Device {zb_device.name} not updated: an extra interface can't be removed."
         )
-        if not add_interface_to_zabbix(
-            hostid, interfaces_to_add, sync_output, zb_interface_details
-        ):
-            had_errors = True
 
-    # Make API calls to remove interfaces from Zabbix
-    if interface_ids_to_remove:
-        log.logger.info(
-            "Making API call to remove %d interface(s)", len(interface_ids_to_remove)
-        )
-        if not remove_interface_from_zabbix(hostid, interface_ids_to_remove, sync_output):
-            had_errors = True
-            # The interfaces are still there, so don't update them as if they were gone
-            interface_ids_to_remove.clear()
-            main_promotions.clear()
-        else:
-            snmp_version_updates.update(swap_version_updates)
+    # The kept interface takes over the SNMP version of the deleted one; with a
+    # single host.update both happen together or not at all.
+    snmp_version_updates.update(swap_version_updates)
 
     # Prefer updated Zabbix values, but fall back to Netbox if source data is missing.
     hostgroup_source: list[str] | str = (
@@ -998,36 +918,16 @@ def apply_differences(
         zb_device.templates if zb_device.templates else nb_device.templates
     )
     template_source = template_source if isinstance(template_source, list) else [template_source]
-    interface_ids: list[int] = device_service.find_hostinterface_ids(hostid)
     templateids: list[int] = [
         find_template_ids(template) for template in template_source if template
     ]
-    template_field_changed = any(
-        extract_field_name(field) == "templates" for field in different_fields
-    )
-    if template_field_changed:
-        resolve_inventory_link_conflicts(hostid, templateids, sync_output)
-    update_data_zabbix = zb_device.update_data_zabbix(
-        name=nb_device.name,
-        hostid=hostid,
-        interface_ids=interface_ids,
-        hostgroupids=hostgroupids,
-        templateids=templateids,
-        include_interfaces=False,
-    )
 
-    # Update interface details if there are field changes
-    # Newly added interfaces won't be in the device model, so they'll be skipped naturally
-    # Only existing interfaces that match by type will be updated
+    # Field changes (IP, DNS, port, SNMP details, default) of interfaces that stay,
+    # keyed by Zabbix interfaceid. Newly added interfaces aren't in Zabbix yet, so
+    # they're never matched here; type and main are never changed by matching.
+    update_entries: dict[str, dict[str, Any]] = {}
     if has_interface_field_changes_check:
-        log.logger.info(
-            "Interface field changes detected. Updating interface details from device model."
-        )
-
-        # Build update params by matching device model interfaces with Zabbix interfaces by type
-        # This ensures we don't try to change interface types (which fails if items are linked)
-        interface_update_params: list[dict[str, Any]] = []
-        # NetBox interfaces just created in Zabbix must not be matched again
+        # NetBox interfaces being created in Zabbix must not be matched again
         used_nb_interfaces: list[interface_model] = list(interfaces_to_add)
         for zb_iface in zb_interface_details:
             if zb_iface["interfaceid"] in interface_ids_to_remove:
@@ -1050,27 +950,17 @@ def apply_differences(
             if nb_iface is None:
                 continue
             used_nb_interfaces.append(nb_iface)
-            # Only update IP, DNS, port and SNMP details (don't change type or main)
             ip_address = (
                 str(nb_iface.addresses[0].address).split("/", maxsplit=1)[0]
                 if nb_iface.addresses
                 else ""
             )
             dns_name = nb_iface.addresses[0].dns_name if nb_iface.addresses else ""
-
-            update_entry: dict[str, Any] = {
-                "interfaceid": zb_iface["interfaceid"],
+            update_entries[zb_iface["interfaceid"]] = {
                 "ip": ip_address,
                 "dns": dns_name,
                 "port": map_port_type_default_port(nb_iface.port_type),
             }
-            if zb_iface["interfaceid"] in snmp_version_updates:
-                update_entry["details"] = build_snmp_details(
-                    snmp_version_updates[zb_iface["interfaceid"]]
-                )
-            if zb_iface["interfaceid"] in main_promotions:
-                update_entry["main"] = 1
-            interface_update_params.append(update_entry)
             log.logger.debug(
                 "Matched interface type %s: updating interfaceid %s with ip=%s, dns=%s",
                 zabbix_type,
@@ -1078,37 +968,33 @@ def apply_differences(
                 ip_address,
                 dns_name,
             )
+    for interfaceid, version in snmp_version_updates.items():
+        if interfaceid not in interface_ids_to_remove:
+            update_entries.setdefault(interfaceid, {})["details"] = build_snmp_details(version)
 
-        if interface_update_params:
-            log.logger.info("Interface update params: %s", interface_update_params)
-            interface_response: requests.Response = _zabbix_post(
-                zabbix_ip, zabbix_key, "hostinterface.update", interface_update_params
-            )
-            interface_response_json = interface_response.json()
-            if "error" not in interface_response_json:
-                sync_output.add_difference_output(
-                    f"Interface for device {zb_device.name} updated successfully in Zabbix."
-                )
-                log.logger.info(
-                    "Interface for device %s updated successfully in Zabbix with response status %s.",
-                    zb_device.name,
-                    interface_response.status_code,
-                )
-            else:
-                sync_output.add_difference_output(
-                    f"Failed to update interface for device {zb_device.name} in Zabbix: {interface_response.text}"
-                )
-                log.logger.error(
-                    "Failed to update interface for device %s in Zabbix: %s with response status %s.",
-                    zb_device.name,
-                    interface_response.text,
-                    interface_response.status_code,
-                )
-                had_errors = True
-        else:
-            log.logger.info(
-                "No matching interfaces found between device model and Zabbix."
-            )
+    interface_set: list[dict[str, Any]] | None = None
+    if interfaces_to_add or interface_ids_to_remove or update_entries or main_promotions:
+        interface_set = build_interface_set(
+            zb_interface_details,
+            interfaces_to_add,
+            interface_ids_to_remove,
+            update_entries,
+            main_promotions,
+        )
+        log.logger.info("Interface set for host.update: %s", interface_set)
+
+    template_field_changed = any(
+        extract_field_name(field) == "templates" for field in different_fields
+    )
+    if template_field_changed:
+        resolve_inventory_link_conflicts(hostid, templateids, sync_output)
+    update_data_zabbix = zb_device.update_data_zabbix(
+        name=nb_device.name,
+        hostid=hostid,
+        hostgroupids=hostgroupids,
+        templateids=templateids,
+        interfaces=interface_set,
+    )
 
     log.logger.info(update_data_zabbix)
     response = _zabbix_post(
@@ -1120,22 +1006,28 @@ def apply_differences(
     )
     response_json = response.json()
     if "error" in response_json:
+        error = response_json["error"]
+        detail = error.get("data", error) if isinstance(error, dict) else error
         sync_output.add_difference_output(
-            f"Error in Zabbix API response: {response_json['error']['data']}"
+            f"Device {zb_device.name} not updated, Zabbix rejected the change: {detail}"
         )
-        log.logger.error("Error in Zabbix API response: %s", response_json["error"])
-        had_errors = True
-    else:
+        log.logger.error("Error in Zabbix API response: %s", error)
+        raise RuntimeError(
+            "One or more errors occurred during synchronization; see sync output for details."
+        )
+    sync_output.add_difference_output(
+        f"Device {zb_device.name} updated successfully in Zabbix."
+    )
+    if interface_set is not None:
         sync_output.add_difference_output(
-            f"Device {zb_device.name} updated successfully in Zabbix."
+            f"Interfaces of {zb_device.name}: added {len(interfaces_to_add)}, "
+            f"removed {len(interface_ids_to_remove)}, updated {len(update_entries)}."
         )
-        log.logger.info(
-            "Device %s updated successfully in Zabbix with response status %s.",
-            zb_device.name,
-            response.status_code,
-        )
-    if had_errors:
-        raise RuntimeError("One or more errors occurred during synchronization; see sync output for details.")
+    log.logger.info(
+        "Device %s updated successfully in Zabbix with response status %s.",
+        zb_device.name,
+        response.status_code,
+    )
 
 
 def create_zabbix_device(device: device_model, sync_output: sync_output_model):

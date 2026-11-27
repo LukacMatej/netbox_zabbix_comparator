@@ -8,7 +8,6 @@ from app.device.models.device_model import (
     Device,
     build_snmp_details,
     dict_interfaces_zb,
-    dict_interfaces_zb_id,
     format_nb_status,
     map_port_type_default_port,
     normalize_status,
@@ -36,13 +35,11 @@ class DeviceModelTests(unittest.TestCase):
         """Interface conversion helpers should include expected keys and values."""
         interfaces = [self._iface("1"), self._iface("2")]
         create_payload = dict_interfaces_zb(interfaces)
-        update_payload = dict_interfaces_zb_id(interfaces, interface_id=99)
 
         self.assertEqual(create_payload[0]["main"], 1)  # First interface of port_type "1"
         self.assertEqual(create_payload[1]["main"], 1)  # First interface of port_type "2"
         self.assertEqual(create_payload[1]["details"]["version"], "2")
         self.assertNotIn("details", create_payload[0])  # Agent has no SNMP details
-        self.assertEqual(update_payload[0]["interfaceid"], 99)
 
     def test_dict_interfaces_helpers_multiple_same_type(self):
         """Multiple interfaces of same type should mark only first as main."""
@@ -67,16 +64,16 @@ class DeviceModelTests(unittest.TestCase):
         create_data = device.create_data_zabbix(
             hostgroupids=[1, "2", ["3"], {"groupid": "4"}, None, -1], templateids=[10, None]
         )
+        interface_set = [{"interfaceid": "77", "type": "2", "main": 1}]
         update_data = device.update_data_zabbix(
-            hostid="101", interface_ids=[77], hostgroupids=[1], templateids=[10], name="r1-new"
-        )
-        update_data_no_interfaces = device.update_data_zabbix(
             hostid="101",
-            interface_ids=[77],
             hostgroupids=[1],
             templateids=[10],
             name="r1-new",
-            include_interfaces=False,
+            interfaces=interface_set,
+        )
+        update_data_no_interfaces = device.update_data_zabbix(
+            hostid="101", hostgroupids=[1], templateids=[10], name="r1-new"
         )
 
         self.assertEqual(create_data["method"], "host.create")
@@ -84,6 +81,7 @@ class DeviceModelTests(unittest.TestCase):
         self.assertEqual(update_data["method"], "host.update")
         self.assertEqual(update_data["params"]["hostid"], "101")
         self.assertEqual(update_data["params"]["name"], "r1-new")
+        self.assertEqual(update_data["params"]["interfaces"], interface_set)
         self.assertNotIn("interfaces", update_data_no_interfaces["params"])
 
     def test_dict_interfaces_zb_no_details_for_ipmi_and_jmx(self):
