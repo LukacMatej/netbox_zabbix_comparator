@@ -1,11 +1,71 @@
-# Netbox and Zabbix Device Comparison and Synchronization
+# NetBox ⇄ Zabbix Sync
 
-The application is used to synchronize device configurations between Netbox and Zabbix, featuring the ability to compare and automatically create/update devices in Zabbix based on the configuration in Netbox.
+**Keep Zabbix monitoring in lockstep with NetBox — automatically, in real time.**
 
-All necessary files are included in the Docker image.
-Run docker to start the container, then copy over the configuration files.
+Compares device configuration between NetBox and Zabbix and creates/updates Zabbix hosts to match NetBox, driven by NetBox webhooks or an on-demand comparison run. Template and port-type selection follows a configurable priority chain (device → device role → config context), and device matching uses the Hungarian algorithm to reliably pair NetBox and Zabbix hosts even when hostnames drift.
 
-## Running Docker
+[![CI](https://github.com/LukacMatej/netbox_zabbix_comparator/actions/workflows/ci.yml/badge.svg)](https://github.com/LukacMatej/netbox_zabbix_comparator/actions/workflows/ci.yml)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Python](https://img.shields.io/badge/python-3.14-blue.svg)
+![FastAPI](https://img.shields.io/badge/framework-FastAPI-009688.svg)
+![Docker](https://img.shields.io/badge/deploy-Docker-2496ED.svg)
+
+![Compare view showing NetBox and Zabbix devices side by side with differences highlighted](docs/screenshot.png)
+
+## Table of Contents
+
+- [Features](#features)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Setup for Proper Application Operation](#setup-for-proper-application-operation)
+  - [Priority for Selecting Templates, Port Types and Host Groups](#priority-for-selecting-templates-port-types-and-host-groups)
+  - [Templates](#templates)
+  - [Port Type](#port-type)
+  - [Primary IP Address](#primary-ip-address)
+  - [Zabbix Host Groups](#zabbix-host-groups)
+  - [Custom Validation](#custom-validation)
+- [REST API](#rest-api)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Features
+
+- 🔁 **One-way sync, NetBox → Zabbix** — create, update, or leave hosts untouched based on a real diff, not a blind overwrite.
+- 🪝 **Webhook-driven** — reacts to NetBox device create/update/delete events as they happen.
+- 🔍 **Compare-before-you-sync UI** — review exactly what will change before triggering a sync.
+- 🎯 **Hungarian-algorithm device matching** — robustly pairs NetBox and Zabbix hosts even when naming or ordering differs.
+- 🧩 **Layered configuration** — templates and port types resolve from device → device role → config context, with automatic fallback.
+- ✅ **Custom validation endpoint** — blocks invalid Template/Port Type combinations directly in the NetBox UI before they're saved.
+- 🐳 **Single-container deployment** — ships as a small FastAPI + uvicorn Docker image.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph NB[NetBox]
+        DEV[Devices, Roles,\nConfig Context]
+    end
+    subgraph APP[netbox-zabbix sync service]
+        WH["/webhook_create /webhook_update /webhook_delete"]
+        CMP[Compare Engine\nHungarian matching]
+        VAL["/validate_update"]
+        UI[Web UI]
+    end
+    subgraph ZBX[Zabbix]
+        HOSTS[Hosts, Templates,\nHost Groups]
+    end
+
+    NB -- webhook events --> WH
+    NB -- custom field validation --> VAL
+    WH --> CMP
+    UI -- trigger compare / sync --> CMP
+    CMP -- REST API --> NB
+    CMP -- create / update hosts --> ZBX
+```
+
+## Quick Start
 
 ```bash
 docker run -d \
@@ -13,67 +73,50 @@ docker run -d \
   -e LISTEN_ADDRESS=<IP address> \
   -e HTTP_PORT=<port> \
   -e ZABBIX_DEFAULT_HOSTGROUP=<default hostgroup name> \
-  -e EXCLUDED_HOSTGROUPS=<Zabbix hostgroup name to exclude from comparison> \
-  -e NETBOX_IP=<Netbox IP address with http://> \
-  -e NETBOX_KEY=<Netbox API key> \
+  -e NETBOX_IP=<NetBox IP address with http://> \
+  -e NETBOX_KEY=<NetBox API key> \
   -e ZABBIX_IP=<Zabbix IP address with http://> \
   -e ZABBIX_KEY=<Zabbix API key> \
   -e PROXY_ROOT_PATH=<dev|prod> \
-  -e ZABBIX_AGENT_PORT=<Zabbix Agent interface port, default 10050> \
-  -e ZABBIX_SNMP_PORT=<Zabbix SNMP interface port, default 161> \
-  -e ZABBIX_IPMI_PORT=<Zabbix IPMI interface port, default 623> \
-  -e ZABBIX_JMX_PORT=<Zabbix JMX interface port, default 12345> \
-  -e SNMPV2_MACRO=<SNMPv2 community string or Zabbix macro, default {$SNMP_COMMUNITY}> \
-  -e ZABBIX_SNMPV3_SECURITY_NAME=<SNMPv3 security name> \
-  -e ZABBIX_SNMPV3_SECURITY_LEVEL=<SNMPv3 security level: 0=noAuthNoPriv, 1=authNoPriv, 2=authPriv, default 2> \
-  -e ZABBIX_SNMPV3_AUTH_PROTOCOL=<SNMPv3 auth protocol code, default 1 (SHA1)> \
-  -e ZABBIX_SNMPV3_AUTH_PASSPHRASE=<SNMPv3 auth passphrase> \
-  -e ZABBIX_SNMPV3_PRIV_PROTOCOL=<SNMPv3 priv protocol code, default 1 (AES128)> \
-  -e ZABBIX_SNMPV3_PRIV_PASSPHRASE=<SNMPv3 priv passphrase> \
-  -e ZABBIX_SNMPV3_CONTEXT_NAME=<SNMPv3 context name>
   netbox-zabbix
-
 ```
 
-### Excluded Hostgroups
+All necessary files (README, custom field import scripts, example `.env`) are included in the Docker image under `/doc`.
 
-* `EXCLUDED_HOSTGROUPS` optionally names a single Zabbix hostgroup to exclude from comparison
-* Zabbix hosts belonging to that hostgroup are dropped from the comparison results entirely (they are neither shown as "Zabbix-only", nor matched against NetBox, nor synchronized)
-* This is unrelated to `ZABBIX_DEFAULT_HOSTGROUP`, which only controls which hostgroup a newly-created Zabbix host is assigned to
-* Leave unset (or empty) to include all hosts
+## Configuration
 
-### SNMPv2/SNMPv3 Configuration
+| Variable | Description |
+|---|---|
+| `LISTEN_ADDRESS` | Address the app listens on inside the container. |
+| `HTTP_PORT` | Port the app listens on inside the container. |
+| `ZABBIX_DEFAULT_HOSTGROUP` | Fallback Zabbix host group for synced devices. |
+| `NETBOX_IP` | Base URL of the NetBox instance, including scheme (`http://`/`https://`). |
+| `NETBOX_KEY` | NetBox API token. |
+| `ZABBIX_IP` | Base URL of the Zabbix instance, including scheme. |
+| `ZABBIX_KEY` | Zabbix API token. |
+| `PROXY_ROOT_PATH` | `dev` or `prod` — adjusts routing when running behind a reverse proxy. |
+| `EXCLUDED_HOSTGROUPS` | Optional. A single Zabbix host group whose hosts are dropped from comparison entirely (not shown as Zabbix-only, not matched, not synchronized). Unrelated to `ZABBIX_DEFAULT_HOSTGROUP`. Unset/empty includes all hosts. |
+| `ZABBIX_AGENT_PORT` | Port for Agent interfaces (default `10050`). |
+| `ZABBIX_SNMP_PORT` | Port for SNMP interfaces (default `161`). Shared by SNMPv2 and SNMPv3 — Zabbix has one port per interface type, not per SNMP version. |
+| `ZABBIX_IPMI_PORT` | Port for IPMI interfaces (default `623`). |
+| `ZABBIX_JMX_PORT` | Port for JMX interfaces (default `12345`). |
+| `SNMPV2_MACRO` | SNMPv2 community string or Zabbix user macro (default `{$SNMP_COMMUNITY}`). |
+| `ZABBIX_SNMPV3_SECURITY_NAME` | SNMPv3 security name. |
+| `ZABBIX_SNMPV3_SECURITY_LEVEL` | SNMPv3 security level: `0`=noAuthNoPriv, `1`=authNoPriv, `2`=authPriv (default `2`). |
+| `ZABBIX_SNMPV3_AUTH_PROTOCOL` | SNMPv3 auth protocol, Zabbix numeric code (default `1` = SHA1). |
+| `ZABBIX_SNMPV3_AUTH_PASSPHRASE` | SNMPv3 auth passphrase. |
+| `ZABBIX_SNMPV3_PRIV_PROTOCOL` | SNMPv3 priv protocol, Zabbix numeric code (default `1` = AES128). |
+| `ZABBIX_SNMPV3_PRIV_PASSPHRASE` | SNMPv3 priv passphrase. |
+| `ZABBIX_SNMPV3_CONTEXT_NAME` | SNMPv3 context name (optional). |
 
-Since `SNMPv2`/`SNMPv3` are deployment-wide credentials (not per-device), they're read from environment variables rather than NetBox:
+SNMP credentials are deployment-wide (not per-device), so they come from environment variables rather than NetBox. See Zabbix's API documentation for the full list of `authprotocol`/`privprotocol` codes.
 
-* `SNMPV2_MACRO` — the community string (or Zabbix user macro, e.g. `{$SNMP_COMMUNITY}`) used for SNMPv2 interfaces. Defaults to `{$SNMP_COMMUNITY}` if unset.
-* `ZABBIX_SNMPV3_SECURITY_NAME` — SNMPv3 security name
-* `ZABBIX_SNMPV3_SECURITY_LEVEL` — SNMPv3 security level: `0`=noAuthNoPriv, `1`=authNoPriv, `2`=authPriv (default `2`)
-* `ZABBIX_SNMPV3_AUTH_PROTOCOL` — SNMPv3 auth protocol, Zabbix's numeric code (default `1` = SHA1)
-* `ZABBIX_SNMPV3_AUTH_PASSPHRASE` — SNMPv3 auth passphrase
-* `ZABBIX_SNMPV3_PRIV_PROTOCOL` — SNMPv3 priv protocol, Zabbix's numeric code (default `1` = AES128)
-* `ZABBIX_SNMPV3_PRIV_PASSPHRASE` — SNMPv3 priv passphrase
-* `ZABBIX_SNMPV3_CONTEXT_NAME` — SNMPv3 context name (optional)
-
-See Zabbix's API documentation for the full list of `authprotocol`/`privprotocol` numeric codes.
-
-### Zabbix Interface Ports
-
-* `ZABBIX_AGENT_PORT`, `ZABBIX_SNMP_PORT`, `ZABBIX_IPMI_PORT`, `ZABBIX_JMX_PORT` set the port used when creating/updating the corresponding Zabbix interface type
-* `ZABBIX_SNMP_PORT` is shared by both SNMPv2 and SNMPv3 — Zabbix has one port per interface type, not per SNMP version
-* Default to Zabbix's own defaults (10050, 161, 623, 12345) if unset
-
-### Interface Changes and Zabbix 8.0
-
-* Interfaces are added, updated and removed through `host.update` (the full interface list, sent together with the other host changes in one call); the `hostinterface.create/update/delete` methods removed in Zabbix 8.0 are not used. The API user's role therefore needs `host.update`; of `hostinterface.*` only `hostinterface.get` is used
-* A device update is all-or-nothing: if an extra interface can't be removed (items still linked to it, e.g. after an unlinked template left its items behind), nothing is changed on that host and the sync reports the error
-
-## Setup Netbox
+## Setup for Proper Application Operation
 
 ### Priority for Selecting Templates, Port Types and Host Groups
 
-Import files with custom field and custom field choices are in project directory or in the Docker container.
-First import import_custom_fields_choices.py, then import_custom_fields.py.
+Import files with custom fields and custom field choices are in the project directory and in the Docker image. Import `import_custom_fields_choices.py` first, then `import_custom_fields.py`.
+
 The system uses a hierarchical priority when selecting Templates, Port Types and Host Groups. The application looks for values in the following order (1 = highest priority):
 
 #### 1. Device Custom Fields (highest priority)
@@ -94,7 +137,7 @@ Set Custom Fields on the device role with a selection of Custom Field Choices:
 
 #### 3. Device Config Context (lowest priority)
 
-In Netbox, you can set an inheritable config context for device roles, which is automatically applied to all devices with that given role:
+In NetBox, you can set an inheritable config context for device roles, which is automatically applied to all devices with that given role:
 
 ```json
 {
@@ -111,37 +154,16 @@ In Netbox, you can set an inheritable config context for device roles, which is 
         ]
     }
 }
-
 ```
 
 **Important:** If a higher priority level contains no values (it is empty or None), the system automatically falls back to a lower priority.
-
-### Zabbix Hostgroups
-
-A Netbox script is available to synchronize Custom Field Choices named `zabbix_hostgroups` with host groups in Zabbix:
-
-* Link Custom Field Choices to a Custom Field named `zabbix_hostgroups`
-* Set it as multi-select on DCIM > DEVICE and DCIM > DEVICE ROLE (role values are used when the device has none, see the priority above)
-* The default host group in Zabbix is set to the value of the `ZABBIX_DEFAULT_HOSTGROUP` environment variable to keep track of all devices created by the synchronization
-* Put both scripts in `<netbox-docker-directory>`/scripts directory
-* chmod 755 scripts
-* chmod 644 scripts/*
-* chown -R 999:999 scripts
-* In docker-compose.yml, add the following line:
-  * `<local-path-to-scripts>`:/opt/netbox/netbox/scripts:z,rw
-* In netbox:
-  * Create a data source in Operations > Data Sources
-  * Type: Local
-  * URL: /opt/netbox/netbox/scripts/
-    * Sync data source
-  * Run scripts in Customization > Scripts
 
 ### Templates
 
 * Templates that will be applied to devices in Zabbix
 * They must exist in Zabbix beforehand
 * Supports multiple templates at once
-* A Netbox script is available to synchronize Custom Field Choices named `zabbix_templates` with templates in Zabbix. For a similar guide, see Zabbix hostgroups.
+* A NetBox script is available to synchronize Custom Field Choices named `zabbix_templates` with templates in Zabbix. For a similar guide, see Zabbix hostgroups.
 
 ### Port Type
 
@@ -151,11 +173,28 @@ A Netbox script is available to synchronize Custom Field Choices named `zabbix_h
 
 ### Primary IP Address
 
-* A mandatory setting in Netbox for proper operation
+* A mandatory setting in NetBox for proper operation
 * Used as the connection address for the device in Zabbix
 * Selected from `primary_ip4` on the device
 
-### Custom Validation - Optional
+### Zabbix Host Groups
+
+A NetBox script is available to synchronize Custom Field Choices named `zabbix_hostgroups` with host groups in Zabbix:
+
+* Link Custom Field Choices to a Custom Field named `zabbix_hostgroups`
+* Set it as multi-select on DCIM > DEVICE and DCIM > DEVICE ROLE (role values are used when the device has none, see the priority above)
+* The default host group in Zabbix is set to the value of the `ZABBIX_DEFAULT_HOSTGROUP` environment variable to keep track of all devices created by the synchronization
+
+To install the sync scripts (templates and host groups) in [netbox-docker](https://github.com/netbox-community/netbox-docker):
+
+* Put both scripts in the `<netbox-docker-directory>/scripts` directory
+* `chmod 755 scripts`, `chmod 644 scripts/*`, `chown -R 999:999 scripts`
+* In `docker-compose.yml`, add the volume `<local-path-to-scripts>:/opt/netbox/netbox/scripts:z,rw`
+* In NetBox:
+  * Create a data source in Operations > Data Sources (Type: Local, URL: `/opt/netbox/netbox/scripts/`) and sync it
+  * Run the scripts in Customization > Scripts
+
+### Custom Validation
 
 Zabbix has many dependencies regarding the Port Type - Templates relationship. For this reason, a custom validation config was created to communicate with Zabbix and handle these dependencies.
 
@@ -169,6 +208,7 @@ Where to place `device_zabbix_validator.py` and how to reference it in `CUSTOM_V
 
 * Place `device_zabbix_validator.py` into the NetBox root folder (`netbox/netbox/`, alongside the real `configuration.py`) — that directory is on NetBox's Python path, so the file becomes importable as a plain top-level module.
 * Insert into `configuration/extra.py` (or `configuration.py` directly):
+
 ```python
 CUSTOM_VALIDATORS = {
     'dcim.device': (
@@ -182,6 +222,7 @@ CUSTOM_VALIDATORS = {
 * Place `device_zabbix_validator.py` into the same host folder that's bind-mounted to `/etc/netbox/config/` (typically `configuration/`, alongside `configuration.py`/`extra.py`) — the folder is not on `sys.path` directly, though.
 * netbox-docker's configuration loader (`docker/configuration.docker.py`, which becomes the real `configuration.py` inside the image) imports every `.py` file it finds in that mounted folder, but registers each one under a **flattened module name**: `netbox.configuration.<filename>` with every dot replaced by an underscore. For `device_zabbix_validator.py` that resolves to `netbox_configuration_device_zabbix_validator` — not the bare filename.
 * Insert into `configuration/extra.py`:
+
 ```python
 CUSTOM_VALIDATORS = {
     'dcim.device': (
@@ -189,9 +230,8 @@ CUSTOM_VALIDATORS = {
     )
 }
 ```
+
 * Recreate the NetBox containers so the mounted config is re-read: `docker compose up -d netbox netbox-worker` (a plain `restart` won't pick up a newly-added file since it doesn't change anything Compose considers part of the container's config).
-
-
 
 The custom validator calls the comparator's API endpoint `/validate_update` (port 7000, needs to be adjusted if a different one is used).
 
@@ -201,19 +241,41 @@ Controlled via the hamburger menu:
 
 ### Compare
 
-* Starts the comparison of devices between Netbox and Zabbix
+* Starts the comparison of devices between NetBox and Zabbix
 * Displays configuration differences and matches
 
 ### Synchronize
 
-* Starts a one-way synchronization from Netbox to Zabbix
+* Starts a one-way synchronization from NetBox to Zabbix
 * Possible scenarios:
-* Device exists only in Netbox → created in Zabbix
-* Device exists in both → values from Netbox overwrite values in Zabbix (if they differ)
-* Device is identical → nothing happens
+  * Device exists only in NetBox → created in Zabbix
+  * Device exists in both → values from NetBox overwrite values in Zabbix (if they differ)
+  * Device is identical → nothing happens
 
 ### Webhooks
-* App listens for webhook events from Netbox and synchronizes Zabbix accordingly
-* /webhook_create
-* /webhook_update
-* /webhook_delete
+
+* App listens for webhook events from NetBox and synchronizes Zabbix accordingly
+* `/webhook_create`
+* `/webhook_update`
+* `/webhook_delete`
+
+## Development
+
+```bash
+# install dependencies
+pip install -r requirements.txt
+
+# run tests
+python -m unittest discover -s tests -p 'test_*.py' -v
+
+# lint (matches CI: pylint --fail-under=9, mypy on server.py + app/)
+pre-commit run --all-files
+```
+
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, lint/test commands, and PR guidelines.
+
+## License
+
+Released under the [MIT License](LICENSE).
